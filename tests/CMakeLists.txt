@@ -1,0 +1,5 @@
+add_executable(phonecast-tests phonecast_tests.cpp)
+target_compile_features(phonecast-tests PRIVATE cxx_std_17)
+target_link_libraries(phonecast-tests PRIVATE phonecast-receiver-lib)
+phonecast_enable_warnings(phonecast-tests)
+add_test(NAME phonecast-unit-tests COMMAND phonecast-tests)

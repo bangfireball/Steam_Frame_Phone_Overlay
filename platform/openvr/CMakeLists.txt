@@ -1,0 +1,5 @@
+add_library(phonecast-openvr-backend src/OpenVrOverlayRenderer.cpp)
+target_include_directories(phonecast-openvr-backend PUBLIC include)
+target_compile_features(phonecast-openvr-backend PUBLIC cxx_std_17)
+target_link_libraries(phonecast-openvr-backend PUBLIC phonecast-vr PRIVATE phonecast_openvr)
+phonecast_enable_warnings(phonecast-openvr-backend)

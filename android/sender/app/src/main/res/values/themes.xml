@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.PhoneCast" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">@color/phonecast_blue</item>
+        <item name="android:navigationBarColor">@color/phonecast_dark</item>
+        <item name="android:statusBarColor">@color/phonecast_dark</item>
+    </style>
+</resources>

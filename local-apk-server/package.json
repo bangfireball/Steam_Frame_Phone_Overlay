@@ -1,0 +1,9 @@
+{
+  "name": "phonecast-local-apk-server",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Disposable local APK download server",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

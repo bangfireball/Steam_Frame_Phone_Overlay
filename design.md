@@ -433,6 +433,20 @@ Keep the architecture portable because Valve may expose the capability later.
 
 # Sprint 1 — Project Foundation
 
+**Status:** `[x] Complete — animated texture visually confirmed on Steam Frame`
+
+- `[x]` Portable Core, VR overlay, and receiver application boundaries
+- `[x]` Structured console logging and validated command-line configuration
+- `[x]` Networking, decoder, video-source, and input contracts
+- `[x]` Generated animated RGBA test source
+- `[x]` OpenVR renderer with continuous updates and clean lifecycle handling
+- `[x]` Windows x64 clean build and automated tests
+- `[x]` Windows SteamVR runtime accepted overlay creation and 31 frame submissions in a timed run
+- `[x]` Linux ARM64 cross-build produced an AArch64 receiver executable
+- `[x]` Architecture and development documentation
+- `[x]` User-visible confirmation that the generated animation updates in-headset
+- `[!]` Known limitation: repeated `SetOverlayRaw` updates visibly flicker; replace with a streaming-appropriate texture path in Sprint 4/performance work
+
 ## Objective
 
 Build the reusable application architecture.
@@ -481,6 +495,20 @@ Use an animated/generated test texture so continuous texture updates can be veri
 ---
 
 # Sprint 2 — Android Screen Capture
+
+**Status:** `[x] Complete — physical-device capture and encoding validated`
+
+- `[x]` Android sender project and reproducible Gradle wrapper
+- `[x]` MediaProjection permission flow
+- `[x]` Android 14+ media-projection foreground-service lifecycle
+- `[x]` Surface-input H.264/AVC MediaCodec pipeline at 30 FPS
+- `[x]` Continuous encoder-output draining and frame/byte diagnostics
+- `[x]` Start, stop, projection-revocation, and resource cleanup paths
+- `[x]` Existing-VirtualDisplay resize with encoder-surface replacement
+- `[x]` Debug APK build, JVM tests, and Android lint
+- `[x]` Permission flow and captured frames confirmed on a physical Android device
+- `[x]` Increasing H.264 frame/output counters confirmed on a physical Android device
+- `[x]` Start/stop/restart and portrait/landscape rotation confirmed on a physical Android device
 
 ## Objective
 

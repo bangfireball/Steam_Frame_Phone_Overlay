@@ -299,3 +299,11 @@ Use when a required environment, particularly Steam Frame hardware/runtime acces
 Native Linux ARM64 OpenVR overlays are no longer merely theoretical: Hello Frame successfully initialized, created a regular overlay, loaded its generated image, registered a stable application manifest, and remained visibly head-locked while the user played a locally running 2D game on Steam Frame.
 
 The project owner accepts this as a successful validation of the foundational native-overlay mechanism. Under the design document's stricter original criterion, coexistence with a standalone **VR scene application** remains the final untested case. The result is therefore recorded as **foundational success, with one VR-specific acceptance test pending**.
+
+---
+
+## Sprint 1 portability follow-up — 2026-10-02
+
+The production receiver foundation cross-built successfully with Debian 12's AArch64 GNU 12.2 toolchain. `file` identified `phonecast-receiver` as an ARM64/AArch64 GNU/Linux PIE executable. The build uses the shared production OpenVR backend and includes a receiver manifest with `binary_path_linux_arm`.
+
+The Sprint 1 receiver was subsequently deployed and launched natively on Steam Frame. The user visually confirmed the panel and moving test pattern. The generated scrolling bars are intentional proof of continuous frame changes; visible panel flicker is not intentional and was observed during the test. The likely cause is repeated `SetOverlayRaw` replacement, which is suitable for feasibility testing but not a final streaming texture path. Sprint 1 is accepted with this limitation recorded for the video-rendering integration/performance work.

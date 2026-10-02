@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">PhoneCast Sender</string>
+    <string name="capture_channel_name">Screen casting</string>
+    <string name="capture_channel_description">Shows when PhoneCast is capturing the screen</string>
+    <string name="capture_notification_title">PhoneCast is capturing your screen</string>
+    <string name="stop_casting">Stop casting</string>
+    <string name="sprint_two_explanation">Sprint 2 captures your display and encodes it as H.264 locally. No screen data is transmitted yet.</string>
+    <string name="start_capture">Start capture</string>
+    <string name="stop_capture">Stop capture</string>
+</resources>

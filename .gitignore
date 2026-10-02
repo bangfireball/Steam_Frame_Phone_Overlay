@@ -8,6 +8,16 @@
 /build/
 CMakeUserPresets.json
 
+# Android/Gradle local output
+.gradle/
+**/.gradle/
+**/build/
+**/local.properties
+
+# Optional local APK server state
+/local-apk-server/*.log
+/local-apk-server/*.pid
+
 # IDE/editor files
 .vs/
 .vscode/
