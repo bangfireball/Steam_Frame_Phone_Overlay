@@ -179,33 +179,69 @@ bool MfH264Decoder::Submit(const std::vector<std::uint8_t>& accessUnit,
         return false;
     }
 
-    MFT_OUTPUT_STREAM_INFO streamInfo{};
-    result = state.transform->GetOutputStreamInfo(0, &streamInfo);
-    if (FAILED(result)) {
-        error = HResultMessage("Reading decoder output requirements", result);
-        return false;
-    }
     IMFSample* outputSample = nullptr;
-    IMFMediaBuffer* outputBuffer = nullptr;
-    result = MFCreateSample(&outputSample);
-    if (SUCCEEDED(result)) {
-        result = MFCreate2DMediaBuffer(state.width, state.height,
-                                       MFVideoFormat_NV12.Data1, FALSE, &outputBuffer);
-    }
-    if (SUCCEEDED(result)) result = outputSample->AddBuffer(outputBuffer);
-    Release(outputBuffer);
-    if (FAILED(result)) {
-        Release(outputSample);
-        error = HResultMessage("Allocating decoder output", result);
-        return false;
-    }
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        MFT_OUTPUT_STREAM_INFO streamInfo{};
+        result = state.transform->GetOutputStreamInfo(0, &streamInfo);
+        if (FAILED(result)) {
+            error = HResultMessage("Reading decoder output requirements", result);
+            return false;
+        }
+        IMFMediaBuffer* outputBuffer = nullptr;
+        result = MFCreateSample(&outputSample);
+        if (SUCCEEDED(result)) {
+            result = MFCreate2DMediaBuffer(state.width, state.height,
+                                           MFVideoFormat_NV12.Data1, FALSE, &outputBuffer);
+        }
+        if (SUCCEEDED(result)) result = outputSample->AddBuffer(outputBuffer);
+        Release(outputBuffer);
+        if (FAILED(result)) {
+            Release(outputSample);
+            error = HResultMessage("Allocating decoder output", result);
+            return false;
+        }
 
-    MFT_OUTPUT_DATA_BUFFER output{};
-    output.dwStreamID = 0;
-    output.pSample = outputSample;
-    DWORD status = 0;
-    result = state.transform->ProcessOutput(0, 1, &output, &status);
-    if (output.pEvents != nullptr) output.pEvents->Release();
+        MFT_OUTPUT_DATA_BUFFER output{};
+        output.dwStreamID = 0;
+        output.pSample = outputSample;
+        DWORD status = 0;
+        result = state.transform->ProcessOutput(0, 1, &output, &status);
+        if (output.pEvents != nullptr) output.pEvents->Release();
+        if (result != MF_E_TRANSFORM_STREAM_CHANGE) break;
+
+        Release(outputSample);
+        HRESULT typeResult = MF_E_INVALIDMEDIATYPE;
+        for (DWORD typeIndex = 0;; ++typeIndex) {
+            IMFMediaType* availableType = nullptr;
+            const HRESULT availableResult =
+                state.transform->GetOutputAvailableType(0, typeIndex, &availableType);
+            if (availableResult == MF_E_NO_MORE_TYPES) break;
+            if (FAILED(availableResult)) {
+                typeResult = availableResult;
+                break;
+            }
+            GUID subtype{};
+            if (SUCCEEDED(availableType->GetGUID(MF_MT_SUBTYPE, &subtype)) &&
+                subtype == MFVideoFormat_NV12) {
+                UINT32 decodedWidth = 0;
+                UINT32 decodedHeight = 0;
+                if (SUCCEEDED(MFGetAttributeSize(availableType, MF_MT_FRAME_SIZE,
+                                                 &decodedWidth, &decodedHeight)) &&
+                    decodedWidth > 0 && decodedHeight > 0) {
+                    state.width = decodedWidth;
+                    state.height = decodedHeight;
+                }
+                typeResult = state.transform->SetOutputType(0, availableType, 0);
+                Release(availableType);
+                break;
+            }
+            Release(availableType);
+        }
+        if (FAILED(typeResult)) {
+            error = HResultMessage("Accepting the decoder's changed output format", typeResult);
+            return false;
+        }
+    }
     if (result == MF_E_TRANSFORM_NEED_MORE_INPUT) {
         Release(outputSample);
         error.clear();
