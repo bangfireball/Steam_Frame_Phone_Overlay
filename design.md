@@ -220,17 +220,52 @@ Performance, architecture, and proof of feasibility come first.
 
 # Sprint 0 — Hello Frame
 
-**Status:** `[~] In progress`
+**Status:** `[x] Complete — foundational feasibility accepted by the project owner`
 
 - `[x]` Initial Valve/OpenVR/OpenXR research
 - `[x]` Minimal Hello Frame source implementation
 - `[x]` Windows x64 build validation
-- `[!]` PC SteamVR runtime validation — headset not connected
+- `[!]` PC SteamVR visual validation not run; no longer required to establish native feasibility
 - `[x]` Linux ARM64 cross-build validation
-- `[x]` Native Steam Frame overlay creation and raw-image validation
+- `[x]` Native Steam Frame deployment, overlay creation, and raw-image validation
 - `[x]` User-confirmed visible, head-locked coexistence with a standalone 2D game
 - `[x]` Foundational native-overlay feasibility accepted by the project owner
-- `[ ]` Strict original criterion: coexistence with a standalone VR scene application
+- `[ ]` Follow-up validation: coexistence with a standalone VR scene application
+
+## Recorded Result
+
+**Outcome:** Success for the architectural feasibility gate, accepted 2026-10-02.
+
+Tested on Steam Frame:
+
+- SteamOS build `20260922.6101926` on Linux ARM64;
+- native SteamVR `2.17.10`;
+- OpenVR SDK/client `2.15.6`;
+- `VRApplication_Overlay` initialization;
+- regular `IVROverlay::CreateOverlay` overlay;
+- generated 640 × 240 RGBA texture uploaded through `SetOverlayRaw`;
+- HMD-relative placement approximately one metre forward;
+- user-visible overlay while an on-device standalone 2D game was running;
+- clean startup and shutdown;
+- approximately 16.7 MiB resident memory and 0.9% CPU during an initial sample.
+
+Observed behavior:
+
+- The panel was head-locked and moved with the user, as intended for this prototype.
+- The panel was not interactive because Sprint 0 did not configure an input method or implement interaction.
+- Steam Frame requires `binary_path_linux_arm` in the application manifest.
+- Registering a stable manifest and classifying the application as an overlay is required for reliable coexistence across application transitions.
+
+Remaining limitation:
+
+- The exact original test with another standalone **VR scene application** has not yet been performed. This remains an explicit follow-up risk and must not be represented as tested.
+
+Architecture decision:
+
+- Proceed with Sprint 1.
+- Treat native Linux ARM64 OpenVR as the preferred Steam Frame overlay backend unless the VR-scene follow-up exposes a restriction.
+- Preserve the platform abstraction and PC-hosted fallback.
+- Keep detailed evidence, commands, and unresolved questions in `docs/steam-frame.md`.
 
 ## Objective
 
@@ -1282,6 +1317,8 @@ Maintain these in `docs/steam-frame.md`.
 
 Can a native ARM64 Steam Frame application create a persistent overlay over another standalone VR application?
 
+**Current answer:** Native ARM64 overlay creation and visible coexistence with an on-device standalone 2D application are confirmed. Coexistence with a standalone VR scene application remains untested. See `docs/steam-frame.md`.
+
 ### Additional Questions
 
 - Does Steam Frame expose `IVROverlay` to standalone applications?
@@ -1444,21 +1481,16 @@ It must meet its acceptance criteria.
 
 # 16. First Task
 
-Do **not** begin by creating the Android streaming application.
+**Status:** `[x] Completed and accepted as Sprint 0 foundational success`
 
-Begin with:
+The native ARM64 Hello Frame overlay was deployed to Steam Frame and visually confirmed over an on-device standalone 2D game. The stricter VR-scene coexistence test remains documented as a follow-up.
 
-```text
-SPRINT 0
-HELLO FRAME
-```
+Historical task directive, now completed:
 
-The first question the project must answer is:
+- Do **not** begin with the Android streaming application.
+- Begin with `SPRINT 0 — HELLO FRAME`.
+- Research current Valve Steam Frame/OpenVR/OpenXR documentation.
+- Implement the smallest possible overlay experiment.
+- Let the measured result guide the architecture.
 
-> Can we place our own persistent overlay over a running VR application on Steam Frame?
-
-Start by researching the current Valve Steam Frame/OpenVR/OpenXR documentation.
-
-Then implement the smallest possible Hello Frame experiment.
-
-The result of this experiment should guide the rest of the architecture rather than forcing the architecture to fit an assumption.
+The experiment answered the foundational question positively enough to proceed: a native ARM64 process can create a user-visible persistent OpenVR overlay on Steam Frame while an on-device standalone 2D application runs. The untested VR-scene case remains explicitly tracked.

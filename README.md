@@ -2,7 +2,7 @@
 
 PhoneCast VR aims to show an Android phone as a persistent VR overlay, first through PC SteamVR and eventually directly on Steam Frame ARM64.
 
-The project is currently in **Sprint 0 — Hello Frame**, a feasibility experiment for persistent third-party overlays.
+**Sprint 0 — Hello Frame** is complete. The foundational native Steam Frame overlay mechanism was accepted after user-visible coexistence with an on-device standalone 2D game. Sprint 1 is next.
 
 ## Current status
 
@@ -13,7 +13,8 @@ The project is currently in **Sprint 0 — Hello Frame**, a feasibility experime
 - `[x]` Linux ARM64 cross-build and emulated CLI smoke test
 - `[x]` Native Steam Frame deployment and overlay creation
 - `[x]` User-confirmed visible, head-locked overlay during a standalone 2D game
-- `[ ]` Strict original acceptance test with a standalone VR scene application
+- `[x]` Sprint 0 foundational feasibility accepted
+- `[!]` Follow-up: validate coexistence with a standalone VR scene application
 
 See:
 
