@@ -15,7 +15,34 @@ PhoneCast VR aims to show an Android phone as a persistent VR overlay, first thr
 - `[x]` Sprint 2 Android sender complete and validated on a physical device
 - `[x]` Android debug APK builds, unit tests pass, and lint passes
 - `[~]` Sprint 3 phone-to-PC streaming visually confirmed on a physical device
-- `[!]` Sprint 3 follow-up: fix right-edge green bar and visibly stuttering preview
+- `[!]` Sprint 3 follow-up: physically validate the decoder green-edge fix and improve visibly stuttering playback
+- `[~]` Sprint 4 Android screen is physically visible in the PC-streamed SteamVR headset
+- `[x]` Phone stream receiver feeds a reusable D3D11-backed OpenVR texture on SteamVR's selected DXGI adapter
+- `[x]` Explicit D3D11 flushing produces visually smooth generated-overlay animation
+- `[x]` Global PC keyboard controls cover show/hide, scale, movement, distance, opacity, and reset
+- `[!]` Follow-up: validate controls, orientation, VR-game coexistence, startup delay, sustained frame pacing, and the green-edge correction
+
+## Sprint 4 VR streaming validation
+
+Start SteamVR, then run the VR stream receiver with a six-digit code:
+
+```powershell
+.\out\build\windows-x64\bin\phonecast-vr-stream-receiver.exe --pair-code 123456
+```
+
+Connect the Android sender to the PC as described below. The receiver keeps the overlay head-relative and preserves the decoded phone aspect ratio. Hold **Ctrl+Alt** while pressing:
+
+- `P` — show/hide
+- `+` / `-` — scale
+- arrow keys — move
+- `Page Up` / `Page Down` — nearer/farther
+- `]` / `[` — increase/decrease opacity
+- `Home` — reset
+- `End` — quit
+
+The Windows OpenVR backend uses a reusable D3D11 texture rather than continuous `SetOverlayRaw` uploads. It selects SteamVR's requested DXGI adapter and flushes each update; both were required for a visible, smoothly updating VRLink overlay on the validation PC. Physical Android-to-headset picture validation succeeded. Validation over a running VR game and validation of controls/orientation are still required before Sprint 4 can be marked complete.
+
+The first phone frame currently takes several seconds to appear. Headset-native moving and phone interaction are later placement/interaction work; Sprint 4 currently uses the documented PC keyboard shortcuts. Phone audio is not part of the visual MVP and is tracked as an optional later sprint.
 
 ## Sprint 3 streaming validation
 

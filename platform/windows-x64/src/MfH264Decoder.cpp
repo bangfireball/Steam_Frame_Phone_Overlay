@@ -35,18 +35,19 @@ std::uint8_t Clamp(int value) {
     return static_cast<std::uint8_t>(std::max(0, std::min(255, value)));
 }
 
-void Nv12ToRgba(const std::uint8_t* source, std::uint32_t width, std::uint32_t height,
-                std::uint32_t stride, std::vector<std::uint8_t>& output) {
-    output.resize(static_cast<std::size_t>(width) * height * 4U);
-    const std::uint8_t* uvPlane = source + static_cast<std::size_t>(stride) * height;
-    for (std::uint32_t y = 0; y < height; ++y) {
-        for (std::uint32_t x = 0; x < width; ++x) {
+void Nv12ToRgba(const std::uint8_t* source, std::uint32_t visibleWidth,
+                std::uint32_t visibleHeight, std::uint32_t stride,
+                std::uint32_t codedHeight, std::vector<std::uint8_t>& output) {
+    output.resize(static_cast<std::size_t>(visibleWidth) * visibleHeight * 4U);
+    const std::uint8_t* uvPlane = source + static_cast<std::size_t>(stride) * codedHeight;
+    for (std::uint32_t y = 0; y < visibleHeight; ++y) {
+        for (std::uint32_t x = 0; x < visibleWidth; ++x) {
             const int luminance = static_cast<int>(source[y * stride + x]) - 16;
             const std::size_t uvOffset = static_cast<std::size_t>(y / 2U) * stride + (x & ~1U);
             const int u = static_cast<int>(uvPlane[uvOffset]) - 128;
             const int v = static_cast<int>(uvPlane[uvOffset + 1]) - 128;
             const int c = std::max(0, luminance);
-            const std::size_t target = (static_cast<std::size_t>(y) * width + x) * 4U;
+            const std::size_t target = (static_cast<std::size_t>(y) * visibleWidth + x) * 4U;
             output[target] = Clamp((298 * c + 409 * v + 128) >> 8);
             output[target + 1] = Clamp((298 * c - 100 * u - 208 * v + 128) >> 8);
             output[target + 2] = Clamp((298 * c + 516 * u + 128) >> 8);
@@ -59,8 +60,10 @@ void Nv12ToRgba(const std::uint8_t* source, std::uint32_t width, std::uint32_t h
 
 struct MfH264Decoder::Implementation {
     IMFTransform* transform{};
-    std::uint32_t width{};
-    std::uint32_t height{};
+    std::uint32_t visibleWidth{};
+    std::uint32_t visibleHeight{};
+    std::uint32_t codedWidth{};
+    std::uint32_t codedHeight{};
     std::uint64_t sequence{};
     bool comInitialized{};
     bool mediaFoundationStarted{};
@@ -75,8 +78,10 @@ struct MfH264Decoder::Implementation {
             CoUninitialize();
             comInitialized = false;
         }
-        width = 0;
-        height = 0;
+        visibleWidth = 0;
+        visibleHeight = 0;
+        codedWidth = 0;
+        codedHeight = 0;
         sequence = 0;
     }
 };
@@ -139,8 +144,10 @@ bool MfH264Decoder::Start(std::uint32_t width, std::uint32_t height, std::string
 
     state.transform->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
     state.transform->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
-    state.width = width;
-    state.height = height;
+    state.visibleWidth = width;
+    state.visibleHeight = height;
+    state.codedWidth = width;
+    state.codedHeight = height;
     error.clear();
     return true;
 }
@@ -190,7 +197,7 @@ bool MfH264Decoder::Submit(const std::vector<std::uint8_t>& accessUnit,
         IMFMediaBuffer* outputBuffer = nullptr;
         result = MFCreateSample(&outputSample);
         if (SUCCEEDED(result)) {
-            result = MFCreate2DMediaBuffer(state.width, state.height,
+            result = MFCreate2DMediaBuffer(state.codedWidth, state.codedHeight,
                                            MFVideoFormat_NV12.Data1, FALSE, &outputBuffer);
         }
         if (SUCCEEDED(result)) result = outputSample->AddBuffer(outputBuffer);
@@ -228,8 +235,8 @@ bool MfH264Decoder::Submit(const std::vector<std::uint8_t>& accessUnit,
                 if (SUCCEEDED(MFGetAttributeSize(availableType, MF_MT_FRAME_SIZE,
                                                  &decodedWidth, &decodedHeight)) &&
                     decodedWidth > 0 && decodedHeight > 0) {
-                    state.width = decodedWidth;
-                    state.height = decodedHeight;
+                    state.codedWidth = decodedWidth;
+                    state.codedHeight = decodedHeight;
                 }
                 typeResult = state.transform->SetOutputType(0, availableType, 0);
                 Release(availableType);
@@ -262,12 +269,12 @@ bool MfH264Decoder::Submit(const std::vector<std::uint8_t>& accessUnit,
     if (SUCCEEDED(result)) result = buffer2d->Lock2D(&decoded, &pitch);
     if (SUCCEEDED(result) && pitch <= 0) result = E_UNEXPECTED;
     if (SUCCEEDED(result)) {
-        frame.width = state.width;
-        frame.height = state.height;
+        frame.width = state.visibleWidth;
+        frame.height = state.visibleHeight;
         frame.format = core::PixelFormat::Rgba8;
         frame.sequence = state.sequence++;
-        Nv12ToRgba(decoded, state.width, state.height, static_cast<std::uint32_t>(pitch),
-                   frame.pixels);
+        Nv12ToRgba(decoded, state.visibleWidth, state.visibleHeight,
+                   static_cast<std::uint32_t>(pitch), state.codedHeight, frame.pixels);
         producedFrame = true;
     }
     if (decoded != nullptr) buffer2d->Unlock2D();

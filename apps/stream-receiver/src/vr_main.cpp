@@ -1,8 +1,12 @@
+#include "phonecast/core/logging/ConsoleLogger.h"
 #include "phonecast/core/protocol/StreamProtocol.h"
-#include "phonecast/core/streaming/VideoFrame.h"
-#include "phonecast/platform/windows/DesktopPreview.h"
+#include "phonecast/platform/openvr/OpenVrOverlayRenderer.h"
 #include "phonecast/platform/windows/MfH264Decoder.h"
 #include "phonecast/platform/windows/TcpVideoServer.h"
+#include "phonecast/vr/overlay/OverlayController.h"
+
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 
 #include <chrono>
 #include <cstdint>
@@ -16,9 +20,51 @@
 namespace {
 using phonecast::core::protocol::Message;
 using phonecast::core::protocol::MessageType;
+using phonecast::vr::OverlayAction;
 
 void PrintUsage() {
-    std::cout << "Usage: phonecast-stream-receiver --pair-code NNNNNN [--port N]\n";
+    std::cout << "Usage: phonecast-vr-stream-receiver --pair-code NNNNNN [--port N]\n\n"
+              << "Global controls (hold Ctrl+Alt):\n"
+              << "  P          Show/hide\n"
+              << "  + / -      Scale up/down\n"
+              << "  Arrows     Move overlay\n"
+              << "  PageUp/Down  Move nearer/farther\n"
+              << "  ] / [      Increase/decrease opacity\n"
+              << "  Home       Reset appearance and position\n"
+              << "  End        Quit PhoneCast\n";
+}
+
+bool Pressed(int key) {
+    static bool previous[256]{};
+    const bool down = (GetAsyncKeyState(key) & 0x8000) != 0;
+    const bool pressed = down && !previous[key];
+    previous[key] = down;
+    return pressed;
+}
+
+bool PollControl(OverlayAction& action, bool& quit) {
+    quit = false;
+    const bool modified = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 &&
+                          (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+    const struct Binding { int key; OverlayAction action; } bindings[] = {
+        {'P', OverlayAction::ToggleVisibility},
+        {VK_OEM_PLUS, OverlayAction::ScaleUp}, {VK_ADD, OverlayAction::ScaleUp},
+        {VK_OEM_MINUS, OverlayAction::ScaleDown}, {VK_SUBTRACT, OverlayAction::ScaleDown},
+        {VK_LEFT, OverlayAction::MoveLeft}, {VK_RIGHT, OverlayAction::MoveRight},
+        {VK_UP, OverlayAction::MoveUp}, {VK_DOWN, OverlayAction::MoveDown},
+        {VK_PRIOR, OverlayAction::DistanceNearer}, {VK_NEXT, OverlayAction::DistanceFarther},
+        {VK_OEM_6, OverlayAction::OpacityUp}, {VK_OEM_4, OverlayAction::OpacityDown},
+        {VK_HOME, OverlayAction::Reset},
+    };
+    bool found = false;
+    for (const auto& binding : bindings) {
+        if (Pressed(binding.key) && modified && !found) {
+            action = binding.action;
+            found = true;
+        }
+    }
+    if (Pressed(VK_END) && modified) quit = true;
+    return found;
 }
 }  // namespace
 
@@ -57,42 +103,57 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    phonecast::platform::windows::DesktopPreview preview;
+    phonecast::core::ConsoleLogger logger;
+    phonecast::platform::openvr::OpenVrOverlayRenderer renderer(logger, argv[0]);
+    phonecast::vr::OverlayController controls;
     std::string error;
-    if (!preview.Start(error)) {
+    if (!renderer.Start(controls.Settings(), error)) {
         std::cerr << error << '\n';
         return EXIT_FAILURE;
     }
     phonecast::platform::windows::TcpVideoServer server(pairCode, port);
     if (!server.Start(error)) {
         std::cerr << error << '\n';
+        renderer.Stop();
         return EXIT_FAILURE;
     }
-    std::cout << "PhoneCast desktop receiver listening on port " << port
+    PrintUsage();
+    std::cout << "\nPhoneCast VR receiver listening on port " << port
               << ". Pairing code: " << pairCode << '\n';
 
     phonecast::platform::windows::MfH264Decoder decoder;
     bool decoderStarted = false;
+    bool running = true;
     std::vector<std::uint8_t> codecConfig;
-    std::uint32_t streamWidth = 0;
-    std::uint32_t streamHeight = 0;
     std::uint64_t decodedFrames = 0;
     std::uint64_t receivedBytes = 0;
     std::uint64_t lastSequence = 0;
     std::uint64_t missingFrames = 0;
     double totalDecodeMillis = 0.0;
-    const auto statsStarted = std::chrono::steady_clock::now();
-    auto lastTitle = statsStarted;
+    auto statsStarted = std::chrono::steady_clock::now();
+    auto lastStats = statsStarted;
 
-    while (preview.PumpEvents()) {
+    while (running && renderer.PumpEvents()) {
+        OverlayAction action{};
+        bool quit = false;
+        if (PollControl(action, quit)) {
+            controls.Apply(action);
+            if (!renderer.ApplySettings(controls.Settings(), error) ||
+                !renderer.SetVisible(controls.Visible(), error)) {
+                std::cerr << error << '\n';
+                running = false;
+            }
+        }
+        if (quit) break;
+
         Message message;
+        phonecast::core::VideoFrame latestFrame;
+        bool haveFrame = false;
         while (server.Pop(message)) {
             receivedBytes += message.payload.size();
             if (message.type == MessageType::VideoConfig) {
                 codecConfig = std::move(message.payload);
-                streamWidth = message.width;
-                streamHeight = message.height;
-                decoderStarted = decoder.Start(streamWidth, streamHeight, error);
+                decoderStarted = decoder.Start(message.width, message.height, error);
                 if (!decoderStarted) std::cerr << error << '\n';
                 continue;
             }
@@ -118,29 +179,31 @@ int main(int argc, char** argv) {
             } else if (produced) {
                 totalDecodeMillis += std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now() - decodeStarted).count();
-                preview.Present(frame);
+                latestFrame = std::move(frame);
+                haveFrame = true;
                 ++decodedFrames;
             }
         }
+        if (haveFrame && !renderer.SubmitFrame(latestFrame, error)) {
+            std::cerr << error << '\n';
+            break;
+        }
 
         const auto now = std::chrono::steady_clock::now();
-        if (now - lastTitle >= std::chrono::seconds(1)) {
+        if (now - lastStats >= std::chrono::seconds(1)) {
             const double seconds = std::chrono::duration<double>(now - statsStarted).count();
-            const double fps = seconds > 0 ? decodedFrames / seconds : 0;
-            const double megabits = seconds > 0 ? receivedBytes * 8.0 / seconds / 1'000'000.0 : 0;
-            preview.SetTitle("PhoneCast | " + server.Status() + " | " +
-                std::to_string(streamWidth) + "x" + std::to_string(streamHeight) + " | " +
-                std::to_string(fps).substr(0, 4) + " FPS | " +
-                std::to_string(megabits).substr(0, 4) + " Mbps | decode " +
-                std::to_string(decodedFrames > 0 ? totalDecodeMillis / decodedFrames : 0.0).substr(0, 4) +
-                " ms | dropped " + std::to_string(server.DroppedMessages() + missingFrames));
-            lastTitle = now;
+            std::cout << "[diagnostics] connected=" << (server.Connected() ? "yes" : "no")
+                      << " fps=" << (seconds > 0 ? decodedFrames / seconds : 0.0)
+                      << " bitrate-mbps=" << (seconds > 0 ? receivedBytes * 8.0 / seconds / 1'000'000.0 : 0.0)
+                      << " decode-ms=" << (decodedFrames > 0 ? totalDecodeMillis / decodedFrames : 0.0)
+                      << " dropped=" << (server.DroppedMessages() + missingFrames) << '\n';
+            lastStats = now;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
 
     server.Stop();
     decoder.Stop();
-    preview.Stop();
+    renderer.Stop();
     return EXIT_SUCCESS;
 }

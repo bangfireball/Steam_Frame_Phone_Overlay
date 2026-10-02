@@ -2,6 +2,7 @@
 #include "phonecast/core/config/AppConfig.h"
 #include "phonecast/core/protocol/StreamProtocol.h"
 #include "phonecast/core/streaming/GeneratedVideoSource.h"
+#include "phonecast/vr/overlay/OverlayController.h"
 
 #include <iostream>
 #include <string>
@@ -26,6 +27,10 @@ public:
         lastSequence = frame.sequence;
         return submitResult;
     }
+    bool ApplySettings(const phonecast::vr::OverlaySettings&, std::string&) override {
+        return true;
+    }
+    bool SetVisible(bool, std::string&) override { return true; }
     bool PumpEvents() override { return keepRunning; }
     void Stop() noexcept override { stopped = true; }
     bool startResult{true};
@@ -116,6 +121,33 @@ void TestStreamProtocol() {
           "pair codes require six digits");
 }
 
+void TestOverlayControls() {
+    phonecast::vr::OverlaySettings initial;
+    initial.widthMeters = 0.65F;
+    initial.distanceMeters = 1.0F;
+    phonecast::vr::OverlayController controls(initial);
+    controls.Apply(phonecast::vr::OverlayAction::MoveRight);
+    controls.Apply(phonecast::vr::OverlayAction::MoveUp);
+    controls.Apply(phonecast::vr::OverlayAction::ScaleUp);
+    Check(controls.Settings().offsetXMeters > 0.0F &&
+              controls.Settings().offsetYMeters > 0.0F,
+          "overlay controls move the transform");
+    Check(controls.Settings().widthMeters > initial.widthMeters,
+          "overlay controls change scale");
+    controls.Apply(phonecast::vr::OverlayAction::ToggleVisibility);
+    Check(!controls.Visible(), "overlay visibility toggles");
+    controls.Apply(phonecast::vr::OverlayAction::Reset);
+    Check(controls.Visible() && controls.Settings().offsetXMeters == 0.0F &&
+              controls.Settings().widthMeters == initial.widthMeters,
+          "overlay reset restores initial state");
+    for (int count = 0; count < 100; ++count) {
+        controls.Apply(phonecast::vr::OverlayAction::OpacityDown);
+        controls.Apply(phonecast::vr::OverlayAction::DistanceNearer);
+    }
+    Check(controls.Settings().alpha == 0.0F && controls.Settings().distanceMeters == 0.2F,
+          "overlay controls clamp safe ranges");
+}
+
 void TestReceiverLifecycle() {
     phonecast::core::GeneratedVideoSource source(64, 64);
     FakeOverlay overlay;
@@ -144,6 +176,7 @@ int main() {
     TestConfig();
     TestGeneratedFrames();
     TestStreamProtocol();
+    TestOverlayControls();
     TestReceiverLifecycle();
     if (failures == 0) std::cout << "All PhoneCast tests passed.\n";
     return failures == 0 ? 0 : 1;

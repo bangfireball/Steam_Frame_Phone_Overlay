@@ -87,10 +87,10 @@ Sprint 3 must not be represented as security-complete. Before normal product use
 
 A physical Android sender connected to the Windows receiver, authenticated, reconnected after a receiver restart, and produced a visible `886 × 1920` phone image. Media Foundation reported an output stream change after reading the H.264 parameter sets; the receiver now renegotiates NV12 output and measured approximately 5.6 ms average decode time during the initial validation.
 
-Known defects from that test:
+Known defects from that test and current follow-up status:
 
-- a green bar appears along the right edge, indicating that the NV12 plane layout/coded-versus-visible width handling still needs correction;
-- playback is visibly stuttering and has not met the approximately 30 FPS acceptance target;
+- the original test showed a green bar along the right edge; Sprint 4 now separates Media Foundation's aligned coded dimensions from the phone's visible dimensions, but the correction still requires physical revalidation;
+- playback was visibly stuttering and has not yet met the approximately 30 FPS acceptance target;
 - portrait/landscape streaming has not yet been revalidated end to end;
 - glass-to-glass latency has not been measured.
 

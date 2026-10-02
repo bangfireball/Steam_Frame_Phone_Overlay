@@ -18,6 +18,8 @@ public:
 
     bool Start(const vr::OverlaySettings& settings, std::string& error) override;
     bool SubmitFrame(const core::VideoFrame& frame, std::string& error) override;
+    bool ApplySettings(const vr::OverlaySettings& settings, std::string& error) override;
+    bool SetVisible(bool visible, std::string& error) override;
     bool PumpEvents() override;
     void Stop() noexcept override;
 

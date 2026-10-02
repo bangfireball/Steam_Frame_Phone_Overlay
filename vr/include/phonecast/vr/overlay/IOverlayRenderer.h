@@ -10,6 +10,8 @@ struct OverlaySettings {
     float widthMeters{0.65F};
     float distanceMeters{1.0F};
     float alpha{1.0F};
+    float offsetXMeters{0.0F};
+    float offsetYMeters{0.0F};
 };
 
 class IOverlayRenderer {
@@ -17,6 +19,8 @@ public:
     virtual ~IOverlayRenderer() = default;
     virtual bool Start(const OverlaySettings& settings, std::string& error) = 0;
     virtual bool SubmitFrame(const core::VideoFrame& frame, std::string& error) = 0;
+    virtual bool ApplySettings(const OverlaySettings& settings, std::string& error) = 0;
+    virtual bool SetVisible(bool visible, std::string& error) = 0;
     // Returns false when the VR runtime asks the receiver to exit.
     virtual bool PumpEvents() = 0;
     virtual void Stop() noexcept = 0;

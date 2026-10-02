@@ -653,6 +653,24 @@ docs/protocol.md
 
 # Sprint 4 — Phone Screen in VR
 
+**Status:** `[~] In progress — Android screen visible in PC-streamed SteamVR; controls and game coexistence still need validation`
+
+- `[x]` Shared paired TCP video server used by desktop and VR receivers
+- `[x]` Windows Media Foundation decoder connected to the OpenVR overlay
+- `[x]` Reusable D3D11 texture submission through `SetOverlayTexture` on Windows
+- `[x]` Aspect-preserving portrait/landscape texture updates
+- `[x]` Global show/hide, scale, distance, opacity, move, and reset controls
+- `[x]` Decoder visible-versus-coded dimension handling intended to remove the green edge
+- `[x]` Windows clean build, automated tests, and generated-texture OpenVR runtime test
+- `[x]` Physical Android stream visible in the SteamVR headset
+- `[x]` D3D11 overlay uses SteamVR's DXGI adapter and explicitly flushes updates; generated animation is visually smooth
+- `[ ]` Validate the phone overlay over a running VR game
+- `[ ]` Physical validation of keyboard controls and orientation changes
+- `[ ]` Confirm green-edge removal and measure sustained phone-stream frame pacing
+- `[ ]` Record VR performance and glass-to-glass latency observations
+- `[!]` Initial overlay appearance takes several seconds; measure keyframe/configuration wait and reduce startup delay
+- `[!]` Test-environment hazard: starting SteamVR under Windows RDP can break VRLink D3D11 texture creation and produce a gray stream; test only from the physical console session (documented in `docs/development.md`)
+
 ## Objective
 
 Connect the video decoder output to the VR overlay.
@@ -780,6 +798,8 @@ User can switch between:
 - Left controller
 - Right controller
 
+Allow direct VR placement adjustment (for example, grab/move or equivalent controller controls) so repositioning does not require the PC keyboard.
+
 Settings persist between sessions.
 
 ---
@@ -838,7 +858,7 @@ Provide a button-based fallback.
 
 Allow interaction with the displayed phone.
 
-Implement VR pointer/raycast interaction.
+Implement VR pointer/raycast interaction. This sprint also provides the headset-native interaction path; Sprint 4's PC keyboard shortcuts are only development/MVP fallback controls.
 
 ```text
 Controller
@@ -988,6 +1008,8 @@ Minimize impact on VR gaming.
 
 Measure:
 
+- time from sender connection/start-cast to first visible overlay frame;
+- codec-configuration and initial-keyframe wait;
 - CPU usage;
 - GPU usage;
 - decoder utilization;
@@ -1047,6 +1069,8 @@ higher resolution / 30-60 FPS
 ```
 
 Actual presets should be based on measurements rather than these placeholder values.
+
+Reduce initial appearance delay where measurements show avoidable receiver, decoder, keyframe-request, or texture-startup latency.
 
 ---
 
@@ -1176,6 +1200,34 @@ Investigate:
 - startup behavior;
 - background operation;
 - Steam Frame application lifecycle.
+
+---
+
+# Sprint 13 — Optional Phone Audio
+
+## Objective
+
+Optionally capture supported Android playback audio and route it through the active VR audio output. This remains outside the initial visual MVP and must be user-controlled.
+
+Investigate and document:
+
+- Android AudioPlaybackCapture restrictions and applications that prohibit capture;
+- audio codec and transport choices;
+- A/V synchronization and latency;
+- reconnect and orientation/session behavior;
+- Windows and Steam Frame audio-output selection;
+- mixing with game audio without disrupting the VR application's device;
+- mute, volume, and audio-disabled defaults.
+
+Do not capture microphone input or protected audio, and do not imply that every Android application permits playback capture.
+
+### Acceptance Criteria
+
+- User can explicitly enable or disable phone audio.
+- Supported phone playback is heard through the selected headset/VR output.
+- Audio remains acceptably synchronized with the phone picture.
+- Unsupported or protected playback fails clearly without breaking video streaming.
+- Phone audio does not unexpectedly replace or mute game audio.
 
 ---
 

@@ -79,6 +79,24 @@ The protocol serializer remains in Core and has no socket or operating-system he
 
 The desktop preview is a validation target, not the Sprint 4 VR rendering path. It currently converts Media Foundation NV12 output to CPU RGBA8. Steam Frame decoding and efficient decoder-to-compositor texture sharing remain separate backend work.
 
+## Sprint 4 Windows VR path
+
+```text
+Android MediaProjection → MediaCodec AVC → framed TCP
+    → TcpVideoServer → Media Foundation H.264 decoder → CPU RGBA8
+    → reusable D3D11 texture → OpenVR SetOverlayTexture → VR compositor
+```
+
+The desktop and VR streaming executables share `TcpVideoServer` and `MfH264Decoder`. The desktop preview remains an independent diagnostic target. On Windows, `OpenVrOverlayRenderer` creates one D3D11 texture per stream resolution and updates it instead of repeatedly calling `SetOverlayRaw`; Linux ARM64 retains the raw fallback until its native decoder/rendering path is implemented.
+
+The D3D11 device must be created on the DXGI adapter returned by OpenVR's `GetDXGIOutputInfo`. Using Windows' default adapter caused successful API calls but an invisible overlay on the multi-GPU validation PC. Each `UpdateSubresource` is followed by `ID3D11DeviceContext::Flush`; without that flush, the generated animation advanced only about once every five seconds through VRLink. With both corrections, the generated animation was visibly smooth and the physical Android screen appeared in-headset.
+
+`OverlayController` contains platform-independent, bounded changes for visibility, width, HMD-relative X/Y offset, distance, opacity, and reset. The Windows executable maps global Ctrl+Alt key combinations to those actions. World-locked and controller-locked modes remain Sprint 5 work.
+
+Media Foundation may report an aligned coded width that exceeds the phone's visible width. The decoder now allocates using coded dimensions while converting and exposing only the original visible dimensions. This is intended to remove the previously observed right-edge green padding and requires physical revalidation.
+
+The current path still performs decoder NV12 → CPU RGBA → D3D11 upload. Direct Media Foundation/DXGI surface conversion and synchronization remain performance work; platform handles have not been added to Core merely to anticipate that optimization.
+
 ## Deferred work
 
-Encrypted pairing, automatic discovery, remote control, placement modes, and GPU texture sharing remain deferred. The custom TCP transport is subject to head-of-line blocking and must be measured on real Wi-Fi before it is treated as a long-term choice.
+Encrypted pairing, automatic discovery, remote control, placement modes, and native decoder-to-GPU surface sharing remain deferred. The custom TCP transport is subject to head-of-line blocking and must be measured on real Wi-Fi before it is treated as a long-term choice.
