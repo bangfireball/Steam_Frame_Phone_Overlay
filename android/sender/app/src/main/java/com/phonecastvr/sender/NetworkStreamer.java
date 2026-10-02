@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicLong;
 final class NetworkStreamer {
     interface Listener {
         void onConnectionChanged(boolean connected, String message);
-        void onReceiverConnected();
+        void onKeyFrameNeeded();
     }
 
     private static final String TAG = "PhoneCastNetwork";
@@ -31,6 +31,7 @@ final class NetworkStreamer {
     private final Listener listener;
     private final ArrayBlockingQueue<Packet> frames = new ArrayBlockingQueue<>(3);
     private final AtomicBoolean running = new AtomicBoolean();
+    private final AtomicBoolean waitingForKeyFrame = new AtomicBoolean(true);
     private final AtomicLong droppedFrames = new AtomicLong();
     private final AtomicLong roundTripMicros = new AtomicLong(-1);
     private volatile Packet latestConfig;
@@ -51,20 +52,35 @@ final class NetworkStreamer {
     }
 
     void offerConfig(byte[] payload, int width, int height) {
+        droppedFrames.addAndGet(frames.size());
         frames.clear();
+        waitingForKeyFrame.set(true);
         latestConfig = new Packet(StreamProtocol.TYPE_VIDEO_CONFIG, 0, 0, 0,
                 width, height, payload);
     }
 
     void offerFrame(byte[] payload, int flags, long sequence, long timestampMicros,
                     int width, int height) {
+        boolean keyFrame = (flags & StreamProtocol.FLAG_KEY_FRAME) != 0;
+        if (waitingForKeyFrame.get() && !keyFrame) {
+            droppedFrames.incrementAndGet();
+            return;
+        }
+        if (keyFrame) waitingForKeyFrame.set(false);
+
         Packet packet = new Packet(StreamProtocol.TYPE_VIDEO_FRAME, flags, sequence,
                 timestampMicros, width, height, payload);
-        if (!frames.offer(packet)) {
-            frames.poll();
-            if (!frames.offer(packet)) return;
-            droppedFrames.incrementAndGet();
+        if (frames.offer(packet)) return;
+
+        int discarded = frames.size();
+        frames.clear();
+        droppedFrames.addAndGet(discarded);
+        if (keyFrame) {
+            frames.offer(packet);
+            return;
         }
+        droppedFrames.incrementAndGet();
+        if (waitingForKeyFrame.compareAndSet(false, true)) listener.onKeyFrameNeeded();
     }
 
     long droppedFrames() {
@@ -103,7 +119,10 @@ final class NetworkStreamer {
                 if (sentConfig != null) sentConfig.write(output);
                 output.flush();
                 listener.onConnectionChanged(true, "Connected to " + host + ':' + port);
-                listener.onReceiverConnected();
+                droppedFrames.addAndGet(frames.size());
+                frames.clear();
+                waitingForKeyFrame.set(true);
+                listener.onKeyFrameNeeded();
                 backoffMillis = 250;
                 long nextPingNanos = 0;
 
@@ -156,6 +175,11 @@ final class NetworkStreamer {
                 if (header.type == StreamProtocol.TYPE_PONG) {
                     roundTripMicros.set(Math.max(0L,
                             System.nanoTime() / 1000L - header.timestampMicros));
+                } else if (header.type == StreamProtocol.TYPE_REQUEST_KEY_FRAME) {
+                    droppedFrames.addAndGet(frames.size());
+                    frames.clear();
+                    waitingForKeyFrame.set(true);
+                    listener.onKeyFrameNeeded();
                 }
             }
         } catch (IOException ignored) {

@@ -4,8 +4,10 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <deque>
 #include <iostream>
 #include <mutex>
@@ -51,19 +53,82 @@ struct TcpVideoServer::Implementation {
         std::cout << "[network] " << status << std::endl;
     }
 
-    void Push(Message message) {
+    struct QueuedMessage {
+        Message message;
+        std::chrono::steady_clock::time_point receivedAt;
+    };
+
+    std::uint64_t DiscardQueuedFrames() {
+        const auto originalSize = messages.size();
+        messages.erase(std::remove_if(messages.begin(), messages.end(),
+            [](const QueuedMessage& queued) {
+                return queued.message.type == MessageType::VideoFrame;
+            }), messages.end());
+        return static_cast<std::uint64_t>(originalSize - messages.size());
+    }
+
+    bool Push(Message message) {
         std::lock_guard<std::mutex> lock(queueMutex);
+        const auto now = std::chrono::steady_clock::now();
         if (message.type == MessageType::VideoConfig) {
+            dropped += DiscardQueuedFrames();
             messages.clear();
-        } else if (message.type == MessageType::VideoFrame && messages.size() >= 4) {
-            auto found = messages.begin();
-            while (found != messages.end() && found->type != MessageType::VideoFrame) ++found;
-            if (found != messages.end()) {
-                messages.erase(found);
-                ++dropped;
-            }
+            waitingForKeyFrame = true;
+            haveExpectedSequence = false;
+            keyFrameRequestPending = true;
+            ++resyncRequests;
+            messages.push_back({std::move(message), now});
+            return true;
         }
-        messages.push_back(std::move(message));
+
+        ++receivedFrames;
+        receivedBytes += message.payload.size();
+        const bool keyFrame = (message.flags & core::protocol::MessageFlags::KeyFrame) != 0;
+        if (keyFrame) {
+            if (haveExpectedSequence && message.sequence > expectedSequence) {
+                dropped += message.sequence - expectedSequence;
+            }
+            waitingForKeyFrame = false;
+            keyFrameRequestPending = false;
+            expectedSequence = message.sequence + 1;
+            haveExpectedSequence = true;
+        } else if (waitingForKeyFrame) {
+            ++dropped;
+            return false;
+        } else if (haveExpectedSequence && message.sequence != expectedSequence) {
+            dropped += DiscardQueuedFrames() + 1;
+            waitingForKeyFrame = true;
+            haveExpectedSequence = false;
+            if (!keyFrameRequestPending) {
+                keyFrameRequestPending = true;
+                ++resyncRequests;
+                return true;
+            }
+            return false;
+        } else {
+            expectedSequence = message.sequence + 1;
+            haveExpectedSequence = true;
+        }
+
+        if (messages.size() >= kMaximumQueuedMessages) {
+            dropped += DiscardQueuedFrames() + 1;
+            waitingForKeyFrame = true;
+            haveExpectedSequence = false;
+            if (!keyFrameRequestPending) {
+                keyFrameRequestPending = true;
+                ++resyncRequests;
+                return true;
+            }
+            return false;
+        }
+        messages.push_back({std::move(message), now});
+        return false;
+    }
+
+    bool SendKeyFrameRequest(SOCKET socket) {
+        Message request;
+        request.type = MessageType::RequestKeyFrame;
+        return SendExact(socket, core::protocol::Serialize(request));
     }
 
     void HandleClient(SOCKET socket) {
@@ -99,7 +164,7 @@ struct TcpVideoServer::Implementation {
                 if (!SendExact(socket, core::protocol::Serialize(pong))) return;
             } else if (message.type == MessageType::VideoConfig ||
                        message.type == MessageType::VideoFrame) {
-                Push(std::move(message));
+                if (Push(std::move(message)) && !SendKeyFrameRequest(socket)) return;
             }
         }
     }
@@ -134,6 +199,13 @@ struct TcpVideoServer::Implementation {
             BOOL noDelay = TRUE;
             setsockopt(accepted, IPPROTO_TCP, TCP_NODELAY,
                        reinterpret_cast<const char*>(&noDelay), sizeof(noDelay));
+            {
+                std::lock_guard<std::mutex> lock(queueMutex);
+                messages.clear();
+                waitingForKeyFrame = true;
+                haveExpectedSequence = false;
+                keyFrameRequestPending = false;
+            }
             HandleClient(accepted);
             connected.store(false);
             closesocket(accepted);
@@ -151,9 +223,17 @@ struct TcpVideoServer::Implementation {
     std::thread thread;
     mutable std::mutex statusMutex;
     std::string status;
+    static constexpr std::size_t kMaximumQueuedMessages = 4;
     mutable std::mutex queueMutex;
-    std::deque<Message> messages;
+    std::deque<QueuedMessage> messages;
+    std::uint64_t receivedFrames{};
+    std::uint64_t receivedBytes{};
     std::uint64_t dropped{};
+    std::uint64_t resyncRequests{};
+    std::uint64_t expectedSequence{};
+    bool waitingForKeyFrame{true};
+    bool haveExpectedSequence{};
+    bool keyFrameRequestPending{};
     bool winsockStarted{};
 };
 
@@ -179,12 +259,17 @@ bool TcpVideoServer::Start(std::string& error) {
     return true;
 }
 
-bool TcpVideoServer::Pop(Message& message) {
+bool TcpVideoServer::Pop(Message& message, std::chrono::microseconds* queueAge) {
     auto& state = *implementation_;
     std::lock_guard<std::mutex> lock(state.queueMutex);
     if (state.messages.empty()) return false;
-    message = std::move(state.messages.front());
+    auto queued = std::move(state.messages.front());
     state.messages.pop_front();
+    message = std::move(queued.message);
+    if (queueAge != nullptr) {
+        *queueAge = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - queued.receivedAt);
+    }
     return true;
 }
 
@@ -208,9 +293,14 @@ std::string TcpVideoServer::Status() const {
     std::lock_guard<std::mutex> lock(implementation_->statusMutex);
     return implementation_->status;
 }
-std::uint64_t TcpVideoServer::DroppedMessages() const noexcept {
+VideoServerStats TcpVideoServer::Stats() const noexcept {
     std::lock_guard<std::mutex> lock(implementation_->queueMutex);
-    return implementation_->dropped;
+    return {implementation_->receivedFrames, implementation_->receivedBytes,
+            implementation_->dropped, implementation_->resyncRequests,
+            implementation_->messages.size()};
+}
+std::uint64_t TcpVideoServer::DroppedMessages() const noexcept {
+    return Stats().droppedFrames;
 }
 
 }  // namespace phonecast::platform::windows

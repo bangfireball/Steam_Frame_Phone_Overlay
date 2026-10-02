@@ -8,6 +8,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -125,13 +126,18 @@ int main(int argc, char** argv) {
     bool decoderStarted = false;
     bool running = true;
     std::vector<std::uint8_t> codecConfig;
-    std::uint64_t decodedFrames = 0;
-    std::uint64_t receivedBytes = 0;
-    std::uint64_t lastSequence = 0;
-    std::uint64_t missingFrames = 0;
-    double totalDecodeMillis = 0.0;
-    auto statsStarted = std::chrono::steady_clock::now();
-    auto lastStats = statsStarted;
+    std::uint64_t windowDecodedFrames = 0;
+    std::uint64_t windowRenderedFrames = 0;
+    double windowDecodeMillis = 0.0;
+    double windowRenderMillis = 0.0;
+    double windowQueueMillis = 0.0;
+    double maximumQueueMillis = 0.0;
+    std::uint64_t windowMessages = 0;
+    phonecast::platform::windows::VideoServerStats previousServerStats{};
+    auto lastStats = std::chrono::steady_clock::now();
+    auto connectionStarted = lastStats;
+    bool wasConnected = false;
+    bool firstFrameReported = false;
 
     while (running && renderer.PumpEvents()) {
         OverlayAction action{};
@@ -146,11 +152,22 @@ int main(int argc, char** argv) {
         }
         if (quit) break;
 
+        const bool connected = server.Connected();
+        if (connected && !wasConnected) {
+            connectionStarted = std::chrono::steady_clock::now();
+            firstFrameReported = false;
+        }
+        wasConnected = connected;
+
         Message message;
         phonecast::core::VideoFrame latestFrame;
         bool haveFrame = false;
-        while (server.Pop(message)) {
-            receivedBytes += message.payload.size();
+        std::chrono::microseconds queueAge{};
+        while (server.Pop(message, &queueAge)) {
+            const double queueMillis = queueAge.count() / 1000.0;
+            windowQueueMillis += queueMillis;
+            maximumQueueMillis = std::max(maximumQueueMillis, queueMillis);
+            ++windowMessages;
             if (message.type == MessageType::VideoConfig) {
                 codecConfig = std::move(message.payload);
                 decoderStarted = decoder.Start(message.width, message.height, error);
@@ -158,10 +175,6 @@ int main(int argc, char** argv) {
                 continue;
             }
             if (!decoderStarted) continue;
-            if (decodedFrames > 0 && message.sequence > lastSequence + 1) {
-                missingFrames += message.sequence - lastSequence - 1;
-            }
-            lastSequence = message.sequence;
             std::vector<std::uint8_t> accessUnit;
             if ((message.flags & phonecast::core::protocol::MessageFlags::KeyFrame) != 0) {
                 accessUnit.reserve(codecConfig.size() + message.payload.size());
@@ -177,26 +190,58 @@ int main(int argc, char** argv) {
                 std::cerr << error << '\n';
                 decoderStarted = false;
             } else if (produced) {
-                totalDecodeMillis += std::chrono::duration<double, std::milli>(
+                windowDecodeMillis += std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now() - decodeStarted).count();
                 latestFrame = std::move(frame);
                 haveFrame = true;
-                ++decodedFrames;
+                ++windowDecodedFrames;
             }
         }
-        if (haveFrame && !renderer.SubmitFrame(latestFrame, error)) {
-            std::cerr << error << '\n';
-            break;
+        if (haveFrame) {
+            const auto renderStarted = std::chrono::steady_clock::now();
+            if (!renderer.SubmitFrame(latestFrame, error)) {
+                std::cerr << error << '\n';
+                break;
+            }
+            windowRenderMillis += std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - renderStarted).count();
+            ++windowRenderedFrames;
+            if (!firstFrameReported) {
+                const double startupMillis = std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - connectionStarted).count();
+                std::cout << "[diagnostics] first-submitted-frame-ms=" << startupMillis << '\n';
+                firstFrameReported = true;
+            }
         }
 
         const auto now = std::chrono::steady_clock::now();
         if (now - lastStats >= std::chrono::seconds(1)) {
-            const double seconds = std::chrono::duration<double>(now - statsStarted).count();
-            std::cout << "[diagnostics] connected=" << (server.Connected() ? "yes" : "no")
-                      << " fps=" << (seconds > 0 ? decodedFrames / seconds : 0.0)
-                      << " bitrate-mbps=" << (seconds > 0 ? receivedBytes * 8.0 / seconds / 1'000'000.0 : 0.0)
-                      << " decode-ms=" << (decodedFrames > 0 ? totalDecodeMillis / decodedFrames : 0.0)
-                      << " dropped=" << (server.DroppedMessages() + missingFrames) << '\n';
+            const double seconds = std::chrono::duration<double>(now - lastStats).count();
+            const auto serverStats = server.Stats();
+            const auto received = serverStats.receivedFrames - previousServerStats.receivedFrames;
+            const auto bytes = serverStats.receivedBytes - previousServerStats.receivedBytes;
+            const auto dropped = serverStats.droppedFrames - previousServerStats.droppedFrames;
+            const auto resyncs = serverStats.resyncRequests - previousServerStats.resyncRequests;
+            std::cout << "[diagnostics] connected=" << (connected ? "yes" : "no")
+                      << " rx-fps=" << received / seconds
+                      << " decode-fps=" << windowDecodedFrames / seconds
+                      << " render-fps=" << windowRenderedFrames / seconds
+                      << " bitrate-mbps=" << bytes * 8.0 / seconds / 1'000'000.0
+                      << " decode-ms=" << (windowDecodedFrames > 0 ? windowDecodeMillis / windowDecodedFrames : 0.0)
+                      << " render-ms=" << (windowRenderedFrames > 0 ? windowRenderMillis / windowRenderedFrames : 0.0)
+                      << " queue-ms=" << (windowMessages > 0 ? windowQueueMillis / windowMessages : 0.0)
+                      << " queue-max-ms=" << maximumQueueMillis
+                      << " queue-depth=" << serverStats.queueDepth
+                      << " dropped=" << dropped
+                      << " resyncs=" << resyncs << '\n';
+            previousServerStats = serverStats;
+            windowDecodedFrames = 0;
+            windowRenderedFrames = 0;
+            windowDecodeMillis = 0.0;
+            windowRenderMillis = 0.0;
+            windowQueueMillis = 0.0;
+            maximumQueueMillis = 0.0;
+            windowMessages = 0;
             lastStats = now;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(2));

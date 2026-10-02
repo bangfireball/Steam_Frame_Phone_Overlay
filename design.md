@@ -707,10 +707,11 @@ Useful evidence for the next session:
 
 Recommended next work:
 
-1. instrument per-stage timestamps and one-second rolling counters rather than lifetime averages;
-2. inspect Android encoder output cadence versus the configured 30 FPS;
-3. inspect receiver queue policy, arbitrary inter-frame drops, keyframe retention, and Media Foundation output draining;
-4. retest startup and steady-state pacing before beginning Sprint 5.
+1. physically validate the newly implemented one-second receive/decode/render, queue-age, drop, resync, and first-frame diagnostics;
+2. verify whether the Android fixed-30-FPS surface request and low-latency/no-B-frame encoder hints correct output cadence on the test phone;
+3. validate the new queue-overrun/sequence-gap policy, which discards dependent frames and requests a fresh keyframe instead of decoding arbitrary inter-frame gaps;
+4. continue inspecting Media Foundation output draining if physical pacing remains poor;
+5. retest startup, landscape reconfiguration, and steady-state pacing before beginning Sprint 5.
 
 ## Objective
 

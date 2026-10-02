@@ -13,6 +13,7 @@ final class StreamProtocol {
     static final int TYPE_PING = 4;
     static final int TYPE_PONG = 5;
     static final int TYPE_END_STREAM = 6;
+    static final int TYPE_REQUEST_KEY_FRAME = 7;
     static final int FLAG_KEY_FRAME = 1;
     static final int MAX_PAYLOAD_SIZE = 4 * 1024 * 1024;
 

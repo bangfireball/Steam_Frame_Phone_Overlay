@@ -25,6 +25,10 @@ public final class StreamProtocolTest {
         assertEquals(1, message[32]);
     }
 
+    @Test public void keyFrameRequestHasStableWireType() {
+        assertEquals(7, StreamProtocol.TYPE_REQUEST_KEY_FRAME);
+    }
+
     @Test public void validatesPairCodes() {
         assertTrue(StreamProtocol.validPairCode("123456"));
         assertFalse(StreamProtocol.validPairCode("12345"));

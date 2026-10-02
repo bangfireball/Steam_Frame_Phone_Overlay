@@ -155,7 +155,7 @@ public final class ScreenCaptureService extends Service {
                     });
                 }
 
-                @Override public void onReceiverConnected() {
+                @Override public void onKeyFrameNeeded() {
                     requestSyncFrame();
                 }
             });
@@ -192,6 +192,10 @@ public final class ScreenCaptureService extends Service {
         format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL,
                 CaptureConfig.I_FRAME_INTERVAL_SECONDS);
         format.setInteger(MediaFormat.KEY_PRIORITY, 0);
+        format.setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0);
+        if (Build.VERSION.SDK_INT >= 30) {
+            format.setInteger(MediaFormat.KEY_LOW_LATENCY, 1);
+        }
 
         MediaCodec codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
         EncoderSession session = new EncoderSession(codec, size);
@@ -223,6 +227,10 @@ public final class ScreenCaptureService extends Service {
         try {
             codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             session.surface = codec.createInputSurface();
+            if (Build.VERSION.SDK_INT >= 30) {
+                session.surface.setFrameRate(CaptureConfig.FRAME_RATE,
+                        Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
+            }
             codec.start();
             return session;
         } catch (RuntimeException error) {

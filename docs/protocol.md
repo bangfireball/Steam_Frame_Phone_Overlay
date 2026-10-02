@@ -12,8 +12,8 @@ This is an intentionally narrow first implementation:
 
 - TCP is available in the Android SDK, Windows, and Linux ARM64 without a large runtime dependency.
 - Reliable ordered delivery avoids writing H.264 fragmentation, reassembly, jitter buffering, and loss recovery before the basic pipeline has been validated.
-- A three-frame sender queue and four-message receiver queue bound latency and memory. Old non-config frames are discarded when either consumer falls behind.
-- Reconnection uses exponential backoff capped at five seconds. A reconnect sends the pairing handshake and latest codec configuration, then requests a fresh keyframe.
+- A three-frame sender queue and four-message receiver queue bound latency and memory. If either queue overruns, the implementation discards the dependent frame chain, waits for a new keyframe, and explicitly requests one instead of decoding arbitrary inter-frame gaps.
+- Reconnection uses exponential backoff capped at five seconds. A reconnect clears stale queued frames, sends the pairing handshake and latest codec configuration, then requests a fresh keyframe.
 
 The tradeoff is TCP head-of-line blocking after packet loss. RFC 8087 explains that reliable ordered transports delay later data while a missing segment is retransmitted. RTP (RFC 3550) avoids that behavior and provides media sequence/timestamp semantics, while WebRTC adds SRTP, congestion control, feedback, and NAT traversal at substantial integration and binary-size cost.
 
@@ -54,6 +54,7 @@ Message types:
 4. `PING` — sender monotonic timestamp used for RTT diagnostics.
 5. `PONG` — receiver echo of the `PING` timestamp.
 6. `END_STREAM` — orderly sender shutdown.
+7. `REQUEST_KEY_FRAME` — receiver-to-sender recovery feedback with an empty payload.
 
 `VIDEO_FRAME` flag bit 0 identifies a keyframe. Android output buffers are copied only from `BufferInfo.offset` through `offset + size`. Codec-config output is not counted as a video frame.
 
@@ -64,8 +65,9 @@ Message types:
 3. Android sends `HELLO`; the receiver closes the connection if the code does not match.
 4. Android sends the latest `VIDEO_CONFIG` before frames.
 5. Keyframes are prefixed with the current codec configuration before being submitted to the Windows decoder.
-6. An orientation/configuration change clears queued old frames, sends new configuration and dimensions, and resets the decoder.
-7. A disconnect leaves capture active while the sender retries with bounded exponential backoff.
+6. An orientation/configuration change clears queued old frames, sends new configuration and dimensions, resets the decoder, and requests a keyframe.
+7. A sequence gap or queue overrun causes both endpoints to discard stale dependent frames and resume only at a requested keyframe.
+8. A disconnect leaves capture active while the sender retries with bounded exponential backoff.
 
 Manual address entry satisfies Sprint 3's “discovers or connects” criterion. Automatic discovery is deferred until the basic stream has physical-device validation.
 
@@ -97,4 +99,6 @@ Known defects from that test and current follow-up status:
 
 ## Diagnostics and limitations
 
-The receiver window reports decoded FPS, received bitrate, average decode time, dimensions, queue/sequence drops, and connection state. The Android sender reports network RTT using a once-per-second `PING`/`PONG` exchange. Android presentation timestamps cannot be directly subtracted from the PC clock; meaningful glass-to-glass latency still requires clock-offset estimation or an external high-speed-camera test.
+The receivers report one-second rolling receive/decode/render FPS, bitrate, decode/render time, queue age/depth, drops, resynchronization requests, and connection state. They also report connection-to-first-decoded-frame time. The Android sender reports network RTT using a once-per-second `PING`/`PONG` exchange. Android presentation timestamps cannot be directly subtracted from the PC clock; meaningful glass-to-glass latency still requires clock-offset estimation or an external high-speed-camera test.
+
+The Android encoder now requests no B-frames and low-latency operation where supported, and its input surface requests a fixed 30 FPS cadence. These changes and keyframe recovery are implemented but still require physical-device/headset validation; they must not yet be represented as resolving the measured latency, frame-pacing, startup, or landscape defects.

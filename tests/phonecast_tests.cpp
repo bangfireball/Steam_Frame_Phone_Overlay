@@ -117,6 +117,12 @@ void TestStreamProtocol() {
     corrupt[8] = 0x7f;
     Check(!ParseHeader(corrupt.data(), kHeaderSize, parsed, payloadSize, error),
           "oversized payload is rejected");
+    Message keyFrameRequest;
+    keyFrameRequest.type = MessageType::RequestKeyFrame;
+    const auto requestBytes = Serialize(keyFrameRequest);
+    Check(ParseHeader(requestBytes.data(), kHeaderSize, parsed, payloadSize, error) &&
+              parsed.type == MessageType::RequestKeyFrame && payloadSize == 0,
+          "key-frame recovery request round trips");
     Check(IsValidPairCode("123456") && !IsValidPairCode("12345x"),
           "pair codes require six digits");
 }

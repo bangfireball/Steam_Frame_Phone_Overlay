@@ -37,7 +37,7 @@ std::uint64_t Read64(const std::uint8_t* data) {
 }
 bool IsKnownType(std::uint8_t type) {
     return type >= static_cast<std::uint8_t>(MessageType::Hello) &&
-           type <= static_cast<std::uint8_t>(MessageType::EndStream);
+           type <= static_cast<std::uint8_t>(MessageType::RequestKeyFrame);
 }
 }  // namespace
 

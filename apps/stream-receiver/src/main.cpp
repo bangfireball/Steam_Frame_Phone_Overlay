@@ -76,18 +76,29 @@ int main(int argc, char** argv) {
     std::vector<std::uint8_t> codecConfig;
     std::uint32_t streamWidth = 0;
     std::uint32_t streamHeight = 0;
-    std::uint64_t decodedFrames = 0;
-    std::uint64_t receivedBytes = 0;
-    std::uint64_t lastSequence = 0;
-    std::uint64_t missingFrames = 0;
-    double totalDecodeMillis = 0.0;
-    const auto statsStarted = std::chrono::steady_clock::now();
-    auto lastTitle = statsStarted;
+    std::uint64_t windowDecodedFrames = 0;
+    double windowDecodeMillis = 0.0;
+    double windowQueueMillis = 0.0;
+    std::uint64_t windowMessages = 0;
+    phonecast::platform::windows::VideoServerStats previousServerStats{};
+    auto lastTitle = std::chrono::steady_clock::now();
+    auto connectionStarted = lastTitle;
+    bool wasConnected = false;
+    bool firstFrameReported = false;
 
     while (preview.PumpEvents()) {
+        const bool connected = server.Connected();
+        if (connected && !wasConnected) {
+            connectionStarted = std::chrono::steady_clock::now();
+            firstFrameReported = false;
+        }
+        wasConnected = connected;
+
         Message message;
-        while (server.Pop(message)) {
-            receivedBytes += message.payload.size();
+        std::chrono::microseconds queueAge{};
+        while (server.Pop(message, &queueAge)) {
+            windowQueueMillis += queueAge.count() / 1000.0;
+            ++windowMessages;
             if (message.type == MessageType::VideoConfig) {
                 codecConfig = std::move(message.payload);
                 streamWidth = message.width;
@@ -97,10 +108,6 @@ int main(int argc, char** argv) {
                 continue;
             }
             if (!decoderStarted) continue;
-            if (decodedFrames > 0 && message.sequence > lastSequence + 1) {
-                missingFrames += message.sequence - lastSequence - 1;
-            }
-            lastSequence = message.sequence;
             std::vector<std::uint8_t> accessUnit;
             if ((message.flags & phonecast::core::protocol::MessageFlags::KeyFrame) != 0) {
                 accessUnit.reserve(codecConfig.size() + message.payload.size());
@@ -116,24 +123,44 @@ int main(int argc, char** argv) {
                 std::cerr << error << '\n';
                 decoderStarted = false;
             } else if (produced) {
-                totalDecodeMillis += std::chrono::duration<double, std::milli>(
+                windowDecodeMillis += std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now() - decodeStarted).count();
                 preview.Present(frame);
-                ++decodedFrames;
+                ++windowDecodedFrames;
+                if (!firstFrameReported) {
+                    const double startupMillis = std::chrono::duration<double, std::milli>(
+                        std::chrono::steady_clock::now() - connectionStarted).count();
+                    std::cout << "First decoded frame after " << startupMillis << " ms.\n";
+                    firstFrameReported = true;
+                }
             }
         }
 
         const auto now = std::chrono::steady_clock::now();
         if (now - lastTitle >= std::chrono::seconds(1)) {
-            const double seconds = std::chrono::duration<double>(now - statsStarted).count();
-            const double fps = seconds > 0 ? decodedFrames / seconds : 0;
-            const double megabits = seconds > 0 ? receivedBytes * 8.0 / seconds / 1'000'000.0 : 0;
+            const double seconds = std::chrono::duration<double>(now - lastTitle).count();
+            const auto serverStats = server.Stats();
+            const auto received = serverStats.receivedFrames - previousServerStats.receivedFrames;
+            const auto bytes = serverStats.receivedBytes - previousServerStats.receivedBytes;
+            const auto dropped = serverStats.droppedFrames - previousServerStats.droppedFrames;
+            const auto resyncs = serverStats.resyncRequests - previousServerStats.resyncRequests;
+            const double fps = windowDecodedFrames / seconds;
+            const double megabits = bytes * 8.0 / seconds / 1'000'000.0;
             preview.SetTitle("PhoneCast | " + server.Status() + " | " +
-                std::to_string(streamWidth) + "x" + std::to_string(streamHeight) + " | " +
+                std::to_string(streamWidth) + "x" + std::to_string(streamHeight) + " | rx " +
+                std::to_string(received / seconds).substr(0, 4) + " | decode " +
                 std::to_string(fps).substr(0, 4) + " FPS | " +
                 std::to_string(megabits).substr(0, 4) + " Mbps | decode " +
-                std::to_string(decodedFrames > 0 ? totalDecodeMillis / decodedFrames : 0.0).substr(0, 4) +
-                " ms | dropped " + std::to_string(server.DroppedMessages() + missingFrames));
+                std::to_string(windowDecodedFrames > 0 ? windowDecodeMillis / windowDecodedFrames : 0.0).substr(0, 4) +
+                " ms | queue " +
+                std::to_string(windowMessages > 0 ? windowQueueMillis / windowMessages : 0.0).substr(0, 4) +
+                " ms | dropped " + std::to_string(dropped) +
+                " | resync " + std::to_string(resyncs));
+            previousServerStats = serverStats;
+            windowDecodedFrames = 0;
+            windowDecodeMillis = 0.0;
+            windowQueueMillis = 0.0;
+            windowMessages = 0;
             lastTitle = now;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(2));

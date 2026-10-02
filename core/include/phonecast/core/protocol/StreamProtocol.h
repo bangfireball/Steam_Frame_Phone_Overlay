@@ -18,6 +18,7 @@ enum class MessageType : std::uint8_t {
     Ping = 4,
     Pong = 5,
     EndStream = 6,
+    RequestKeyFrame = 7,
 };
 
 enum MessageFlags : std::uint16_t {

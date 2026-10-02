@@ -2,11 +2,21 @@
 
 #include "phonecast/core/protocol/StreamProtocol.h"
 
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
 
 namespace phonecast::platform::windows {
+
+struct VideoServerStats {
+    std::uint64_t receivedFrames{};
+    std::uint64_t receivedBytes{};
+    std::uint64_t droppedFrames{};
+    std::uint64_t resyncRequests{};
+    std::size_t queueDepth{};
+};
 
 class TcpVideoServer {
 public:
@@ -16,11 +26,13 @@ public:
     TcpVideoServer& operator=(const TcpVideoServer&) = delete;
 
     bool Start(std::string& error);
-    bool Pop(core::protocol::Message& message);
+    bool Pop(core::protocol::Message& message,
+             std::chrono::microseconds* queueAge = nullptr);
     void Stop() noexcept;
 
     [[nodiscard]] bool Connected() const noexcept;
     [[nodiscard]] std::string Status() const;
+    [[nodiscard]] VideoServerStats Stats() const noexcept;
     [[nodiscard]] std::uint64_t DroppedMessages() const noexcept;
 
 private:
