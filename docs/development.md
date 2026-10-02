@@ -99,7 +99,9 @@ the old VR receiver remained running. To physically retest, exit the old receive
 
 No sender reinstall is required. Compare an isolated phone tap followed by no
 motion, continuous scrolling, and startup; use the desktop receiver separately
-for comparison. End-to-end improvement has not yet been physically measured.
+for comparison. After restarting the fixed receiver, the user physically retested
+and reported “this is perfect. very snappy.” End-to-end responsiveness improvement
+is qualitatively confirmed; quantitative latency and startup timings remain unmeasured.
 Sparse `rx-fps=0` on a static screen is not alone evidence of capture failure.
 
 ## Linux ARM64 receiver cross-build

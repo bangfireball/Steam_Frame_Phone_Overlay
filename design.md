@@ -718,9 +718,10 @@ Most important evidence:
 - `[x]` Enabled `MF_LOW_LATENCY` (the `CODECAPI_AVLowLatencyMode` GUID, UINT32) before decoder media-type negotiation. Failure to enable it is reported rather than silently accepting buffering.
 - `[x]` The same test now produces the IDR and each subsequent P-frame immediately, without future input or an end-of-stream drain. This affects both desktop and VR receivers; no Android APK change is needed.
 - `[x]` Full Windows build and all nine CTest tests pass in `out/build/windows-x64-latency`. The original build's VR executable was locked by the running receiver, which was left undisturbed.
-- `[ ]` Restart with the fixed receiver and physically measure startup and action-to-visible latency. No phone was attached through ADB during this follow-up. Do not claim that all 2–5 second delays are resolved until retested.
+- `[x]` Restarted the fixed VR receiver in the physical console session; the user retested and reported “this is perfect. very snappy.” This confirms a substantial perceived responsiveness improvement in the phone-to-VR path.
+- `[ ]` Quantitatively measure startup and glass-to-glass latency; the user confirmation is qualitative, not a measured latency value. Landscape remains unverified.
 
-The prior inference that decoder buffering was ruled out was incorrect. Milliseconds spent inside `Submit` measure work, not how long a picture waits for future input. Sparse screen updates can turn a small decoder look-ahead into seconds of visible delay. Test this smaller, reproduced fix before replacing Android's capture path.
+The prior inference that decoder buffering was ruled out was incorrect. Milliseconds spent inside `Submit` measure work, not how long a picture waits for future input. Sparse screen updates can turn a small decoder look-ahead into seconds of visible delay. The reproduced fix is now also user-confirmed as very responsive; replacing Android's capture path is not justified without new evidence of remaining stalls.
 
 Recommended next work:
 
