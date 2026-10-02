@@ -580,11 +580,12 @@ Prioritize latency and reliability.
 - `[x]` Windows TCP receiver and Media Foundation H.264 decoder
 - `[x]` Aspect-preserving desktop preview and basic diagnostics
 - `[x]` C++ protocol tests, Windows build/tests, Android tests, APK, and lint
-- `[ ]` Physical Android-to-PC picture validation
-- `[ ]` Approximately 30 FPS LAN validation
-- `[ ]` Receiver restart/reconnection validation
+- `[x]` Physical Android-to-PC picture validation
+- `[!]` Approximately 30 FPS LAN validation — current preview is visibly stuttering
+- `[x]` Receiver restart/reconnection validation
 - `[ ]` Portrait/landscape streaming validation
-- `[ ]` Latency measurement recorded
+- `[~]` Latency measurement — decoder measured near 5.6 ms; glass-to-glass latency not yet recorded
+- `[!]` Known rendering defect: green bar appears on the right edge of the decoded picture
 - `[!]` Security limitation: pairing gates the stream, but Sprint 3 transport is not encrypted
 
 ## Objective

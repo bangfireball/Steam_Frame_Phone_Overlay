@@ -14,7 +14,8 @@ PhoneCast VR aims to show an Android phone as a persistent VR overlay, first thr
 - `[!]` Follow-up: validate coexistence with a standalone VR scene application
 - `[x]` Sprint 2 Android sender complete and validated on a physical device
 - `[x]` Android debug APK builds, unit tests pass, and lint passes
-- `[~]` Sprint 3 phone-to-PC streaming implemented; physical-device validation pending
+- `[~]` Sprint 3 phone-to-PC streaming visually confirmed on a physical device
+- `[!]` Sprint 3 follow-up: fix right-edge green bar and visibly stuttering preview
 
 ## Sprint 3 streaming validation
 

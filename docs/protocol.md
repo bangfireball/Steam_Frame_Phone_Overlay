@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-10-02
 
-Sprint 3 status: **implementation in progress; physical-device streaming validation pending**
+Sprint 3 status: **physical Android-to-PC streaming confirmed; performance and rendering fixes remain**
 
 ## Transport decision
 
@@ -82,6 +82,17 @@ The receiver accepts only an outbound connection initiated by a user-configured 
 **The Sprint 3 protocol is not encrypted and the short code is not a cryptographic authentication protocol. Screen content can be observed by an attacker able to capture LAN traffic, and an active attacker could impersonate an endpoint. Do not use it on an untrusted network.**
 
 Sprint 3 must not be represented as security-complete. Before normal product use, replace this bootstrap with authenticated encryption and persistent device identity (for example TLS with certificate pinning established through a QR/fingerprint pairing flow), plus device revocation.
+
+## Physical validation
+
+A physical Android sender connected to the Windows receiver, authenticated, reconnected after a receiver restart, and produced a visible `886 × 1920` phone image. Media Foundation reported an output stream change after reading the H.264 parameter sets; the receiver now renegotiates NV12 output and measured approximately 5.6 ms average decode time during the initial validation.
+
+Known defects from that test:
+
+- a green bar appears along the right edge, indicating that the NV12 plane layout/coded-versus-visible width handling still needs correction;
+- playback is visibly stuttering and has not met the approximately 30 FPS acceptance target;
+- portrait/landscape streaming has not yet been revalidated end to end;
+- glass-to-glass latency has not been measured.
 
 ## Diagnostics and limitations
 
