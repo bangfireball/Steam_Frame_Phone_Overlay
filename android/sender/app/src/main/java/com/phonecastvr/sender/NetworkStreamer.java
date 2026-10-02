@@ -35,6 +35,7 @@ final class NetworkStreamer {
     private final AtomicLong droppedFrames = new AtomicLong();
     private final AtomicLong roundTripMicros = new AtomicLong(-1);
     private volatile Packet latestConfig;
+    private volatile Packet latestKeyFrame;
     private volatile Socket socket;
     private Thread thread;
 
@@ -55,6 +56,7 @@ final class NetworkStreamer {
         droppedFrames.addAndGet(frames.size());
         frames.clear();
         waitingForKeyFrame.set(true);
+        latestKeyFrame = null;
         latestConfig = new Packet(StreamProtocol.TYPE_VIDEO_CONFIG, 0, 0, 0,
                 width, height, payload);
     }
@@ -70,6 +72,7 @@ final class NetworkStreamer {
 
         Packet packet = new Packet(StreamProtocol.TYPE_VIDEO_FRAME, flags, sequence,
                 timestampMicros, width, height, payload);
+        if (keyFrame) latestKeyFrame = packet;
         if (frames.offer(packet)) return;
 
         int discarded = frames.size();
@@ -117,6 +120,12 @@ final class NetworkStreamer {
                         pairCode.getBytes(StandardCharsets.US_ASCII));
                 Packet sentConfig = latestConfig;
                 if (sentConfig != null) sentConfig.write(output);
+                Packet cachedKeyFrame = latestKeyFrame;
+                if (cachedKeyFrame != null && sentConfig != null &&
+                        cachedKeyFrame.width == sentConfig.width &&
+                        cachedKeyFrame.height == sentConfig.height) {
+                    cachedKeyFrame.write(output);
+                }
                 output.flush();
                 listener.onConnectionChanged(true, "Connected to " + host + ':' + port);
                 droppedFrames.addAndGet(frames.size());

@@ -192,10 +192,6 @@ public final class ScreenCaptureService extends Service {
         // Surface producers may run at the display refresh rate despite KEY_FRAME_RATE.
         // This encoder-side cap drops excess input before H.264 dependencies are created.
         format.setFloat(MediaFormat.KEY_MAX_FPS_TO_ENCODER, CaptureConfig.FRAME_RATE);
-        // MediaProjection can become extremely sparse for mostly-static screens.
-        // Repeat the latest submitted surface frame at 10 FPS so a one-frame UI
-        // transition cannot remain invisible until the next animation or gesture.
-        format.setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L);
         format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL,
                 CaptureConfig.I_FRAME_INTERVAL_SECONDS);
         format.setInteger(MediaFormat.KEY_PRIORITY, 0);
@@ -205,6 +201,17 @@ public final class ScreenCaptureService extends Service {
         }
 
         MediaCodec codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
+        MediaCodecInfo.CodecCapabilities capabilities = codec.getCodecInfo()
+                .getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC);
+        if (capabilities.getEncoderCapabilities().isBitrateModeSupported(
+                MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)) {
+            format.setInteger(MediaFormat.KEY_BITRATE_MODE,
+                    MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR);
+        }
+        if (Build.VERSION.SDK_INT >= 30 && capabilities.isFeatureSupported(
+                MediaCodecInfo.CodecCapabilities.FEATURE_LowLatency)) {
+            format.setFeatureEnabled(MediaCodecInfo.CodecCapabilities.FEATURE_LowLatency, true);
+        }
         EncoderSession session = new EncoderSession(codec, size);
         codec.setCallback(new MediaCodec.Callback() {
             @Override public void onInputBufferAvailable(MediaCodec mediaCodec, int index) {
@@ -234,10 +241,6 @@ public final class ScreenCaptureService extends Service {
         try {
             codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             session.surface = codec.createInputSurface();
-            if (Build.VERSION.SDK_INT >= 30) {
-                session.surface.setFrameRate(CaptureConfig.FRAME_RATE,
-                        Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
-            }
             codec.start();
             return session;
         } catch (RuntimeException error) {

@@ -8,16 +8,16 @@ import org.junit.Test;
 public final class CaptureConfigTest {
     @Test public void nativeSmallResolutionIsPreservedAndEven() {
         CaptureConfig.Size size = CaptureConfig.fitWithinLimit(1080, 2340);
-        assertEquals(886, size.width);
-        assertEquals(1920, size.height);
+        assertEquals(590, size.width);
+        assertEquals(1280, size.height);
         assertEquals(0, size.width % 2);
         assertEquals(0, size.height % 2);
     }
 
     @Test public void landscapeOrientationIsPreserved() {
         CaptureConfig.Size size = CaptureConfig.fitWithinLimit(2340, 1080);
-        assertEquals(1920, size.width);
-        assertEquals(886, size.height);
+        assertEquals(1280, size.width);
+        assertEquals(590, size.height);
     }
 
     @Test public void lowResolutionIsNotUpscaled() {

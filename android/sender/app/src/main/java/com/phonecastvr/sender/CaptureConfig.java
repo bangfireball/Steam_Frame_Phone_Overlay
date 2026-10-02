@@ -2,8 +2,8 @@ package com.phonecastvr.sender;
 
 final class CaptureConfig {
     static final int FRAME_RATE = 30;
-    static final int I_FRAME_INTERVAL_SECONDS = 1;
-    static final int MAX_LONG_EDGE = 1920;
+    static final int I_FRAME_INTERVAL_SECONDS = 2;
+    static final int MAX_LONG_EDGE = 1280;
 
     private CaptureConfig() {}
 

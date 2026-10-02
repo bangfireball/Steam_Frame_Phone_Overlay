@@ -31,7 +31,7 @@ The Sprint 2 sender:
 2. Starts `ScreenCaptureService` from the user action.
 3. Enters the foreground with the `mediaProjection` service type.
 4. Obtains and registers the approved projection.
-5. Selects dimensions preserving aspect ratio with a 1920-pixel long-edge cap.
+5. Selects dimensions preserving aspect ratio; the current latency-oriented streaming profile caps the long edge at 1280 pixels.
 6. Configures a 30 FPS surface-input AVC encoder.
 7. Creates one virtual display targeting the encoder surface.
 8. Drains H.264 output, counts frames and bytes, and discards payloads.

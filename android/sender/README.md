@@ -42,7 +42,7 @@ adb logcat -s PhoneCastCapture
 ## Current behavior
 
 - Captures at 30 FPS.
-- Preserves aspect ratio and caps the longest encoded edge at 1920 pixels.
+- Preserves aspect ratio and currently caps the longest encoded edge at 1280 pixels to prioritize latency.
 - Uses hardware H.264 when the device's default AVC encoder is hardware-backed; Android selects the encoder.
 - Runs capture from a `mediaProjection` foreground service.
 - Drains encoded output continuously and reports frame/byte counts.
