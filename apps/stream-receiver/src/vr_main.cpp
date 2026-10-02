@@ -43,6 +43,25 @@ bool Pressed(int key) {
     return pressed;
 }
 
+phonecast::core::VideoFrame MakeWaitingFrame() {
+    phonecast::core::VideoFrame frame;
+    frame.width = 320;
+    frame.height = 180;
+    frame.format = phonecast::core::PixelFormat::Rgba8;
+    frame.pixels.resize(static_cast<std::size_t>(frame.width) * frame.height * 4U);
+    for (std::uint32_t y = 0; y < frame.height; ++y) {
+        for (std::uint32_t x = 0; x < frame.width; ++x) {
+            const bool border = x < 6 || y < 6 || x >= frame.width - 6 || y >= frame.height - 6;
+            const std::size_t offset = (static_cast<std::size_t>(y) * frame.width + x) * 4U;
+            frame.pixels[offset] = border ? 35 : 12;
+            frame.pixels[offset + 1] = border ? 125 : 18;
+            frame.pixels[offset + 2] = border ? 220 : 28;
+            frame.pixels[offset + 3] = 255;
+        }
+    }
+    return frame;
+}
+
 bool PollControl(OverlayAction& action, bool& quit) {
     quit = false;
     const bool modified = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 &&
@@ -112,6 +131,12 @@ int main(int argc, char** argv) {
         std::cerr << error << '\n';
         return EXIT_FAILURE;
     }
+    const auto waitingFrame = MakeWaitingFrame();
+    if (!renderer.SubmitFrame(waitingFrame, error)) {
+        std::cerr << error << '\n';
+        renderer.Stop();
+        return EXIT_FAILURE;
+    }
     phonecast::platform::windows::TcpVideoServer server(pairCode, port);
     if (!server.Start(error)) {
         std::cerr << error << '\n';
@@ -137,6 +162,8 @@ int main(int argc, char** argv) {
     auto lastStats = std::chrono::steady_clock::now();
     auto connectionStarted = lastStats;
     bool wasConnected = false;
+    bool configReported = false;
+    bool keyFrameReported = false;
     bool firstFrameReported = false;
 
     while (running && renderer.PumpEvents()) {
@@ -155,6 +182,8 @@ int main(int argc, char** argv) {
         const bool connected = server.Connected();
         if (connected && !wasConnected) {
             connectionStarted = std::chrono::steady_clock::now();
+            configReported = false;
+            keyFrameReported = false;
             firstFrameReported = false;
         }
         wasConnected = connected;
@@ -170,6 +199,13 @@ int main(int argc, char** argv) {
             ++windowMessages;
             if (message.type == MessageType::VideoConfig) {
                 codecConfig = std::move(message.payload);
+                if (!configReported) {
+                    const double configMillis = std::chrono::duration<double, std::milli>(
+                        std::chrono::steady_clock::now() - connectionStarted).count();
+                    std::cout << "[diagnostics] first-config-ms=" << configMillis
+                              << " dimensions=" << message.width << 'x' << message.height << '\n';
+                    configReported = true;
+                }
                 decoderStarted = decoder.Start(message.width, message.height, error);
                 if (!decoderStarted) std::cerr << error << '\n';
                 continue;
@@ -177,6 +213,12 @@ int main(int argc, char** argv) {
             if (!decoderStarted) continue;
             std::vector<std::uint8_t> accessUnit;
             if ((message.flags & phonecast::core::protocol::MessageFlags::KeyFrame) != 0) {
+                if (!keyFrameReported) {
+                    const double keyFrameMillis = std::chrono::duration<double, std::milli>(
+                        std::chrono::steady_clock::now() - connectionStarted).count();
+                    std::cout << "[diagnostics] first-keyframe-ms=" << keyFrameMillis << '\n';
+                    keyFrameReported = true;
+                }
                 accessUnit.reserve(codecConfig.size() + message.payload.size());
                 accessUnit.insert(accessUnit.end(), codecConfig.begin(), codecConfig.end());
                 accessUnit.insert(accessUnit.end(), message.payload.begin(), message.payload.end());
@@ -220,6 +262,7 @@ int main(int argc, char** argv) {
             const auto serverStats = server.Stats();
             const auto received = serverStats.receivedFrames - previousServerStats.receivedFrames;
             const auto bytes = serverStats.receivedBytes - previousServerStats.receivedBytes;
+            const auto keyFrames = serverStats.keyFrames - previousServerStats.keyFrames;
             const auto dropped = serverStats.droppedFrames - previousServerStats.droppedFrames;
             const auto resyncs = serverStats.resyncRequests - previousServerStats.resyncRequests;
             std::cout << "[diagnostics] connected=" << (connected ? "yes" : "no")
@@ -232,6 +275,7 @@ int main(int argc, char** argv) {
                       << " queue-ms=" << (windowMessages > 0 ? windowQueueMillis / windowMessages : 0.0)
                       << " queue-max-ms=" << maximumQueueMillis
                       << " queue-depth=" << serverStats.queueDepth
+                      << " keyframes=" << keyFrames
                       << " dropped=" << dropped
                       << " resyncs=" << resyncs << '\n';
             previousServerStats = serverStats;

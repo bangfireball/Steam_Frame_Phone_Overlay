@@ -701,6 +701,7 @@ Useful evidence for the next session:
 
 - Media Foundation decode itself is roughly 5–6 ms, so it does not explain the full latency.
 - During the successful game test, diagnostics accumulated thousands of receiver-queue drops while decoded FPS rose toward roughly 48, suggesting producer/consumer pacing and queue policy need investigation.
+- A subsequent instrumented run measured roughly 90–110 received frames per second despite the requested 30 FPS, about 5–6 ms decode, roughly 0.5 ms steady-state D3D submission, only about 8–16 rendered updates per second, repeated queue resynchronization, and 15.4 seconds from connection to first submitted frame. This identifies uncontrolled Android surface-input cadence as the immediate bottleneck; `KEY_MAX_FPS_TO_ENCODER=30` is now implemented for the next physical test.
 - The current Windows path still performs NV12 → CPU RGBA → D3D11 upload.
 - Do not test through RDP; confirm `query session` shows the user on `console` before launching SteamVR.
 - Sprint 4 keyboard controls adjust only the overlay. Phone input is Sprint 7/8, and optional phone audio is Sprint 13.

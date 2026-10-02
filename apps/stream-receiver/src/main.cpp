@@ -142,6 +142,7 @@ int main(int argc, char** argv) {
             const auto serverStats = server.Stats();
             const auto received = serverStats.receivedFrames - previousServerStats.receivedFrames;
             const auto bytes = serverStats.receivedBytes - previousServerStats.receivedBytes;
+            const auto keyFrames = serverStats.keyFrames - previousServerStats.keyFrames;
             const auto dropped = serverStats.droppedFrames - previousServerStats.droppedFrames;
             const auto resyncs = serverStats.resyncRequests - previousServerStats.resyncRequests;
             const double fps = windowDecodedFrames / seconds;
@@ -154,7 +155,8 @@ int main(int argc, char** argv) {
                 std::to_string(windowDecodedFrames > 0 ? windowDecodeMillis / windowDecodedFrames : 0.0).substr(0, 4) +
                 " ms | queue " +
                 std::to_string(windowMessages > 0 ? windowQueueMillis / windowMessages : 0.0).substr(0, 4) +
-                " ms | dropped " + std::to_string(dropped) +
+                " ms | keyframes " + std::to_string(keyFrames) +
+                " | dropped " + std::to_string(dropped) +
                 " | resync " + std::to_string(resyncs));
             previousServerStats = serverStats;
             windowDecodedFrames = 0;

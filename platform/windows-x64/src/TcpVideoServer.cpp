@@ -85,6 +85,7 @@ struct TcpVideoServer::Implementation {
         receivedBytes += message.payload.size();
         const bool keyFrame = (message.flags & core::protocol::MessageFlags::KeyFrame) != 0;
         if (keyFrame) {
+            ++keyFrames;
             if (haveExpectedSequence && message.sequence > expectedSequence) {
                 dropped += message.sequence - expectedSequence;
             }
@@ -223,11 +224,15 @@ struct TcpVideoServer::Implementation {
     std::thread thread;
     mutable std::mutex statusMutex;
     std::string status;
-    static constexpr std::size_t kMaximumQueuedMessages = 4;
+    // Absorb short TCP/Android scheduler bursts without repeatedly throwing away
+    // an otherwise decodable prediction chain. At the target 30 FPS this is
+    // still bounded to substantially less than one second of video.
+    static constexpr std::size_t kMaximumQueuedMessages = 8;
     mutable std::mutex queueMutex;
     std::deque<QueuedMessage> messages;
     std::uint64_t receivedFrames{};
     std::uint64_t receivedBytes{};
+    std::uint64_t keyFrames{};
     std::uint64_t dropped{};
     std::uint64_t resyncRequests{};
     std::uint64_t expectedSequence{};
@@ -296,8 +301,8 @@ std::string TcpVideoServer::Status() const {
 VideoServerStats TcpVideoServer::Stats() const noexcept {
     std::lock_guard<std::mutex> lock(implementation_->queueMutex);
     return {implementation_->receivedFrames, implementation_->receivedBytes,
-            implementation_->dropped, implementation_->resyncRequests,
-            implementation_->messages.size()};
+            implementation_->keyFrames, implementation_->dropped,
+            implementation_->resyncRequests, implementation_->messages.size()};
 }
 std::uint64_t TcpVideoServer::DroppedMessages() const noexcept {
     return Stats().droppedFrames;

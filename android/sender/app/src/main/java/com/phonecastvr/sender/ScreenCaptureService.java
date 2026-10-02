@@ -189,6 +189,9 @@ public final class ScreenCaptureService extends Service {
                 MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
         format.setInteger(MediaFormat.KEY_BIT_RATE, CaptureConfig.bitrateFor(size));
         format.setInteger(MediaFormat.KEY_FRAME_RATE, CaptureConfig.FRAME_RATE);
+        // Surface producers may run at the display refresh rate despite KEY_FRAME_RATE.
+        // This encoder-side cap drops excess input before H.264 dependencies are created.
+        format.setFloat(MediaFormat.KEY_MAX_FPS_TO_ENCODER, CaptureConfig.FRAME_RATE);
         format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL,
                 CaptureConfig.I_FRAME_INTERVAL_SECONDS);
         format.setInteger(MediaFormat.KEY_PRIORITY, 0);

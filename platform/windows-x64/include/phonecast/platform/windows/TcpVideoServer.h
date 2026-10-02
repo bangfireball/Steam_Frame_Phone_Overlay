@@ -13,6 +13,7 @@ namespace phonecast::platform::windows {
 struct VideoServerStats {
     std::uint64_t receivedFrames{};
     std::uint64_t receivedBytes{};
+    std::uint64_t keyFrames{};
     std::uint64_t droppedFrames{};
     std::uint64_t resyncRequests{};
     std::size_t queueDepth{};

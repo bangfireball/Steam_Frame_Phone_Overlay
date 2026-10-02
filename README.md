@@ -23,7 +23,7 @@ PhoneCast VR aims to show an Android phone as a persistent VR overlay, first thr
 - `[x]` Physical validation confirms portrait display and removal of the right-edge green bar
 - `[!]` Landscape currently fails; startup takes roughly 10–30 seconds; frame pacing is poor and latency is unusable
 - `[x]` Phone overlay persists over a running VR game and PC keyboard controls are validated
-- `[~]` Performance instrumentation, fixed-30-FPS/low-latency encoder hints, and keyframe-safe queue recovery implemented; physical validation pending
+- `[~]` Instrumentation found the phone actually sending roughly 90–110 FPS; an encoder-side 30 FPS cap, burst tolerance, startup-stage timing, and an immediate waiting overlay are implemented for physical validation
 - `[!]` Follow-up: validate those changes, fix landscape orientation, and quantify glass-to-glass latency
 
 ## Sprint 4 VR streaming validation
@@ -46,7 +46,7 @@ Connect the Android sender to the PC as described below. The receiver keeps the 
 
 The Windows OpenVR backend uses a reusable D3D11 texture rather than continuous `SetOverlayRaw` uploads. It selects SteamVR's requested DXGI adapter and flushes each update; both were required for a visible, smoothly updating VRLink overlay on the validation PC. Physical Android-to-headset picture, persistence over a running VR game, and PC keyboard controls are confirmed. Landscape and streaming performance still prevent Sprint 4 from being complete.
 
-The last physical test measured roughly 10–30 seconds to first picture, poor frame pacing, and unusable perceived latency. The next build adds one-second rolling stage/queue diagnostics, connection-to-first-frame timing, a fixed-30-FPS surface request, low-latency/no-B-frame encoder hints, and keyframe-safe recovery after queue overruns or sequence gaps. These changes still require physical validation. Portrait works and the prior green edge is fixed, but landscape currently fails. Sprint 4's PC keyboard shortcuts control the overlay itself only; they do not interact with Android. Headset-native placement and phone control are later placement/interaction work. Phone audio is not part of the visual MVP and is tracked as an optional later sprint.
+The latest instrumented physical test measured about 15.4 seconds from connection to first submitted phone frame. It also showed roughly 90–110 received FPS despite the requested 30 FPS, about 5–6 ms decode time, roughly 0.5 ms steady-state D3D submission, repeated resynchronization, and only about 8–16 rendered updates per second. The next build applies MediaCodec's encoder-side maximum-FPS control, increases tolerance for short transport bursts, reports configuration/keyframe/submission startup stages separately, and shows a waiting texture immediately so hotkeys work before video arrives. These changes require physical validation. Portrait works and the prior green edge is fixed, but landscape currently fails. Sprint 4's PC keyboard shortcuts control the overlay itself only; they do not interact with Android. Headset-native placement and phone control are later placement/interaction work. Phone audio is not part of the visual MVP and is tracked as an optional later sprint.
 
 ## Sprint 3 streaming validation
 
