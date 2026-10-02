@@ -668,51 +668,57 @@ docs/protocol.md
 - `[x]` Physical validation of PC keyboard overlay controls
 - `[~]` Orientation validation: portrait works; landscape currently fails
 - `[x]` Physical validation confirms the right-edge green bar is fixed
-- `[!]` Phone-stream frame pacing is poor and observed latency is currently unusable
-- `[~]` Initial overlay appearance takes approximately 10–30 seconds; measure codec-configuration/keyframe wait and reduce startup delay
+- `[!]` Dynamic periods now sustain approximately 30 FPS, but output can stop for seconds and perceived latency remains approximately 2–5+ seconds
+- `[~]` Initial overlay appearance improved but remains variable (approximately 3.7–17.6 seconds in recent instrumented runs)
 - `[ ]` Record quantitative sustained FPS and glass-to-glass latency measurements
 - `[x]` Overlay lifecycle ignores unrelated `VREvent_ProcessQuit` events during VR scene transitions
 - `[!]` Test-environment hazard: starting SteamVR under Windows RDP can break VRLink D3D11 texture creation and produce a gray stream; test only from the physical console session (documented in `docs/development.md`)
 
 ## Session Handoff Snapshot — 2026-10-02
 
-Last validated commits:
+Latest commits:
 
-- `9bb524f` — Sprint 4 Android-to-VR implementation;
-- `63cdab3` — physical headset findings recorded;
-- `5169822` — overlay survives VR scene transitions.
+- `dab5fc2` — rolling performance diagnostics and keyframe-safe recovery;
+- `9c961b0` — encoder cadence cap and immediate waiting overlay;
+- `763d84a` — static-screen experiment and larger startup queue;
+- `5a2323c` — 1280-pixel sender, codec latency settings, and cached startup keyframe.
 
 Physically confirmed on Windows PC → VRLink → Steam Frame:
 
-- Android portrait screen appears as a head-relative OpenVR overlay;
-- overlay remains visible over a running VR game;
-- PC keyboard controls work;
+- Android portrait screen appears as a head-relative OpenVR overlay and remains visible over a running VR game;
+- PC keyboard overlay controls work, including before phone video arrives because a waiting texture is submitted at startup;
 - generated D3D11 animation is smooth after selecting OpenVR's DXGI adapter and flushing updates;
-- the right-edge green bar is fixed.
+- the right-edge green bar is fixed;
+- dynamic phone content can sustain approximately 30 received/decoded FPS with no receiver drops;
+- the latest 590 × 1280 stream reduced decode time from roughly 5–6 ms to roughly 2.5–3 ms and reduced typical bitrate to roughly 1–2.6 Mbps.
 
 Current blockers, in priority order:
 
-1. Fix poor phone-stream frame pacing and unusable perceived latency.
-2. Reduce the approximately 10–30 second first-frame delay.
-3. Fix landscape reconfiguration.
-4. Record sustained FPS, queue/drop behavior, and quantitative glass-to-glass latency.
+1. Eliminate the remaining approximately 2–5+ second action-to-visible latency.
+2. Eliminate multi-second sender stalls where the TCP connection remains healthy but the receiver gets zero video frames.
+3. Make first phone-frame startup consistently sub-second; recent runs ranged from approximately 3.7 to 17.6 seconds.
+4. Fix landscape reconfiguration.
+5. Record quantitative glass-to-glass latency after sender cadence is reliable.
 
-Useful evidence for the next session:
+Most important evidence:
 
-- Media Foundation decode itself is roughly 5–6 ms, so it does not explain the full latency.
-- During the successful game test, diagnostics accumulated thousands of receiver-queue drops while decoded FPS rose toward roughly 48, suggesting producer/consumer pacing and queue policy need investigation.
-- A subsequent instrumented run measured roughly 90–110 received frames per second despite the requested 30 FPS, about 5–6 ms decode, roughly 0.5 ms steady-state D3D submission, only about 8–16 rendered updates per second, repeated queue resynchronization, and 15.4 seconds from connection to first submitted frame. `KEY_MAX_FPS_TO_ENCODER=30` corrected dynamic periods to roughly 30 FPS with no drops, but static output could stop for seconds; `KEY_REPEAT_PREVIOUS_FRAME_AFTER` was ineffective on the test encoder. Receiver queue/decode/render remains around 5–15 ms, locating the remaining 3–6+ second delay upstream. The next test uses 1280-pixel long edge, two-second keyframe intervals, advertised CBR/low-latency codec features, and cached-keyframe startup.
-- The current Windows path still performs NV12 → CPU RGBA → D3D11 upload.
+- The receiver is not accumulating a delayed queue. In the latest run, queue age was generally about 5–15 ms, Media Foundation decode about 2.5–3 ms at 590 × 1280, D3D/OpenVR submission about 0.2–0.3 ms, queue depth zero, and receiver drops/resyncs zero during steady-state streaming.
+- During visible lag, diagnostics repeatedly report `rx-fps=0` for many consecutive seconds while the TCP connection remains established. The delay therefore occurs before a complete frame reaches `TcpVideoServer`: Android capture/composition, MediaCodec input/output, the Android sender queue, or a blocked TCP write.
+- When Android does deliver motion, the complete downstream path sustains approximately 30 FPS and renders roughly 25–30 FPS. Optimizing Media Foundation or D3D cannot explain or fix the multi-second stalls.
+- `KEY_MAX_FPS_TO_ENCODER=30` fixed the original 90–120 FPS flood. `KEY_REPEAT_PREVIOUS_FRAME_AFTER` did not provide a reliable heartbeat on the test codec and was removed.
+- The latest sender uses a 1280-pixel long edge, two-second keyframe interval, CBR when supported, the advertised low-latency codec feature when supported, no B-frames, and a cached keyframe for reconnect. These reduced bandwidth and decode cost but did not eliminate the upstream stalls.
+- Latest startup example: config at approximately 343 ms, decoder initialization 14 ms, first keyframe at 374 ms, but first decoded/submitted frame at approximately 4.93 seconds. An earlier run waited approximately 16.5 seconds for the first keyframe.
+- The current Windows path still performs NV12 → CPU RGBA → D3D11 upload, but measured cost is far below the observed latency.
 - Do not test through RDP; confirm `query session` shows the user on `console` before launching SteamVR.
-- Sprint 4 keyboard controls adjust only the overlay. Phone input is Sprint 7/8, and optional phone audio is Sprint 13.
+- At handoff time, the VR receiver was running on TCP port `49321` with pairing code `123456`; process IDs are ephemeral and must be rechecked.
 
 Recommended next work:
 
-1. physically validate the newly implemented one-second receive/decode/render, queue-age, drop, resync, and first-frame diagnostics;
-2. verify whether the Android fixed-30-FPS surface request and low-latency/no-B-frame encoder hints correct output cadence on the test phone;
-3. validate the new queue-overrun/sequence-gap policy, which discards dependent frames and requests a fresh keyframe instead of decoding arbitrary inter-frame gaps;
-4. continue inspecting Media Foundation output draining if physical pacing remains poor;
-5. retest startup, landscape reconfiguration, and steady-state pacing before beginning Sprint 5.
+1. Instrument Android with one-second rolling counters and timings for encoder output callbacks, presentation-time-to-callback delay, sender queue depth/drops, bytes written, and per-write blocking time. Send these diagnostics to the receiver or expose them clearly in the app; receiver-only timing cannot isolate the remaining upstream stage.
+2. Add sender watchdog telemetry for time since the last encoded frame and last successful socket write. Do not infer capture health from an established TCP connection.
+3. Investigate a controlled Android capture path if direct `VirtualDisplay → MediaCodec Surface` continues to stall. The leading candidate is `VirtualDisplay → SurfaceTexture/external-OES texture → EGL → MediaCodec input Surface`, rendered at an application-controlled cadence. This is more work but would provide deterministic frame pacing and force current composition into the encoder.
+4. Before replacing the capture path, test whether periodically requesting a sync frame changes callback cadence, and record the selected codec name/capabilities plus whether CBR and low-latency mode were actually enabled. A sync request cannot solve a missing input buffer, so treat this only as a diagnostic.
+5. Retest startup and steady-state latency using the desktop preview as well as VR to confirm the sender result independently of VRLink, then return to landscape handling.
 
 ## Objective
 
