@@ -68,6 +68,17 @@ Uses Valve's OpenVR client DLL and copies it beside `phonecast-receiver.exe`. No
 
 Builds OpenVR from pinned source and links it statically. The same backend uses the manifest's required `binary_path_linux_arm`. Sprint 1 cross-builds this path; native visual validation remains hardware-dependent.
 
+## Sprint 3 streaming path
+
+```text
+Android MediaProjection → MediaCodec AVC → framed TCP
+    → Windows receiver → Media Foundation H.264 decoder → RGBA8 → Win32 preview
+```
+
+The protocol serializer remains in Core and has no socket or operating-system headers. Android and the Windows receiver implement the same fixed, network-byte-order framing. The Windows decoder and desktop window are isolated under `platform/windows-x64`.
+
+The desktop preview is a validation target, not the Sprint 4 VR rendering path. It currently converts Media Foundation NV12 output to CPU RGBA8. Steam Frame decoding and efficient decoder-to-compositor texture sharing remain separate backend work.
+
 ## Deferred work
 
-Sprint 1 intentionally excludes Android capture, networking implementations, pairing, video codecs, remote control, placement modes, and GPU texture sharing.
+Encrypted pairing, automatic discovery, remote control, placement modes, and GPU texture sharing remain deferred. The custom TCP transport is subject to head-of-line blocking and must be measured on real Wi-Fi before it is treated as a long-term choice.

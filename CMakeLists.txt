@@ -23,6 +23,7 @@ add_subdirectory(vr)
 if(PHONECAST_BUILD_RECEIVER)
     add_subdirectory(platform/openvr)
     add_subdirectory(apps/receiver)
+    add_subdirectory(apps/stream-receiver)
 endif()
 
 if(PHONECAST_BUILD_HELLO_FRAME)

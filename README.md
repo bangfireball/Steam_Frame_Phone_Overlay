@@ -14,6 +14,19 @@ PhoneCast VR aims to show an Android phone as a persistent VR overlay, first thr
 - `[!]` Follow-up: validate coexistence with a standalone VR scene application
 - `[x]` Sprint 2 Android sender complete and validated on a physical device
 - `[x]` Android debug APK builds, unit tests pass, and lint passes
+- `[~]` Sprint 3 phone-to-PC streaming implemented; physical-device validation pending
+
+## Sprint 3 streaming validation
+
+Start the Windows desktop receiver with a six-digit code:
+
+```powershell
+.\out\build\windows-x64\bin\phonecast-stream-receiver.exe --pair-code 123456
+```
+
+Allow TCP port `47990` through Windows Firewall. In the Android app, enter the PC's LAN IPv4 address and the same code, then press **Start casting**. The desktop window reports connection state, decoded FPS, bitrate, and dropped frames.
+
+The current transport is LAN-only framed TCP and is **not encrypted**. See [`docs/protocol.md`](docs/protocol.md) before testing.
 
 ## Sprint 2 Android sender
 
@@ -48,6 +61,7 @@ See:
 - [`design.md`](design.md) — product and sprint plan
 - [`docs/architecture.md`](docs/architecture.md) — production boundaries and interfaces
 - [`docs/android-capture.md`](docs/android-capture.md) — Android capture decisions and validation status
+- [`docs/protocol.md`](docs/protocol.md) — Sprint 3 transport, framing, and security limitations
 - [`android/sender/README.md`](android/sender/README.md) — sender build and test instructions
 - [`docs/development.md`](docs/development.md) — build, test, and run instructions
 - [`docs/steam-frame.md`](docs/steam-frame.md) — Steam Frame evidence and open questions

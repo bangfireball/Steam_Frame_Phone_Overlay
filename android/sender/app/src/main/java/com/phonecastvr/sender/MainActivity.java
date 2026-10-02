@@ -12,9 +12,11 @@ import android.graphics.Color;
 import android.media.projection.MediaProjectionManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -26,6 +28,8 @@ public final class MainActivity extends Activity {
 
     private TextView statusView;
     private TextView metricsView;
+    private EditText receiverHostView;
+    private EditText pairCodeView;
     private Button startButton;
     private Button stopButton;
     private boolean captureAfterPermission;
@@ -38,7 +42,9 @@ public final class MainActivity extends Activity {
             long bytes = intent.getLongExtra(ScreenCaptureService.EXTRA_BYTES, 0L);
             int width = intent.getIntExtra(ScreenCaptureService.EXTRA_WIDTH, 0);
             int height = intent.getIntExtra(ScreenCaptureService.EXTRA_HEIGHT, 0);
-            updateState(running, message, frames, bytes, width, height);
+            long dropped = intent.getLongExtra(ScreenCaptureService.EXTRA_DROPPED_FRAMES, 0L);
+            long rttMicros = intent.getLongExtra(ScreenCaptureService.EXTRA_NETWORK_RTT_MICROS, -1L);
+            updateState(running, message, frames, bytes, width, height, dropped, rttMicros);
         }
     };
 
@@ -47,7 +53,7 @@ public final class MainActivity extends Activity {
         buildUi();
         boolean running = getSharedPreferences(ScreenCaptureService.PREFERENCES, MODE_PRIVATE)
                 .getBoolean("capture_running", false);
-        updateState(running, running ? "Capture service active" : "Ready to capture", 0, 0, 0, 0);
+        updateState(running, running ? "Capture service active" : "Ready to stream", 0, 0, 0, 0, 0, -1);
     }
 
     @Override protected void onStart() {
@@ -95,6 +101,24 @@ public final class MainActivity extends Activity {
         explanationParams.setMargins(0, dp(16), 0, dp(24));
         root.addView(explanation, explanationParams);
 
+        receiverHostView = new EditText(this);
+        receiverHostView.setHint("Receiver IP address");
+        receiverHostView.setSingleLine(true);
+        receiverHostView.setInputType(InputType.TYPE_CLASS_PHONE);
+        receiverHostView.setText(getPreferences(MODE_PRIVATE)
+                .getString("receiver_host", "192.168.1.100"));
+        receiverHostView.setTextColor(Color.WHITE);
+        receiverHostView.setHintTextColor(Color.rgb(130, 145, 160));
+        root.addView(receiverHostView, matchWrap());
+
+        pairCodeView = new EditText(this);
+        pairCodeView.setHint("6-digit pairing code");
+        pairCodeView.setSingleLine(true);
+        pairCodeView.setInputType(InputType.TYPE_CLASS_NUMBER);
+        pairCodeView.setTextColor(Color.WHITE);
+        pairCodeView.setHintTextColor(Color.rgb(130, 145, 160));
+        root.addView(pairCodeView, matchWrap());
+
         statusView = new TextView(this);
         statusView.setTextColor(Color.rgb(42, 188, 251));
         statusView.setTextSize(18);
@@ -125,6 +149,12 @@ public final class MainActivity extends Activity {
     }
 
     private void requestCapture() {
+        String receiverHost = receiverHostView.getText().toString().trim();
+        String pairCode = pairCodeView.getText().toString().trim();
+        if (receiverHost.isEmpty() || !StreamProtocol.validPairCode(pairCode)) {
+            updateState(false, "Enter a receiver IP and 6-digit pairing code", 0, 0, 0, 0, 0, -1);
+            return;
+        }
         if (Build.VERSION.SDK_INT >= 33 &&
                 checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             captureAfterPermission = true;
@@ -153,15 +183,24 @@ public final class MainActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode != REQUEST_CAPTURE) return;
         if (resultCode != RESULT_OK || data == null) {
-            updateState(false, "Screen-capture permission was not granted", 0, 0, 0, 0);
+            updateState(false, "Screen-capture permission was not granted", 0, 0, 0, 0, 0, -1);
             return;
         }
+        String receiverHost = receiverHostView.getText().toString().trim();
+        String pairCode = pairCodeView.getText().toString().trim();
+        if (receiverHost.isEmpty() || !StreamProtocol.validPairCode(pairCode)) {
+            updateState(false, "Enter a receiver IP and 6-digit pairing code", 0, 0, 0, 0, 0, -1);
+            return;
+        }
+        getPreferences(MODE_PRIVATE).edit().putString("receiver_host", receiverHost).apply();
         Intent service = new Intent(this, ScreenCaptureService.class)
                 .setAction(ScreenCaptureService.ACTION_START)
                 .putExtra(ScreenCaptureService.EXTRA_RESULT_CODE, resultCode)
-                .putExtra(ScreenCaptureService.EXTRA_RESULT_DATA, data);
+                .putExtra(ScreenCaptureService.EXTRA_RESULT_DATA, data)
+                .putExtra(ScreenCaptureService.EXTRA_RECEIVER_HOST, receiverHost)
+                .putExtra(ScreenCaptureService.EXTRA_PAIR_CODE, pairCode);
         startForegroundService(service);
-        updateState(true, "Starting capture…", 0, 0, 0, 0);
+        updateState(true, "Starting capture and connection…", 0, 0, 0, 0, 0, -1);
     }
 
     private void stopCapture() {
@@ -171,19 +210,23 @@ public final class MainActivity extends Activity {
     }
 
     private void updateState(boolean running, String message, long frames, long bytes,
-                             int width, int height) {
+                             int width, int height, long droppedFrames, long rttMicros) {
         getSharedPreferences(ScreenCaptureService.PREFERENCES, MODE_PRIVATE).edit()
                 .putBoolean("capture_running", running).apply();
         statusView.setText(message == null ? (running ? "Capturing" : "Stopped") : message);
         if (running && width > 0) {
             metricsView.setText(String.format(Locale.US,
-                    "%d × %d · %,d encoded frames · %.1f MB", width, height, frames,
-                    bytes / 1_000_000.0));
+                    "%d × %d · %,d frames · %.1f MB · %,d dropped · %s",
+                    width, height, frames, bytes / 1_000_000.0, droppedFrames,
+                    rttMicros >= 0 ? String.format(Locale.US, "%.1f ms RTT", rttMicros / 1000.0)
+                            : "RTT pending"));
         } else {
             metricsView.setText(running ? "Initializing H.264 encoder…" : "No active capture");
         }
         startButton.setEnabled(!running);
         stopButton.setEnabled(running);
+        receiverHostView.setEnabled(!running);
+        pairCodeView.setEnabled(!running);
     }
 
     private LinearLayout.LayoutParams matchWrap() {

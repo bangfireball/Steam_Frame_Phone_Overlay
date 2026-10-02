@@ -26,7 +26,15 @@ Run SteamVR, then:
 
 The build places `openvr_api.dll` and `phonecast-receiver.vrmanifest` beside the executable.
 
-Useful options:
+Sprint 3 desktop streaming receiver:
+
+```powershell
+.\out\build\windows-x64\bin\phonecast-stream-receiver.exe --pair-code 123456
+```
+
+The Android sender connects to the PC's LAN IPv4 address on TCP port `47990`. Windows Firewall must permit inbound private-network TCP traffic for the receiver. The pairing code must contain exactly six digits. The current protocol is not encrypted; use only a trusted development LAN.
+
+Useful overlay receiver options:
 
 ```text
 --width N
@@ -81,7 +89,7 @@ See `android/sender/README.md` and `docs/android-capture.md` for behavior and pe
 
 ## CMake options
 
-- `PHONECAST_BUILD_RECEIVER` — build the Sprint 1 receiver (default `ON`).
+- `PHONECAST_BUILD_RECEIVER` — build the OpenVR receiver and, on Windows, the Sprint 3 desktop stream receiver (default `ON`).
 - `PHONECAST_BUILD_HELLO_FRAME` — retain the Sprint 0 experiment (default `ON`).
 - `BUILD_TESTING` — build/register tests (default controlled by CTest, normally `ON`).
 

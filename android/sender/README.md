@@ -1,6 +1,6 @@
-# PhoneCast Android Sender — Sprint 2
+# PhoneCast Android Sender
 
-This Android application captures the user-approved display with `MediaProjection` and feeds it directly into a surface-input H.264/AVC `MediaCodec` encoder. Encoded output is drained and measured, but intentionally discarded: networking begins in Sprint 3.
+This Android application captures the user-approved display with `MediaProjection`, feeds it into a surface-input H.264/AVC `MediaCodec` encoder, and streams encoded access units to the Sprint 3 PC receiver over the local network.
 
 ## Requirements
 
@@ -31,7 +31,7 @@ Enable USB or wireless debugging, connect the phone, then:
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Open **PhoneCast Sender**, press **Start capture**, approve notification permission when requested, and approve Android's screen-sharing dialog. The app displays encoded frame and byte counters. Use the in-app button or foreground notification action to stop.
+Start `phonecast-stream-receiver.exe --pair-code 123456` on the PC. Open **PhoneCast Sender**, enter the PC's LAN IPv4 address and matching code, press **Start casting**, approve notification permission when requested, and approve Android's screen-sharing dialog. The app displays encoded frame, byte, and congestion-drop counters. Use the in-app button or foreground notification action to stop.
 
 Useful diagnostics:
 
@@ -46,9 +46,12 @@ adb logcat -s PhoneCastCapture
 - Uses hardware H.264 when the device's default AVC encoder is hardware-backed; Android selects the encoder.
 - Runs capture from a `mediaProjection` foreground service.
 - Drains encoded output continuously and reports frame/byte counts.
+- Sends versioned, size-bounded messages over a low-delay TCP connection.
+- Keeps only a few pending frames so a slow network does not stall the encoder indefinitely.
+- Reconnects with bounded exponential backoff and requests a fresh keyframe.
 - Replaces the encoder surface and resizes the existing virtual display when captured content changes size.
 - Stops cleanly when the user revokes sharing, presses Stop, or uses the notification action.
 
-## Sprint boundary
+## Security limitation
 
-No network connection is opened and no screen bytes leave the phone. The encoded access units become Sprint 3's transport input.
+The receiver requires the six-digit code before accepting video, but the current Sprint 3 transport is not encrypted. Use it only on a trusted development LAN. See `docs/protocol.md` for the protocol decision and required security follow-up.

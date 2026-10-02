@@ -569,6 +569,24 @@ Prioritize latency and reliability.
 
 # Sprint 3 — Phone → PC Streaming
 
+**Status:** `[~] In progress — implementation complete enough for physical-device validation`
+
+- `[x]` Transport alternatives researched and decision documented
+- `[x]` Versioned, bounded binary framing protocol
+- `[x]` Manual receiver connection and six-digit pairing gate
+- `[x]` Android H.264 access-unit streaming with bounded queue
+- `[x]` Automatic reconnect and keyframe request
+- `[x]` Codec configuration and orientation-change propagation
+- `[x]` Windows TCP receiver and Media Foundation H.264 decoder
+- `[x]` Aspect-preserving desktop preview and basic diagnostics
+- `[x]` C++ protocol tests, Windows build/tests, Android tests, APK, and lint
+- `[ ]` Physical Android-to-PC picture validation
+- `[ ]` Approximately 30 FPS LAN validation
+- `[ ]` Receiver restart/reconnection validation
+- `[ ]` Portrait/landscape streaming validation
+- `[ ]` Latency measurement recorded
+- `[!]` Security limitation: pairing gates the stream, but Sprint 3 transport is not encrypted
+
 ## Objective
 
 Connect the Android sender to the receiver.

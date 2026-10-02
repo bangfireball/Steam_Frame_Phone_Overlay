@@ -2,6 +2,7 @@ add_library(phonecast-core
     src/AppConfig.cpp
     src/ConsoleLogger.cpp
     src/GeneratedVideoSource.cpp
+    src/StreamProtocol.cpp
 )
 target_include_directories(phonecast-core PUBLIC include)
 target_compile_features(phonecast-core PUBLIC cxx_std_17)

@@ -4,7 +4,7 @@
     <string name="capture_channel_description">Shows when PhoneCast is capturing the screen</string>
     <string name="capture_notification_title">PhoneCast is capturing your screen</string>
     <string name="stop_casting">Stop casting</string>
-    <string name="sprint_two_explanation">Sprint 2 captures your display and encodes it as H.264 locally. No screen data is transmitted yet.</string>
-    <string name="start_capture">Start capture</string>
+    <string name="sprint_two_explanation">Enter the PC receiver address and pairing code, then approve screen capture to stream H.264 over your local network.</string>
+    <string name="start_capture">Start casting</string>
     <string name="stop_capture">Stop capture</string>
 </resources>

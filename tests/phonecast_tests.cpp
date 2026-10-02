@@ -1,5 +1,6 @@
 #include "phonecast/apps/Receiver.h"
 #include "phonecast/core/config/AppConfig.h"
+#include "phonecast/core/protocol/StreamProtocol.h"
 #include "phonecast/core/streaming/GeneratedVideoSource.h"
 
 #include <iostream>
@@ -78,6 +79,43 @@ void TestGeneratedFrames() {
     Check(first.pixels != second.pixels, "animation changes frame pixels");
 }
 
+void TestStreamProtocol() {
+    using namespace phonecast::core::protocol;
+    Message outgoing;
+    outgoing.type = MessageType::VideoFrame;
+    outgoing.flags = MessageFlags::KeyFrame;
+    outgoing.sequence = 42;
+    outgoing.timestampMicros = 123456;
+    outgoing.width = 1080;
+    outgoing.height = 1920;
+    outgoing.payload = {0, 0, 0, 1, 0x65};
+    const auto bytes = Serialize(outgoing);
+    Check(bytes.size() == kHeaderSize + outgoing.payload.size(), "protocol message serializes");
+
+    Message parsed;
+    std::uint32_t payloadSize = 0;
+    std::string error;
+    Check(ParseHeader(bytes.data(), kHeaderSize, parsed, payloadSize, error),
+          "protocol header parses");
+    Check(parsed.type == MessageType::VideoFrame && parsed.sequence == 42,
+          "protocol identity fields round trip");
+    Check(parsed.flags == MessageFlags::KeyFrame && parsed.timestampMicros == 123456,
+          "protocol timing fields round trip");
+    Check(parsed.width == 1080 && parsed.height == 1920 && payloadSize == 5,
+          "protocol dimensions and payload length round trip");
+
+    auto corrupt = bytes;
+    corrupt[0] = 'X';
+    Check(!ParseHeader(corrupt.data(), kHeaderSize, parsed, payloadSize, error),
+          "invalid protocol magic is rejected");
+    corrupt = bytes;
+    corrupt[8] = 0x7f;
+    Check(!ParseHeader(corrupt.data(), kHeaderSize, parsed, payloadSize, error),
+          "oversized payload is rejected");
+    Check(IsValidPairCode("123456") && !IsValidPairCode("12345x"),
+          "pair codes require six digits");
+}
+
 void TestReceiverLifecycle() {
     phonecast::core::GeneratedVideoSource source(64, 64);
     FakeOverlay overlay;
@@ -105,6 +143,7 @@ void TestReceiverLifecycle() {
 int main() {
     TestConfig();
     TestGeneratedFrames();
+    TestStreamProtocol();
     TestReceiverLifecycle();
     if (failures == 0) std::cout << "All PhoneCast tests passed.\n";
     return failures == 0 ? 0 : 1;

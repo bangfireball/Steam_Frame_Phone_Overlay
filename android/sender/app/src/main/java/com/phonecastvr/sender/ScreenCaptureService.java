@@ -37,12 +37,16 @@ public final class ScreenCaptureService extends Service {
     static final String ACTION_STATUS = "com.phonecastvr.sender.action.STATUS";
     static final String EXTRA_RESULT_CODE = "result_code";
     static final String EXTRA_RESULT_DATA = "result_data";
+    static final String EXTRA_RECEIVER_HOST = "receiver_host";
+    static final String EXTRA_PAIR_CODE = "pair_code";
     static final String EXTRA_RUNNING = "running";
     static final String EXTRA_MESSAGE = "message";
     static final String EXTRA_FRAMES = "frames";
     static final String EXTRA_BYTES = "bytes";
     static final String EXTRA_WIDTH = "width";
     static final String EXTRA_HEIGHT = "height";
+    static final String EXTRA_DROPPED_FRAMES = "dropped_frames";
+    static final String EXTRA_NETWORK_RTT_MICROS = "network_rtt_micros";
     static final String PREFERENCES = "phonecast_sender";
 
     private static final String TAG = "PhoneCastCapture";
@@ -59,6 +63,7 @@ public final class ScreenCaptureService extends Service {
     private MediaProjection projection;
     private VirtualDisplay virtualDisplay;
     private EncoderSession encoderSession;
+    private NetworkStreamer networkStreamer;
     private int densityDpi;
     private long lastStatusNanos;
     private boolean stopping;
@@ -99,7 +104,14 @@ public final class ScreenCaptureService extends Service {
             stopCapture("Missing screen-capture permission token");
             return START_NOT_STICKY;
         }
-        startCapture(resultCode, resultData);
+        String receiverHost = intent.getStringExtra(EXTRA_RECEIVER_HOST);
+        String pairCode = intent.getStringExtra(EXTRA_PAIR_CODE);
+        if (receiverHost == null || receiverHost.trim().isEmpty() ||
+                !StreamProtocol.validPairCode(pairCode)) {
+            stopCapture("Receiver address or pairing code is invalid");
+            return START_NOT_STICKY;
+        }
+        startCapture(resultCode, resultData, receiverHost.trim(), pairCode);
         return START_NOT_STICKY;
     }
 
@@ -117,7 +129,8 @@ public final class ScreenCaptureService extends Service {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
     }
 
-    private void startCapture(int resultCode, Intent resultData) {
+    private void startCapture(int resultCode, Intent resultData, String receiverHost,
+                              String pairCode) {
         stopCaptureResources(true);
         stopping = false;
         encodedFrames.set(0);
@@ -130,6 +143,23 @@ public final class ScreenCaptureService extends Service {
             projection = manager.getMediaProjection(resultCode, resultData);
             if (projection == null) throw new IllegalStateException("MediaProjection was not granted");
             projection.registerCallback(projectionCallback, mainHandler);
+            networkStreamer = new NetworkStreamer(receiverHost, StreamProtocol.DEFAULT_PORT,
+                    pairCode, new NetworkStreamer.Listener() {
+                @Override public void onConnectionChanged(boolean connected, String message) {
+                    Log.i(TAG, message);
+                    mainHandler.post(() -> {
+                        if (stopping) return;
+                        EncoderSession current;
+                        synchronized (encoderLock) { current = encoderSession; }
+                        broadcastStatus(true, message, current == null ? null : current.size);
+                    });
+                }
+
+                @Override public void onReceiverConnected() {
+                    requestSyncFrame();
+                }
+            });
+            networkStreamer.start();
 
             DisplayMetrics metrics = currentDisplayMetrics();
             densityDpi = metrics.densityDpi;
@@ -206,9 +236,24 @@ public final class ScreenCaptureService extends Service {
         try {
             ByteBuffer output = codec.getOutputBuffer(index);
             if (output != null && info.size > 0) {
+                output.position(info.offset);
+                output.limit(info.offset + info.size);
+                byte[] payload = new byte[info.size];
+                output.get(payload);
                 encodedBytes.addAndGet(info.size);
-                if ((info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
-                    encodedFrames.incrementAndGet();
+                NetworkStreamer streamer = networkStreamer;
+                if ((info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
+                    if (streamer != null) {
+                        streamer.offerConfig(payload, session.size.width, session.size.height);
+                    }
+                } else {
+                    long sequence = encodedFrames.getAndIncrement();
+                    int flags = (info.flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0
+                            ? StreamProtocol.FLAG_KEY_FRAME : 0;
+                    if (streamer != null) {
+                        streamer.offerFrame(payload, flags, sequence, info.presentationTimeUs,
+                                session.size.width, session.size.height);
+                    }
                 }
             }
             codec.releaseOutputBuffer(index, false);
@@ -225,6 +270,21 @@ public final class ScreenCaptureService extends Service {
                 }
             }
         }
+    }
+
+    private void requestSyncFrame() {
+        codecHandler.post(() -> {
+            synchronized (encoderLock) {
+                if (encoderSession == null) return;
+                try {
+                    android.os.Bundle parameters = new android.os.Bundle();
+                    parameters.putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0);
+                    encoderSession.codec.setParameters(parameters);
+                } catch (IllegalStateException error) {
+                    Log.w(TAG, "Could not request an H.264 sync frame", error);
+                }
+            }
+        });
     }
 
     private void reconfigureForSize(int sourceWidth, int sourceHeight) {
@@ -301,6 +361,10 @@ public final class ScreenCaptureService extends Service {
             encoderSession = null;
         }
         if (old != null) old.release();
+        if (networkStreamer != null) {
+            networkStreamer.stop();
+            networkStreamer = null;
+        }
         if (projection != null) {
             projection.unregisterCallback(projectionCallback);
             MediaProjection oldProjection = projection;
@@ -323,7 +387,11 @@ public final class ScreenCaptureService extends Service {
                 .putExtra(EXTRA_RUNNING, running)
                 .putExtra(EXTRA_MESSAGE, message)
                 .putExtra(EXTRA_FRAMES, encodedFrames.get())
-                .putExtra(EXTRA_BYTES, encodedBytes.get());
+                .putExtra(EXTRA_BYTES, encodedBytes.get())
+                .putExtra(EXTRA_DROPPED_FRAMES,
+                        networkStreamer == null ? 0L : networkStreamer.droppedFrames())
+                .putExtra(EXTRA_NETWORK_RTT_MICROS,
+                        networkStreamer == null ? -1L : networkStreamer.roundTripMicros());
         if (size != null) {
             status.putExtra(EXTRA_WIDTH, size.width);
             status.putExtra(EXTRA_HEIGHT, size.height);
