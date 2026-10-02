@@ -153,6 +153,9 @@ Observed:
 5. A 15-second timed test completed without runtime errors and shut down cleanly.
 6. The runtime registered the process as `VRApplication_Overlay` and loaded legacy Frame controller bindings, although input was not enabled by the prototype.
 7. During a longer run the process used approximately 16.7 MiB resident memory and about 0.9% CPU as sampled over its first minute. This is an initial observation, not a final performance benchmark.
+8. The user visually confirmed that the “HELLO FRAME” panel remained visible while playing a standalone, on-device 2D game.
+9. The user confirmed that the panel followed their head. This is the expected result of `SetOverlayTransformTrackedDeviceRelative` using the HMD as the tracked device.
+10. The user could not interact with the panel. This is expected: Sprint 0 does not configure an overlay input method or implement event-driven controls.
 
 Application lifecycle finding:
 
@@ -192,15 +195,12 @@ Reproduction steps:
 
 ## Assumed behavior
 
-These are hypotheses to test, not confirmed capabilities:
+These hypotheses remain unconfirmed:
 
 1. A regular OpenVR overlay should remain visible over a PC SteamVR game because that is the API's documented model.
-2. A static `SetOverlayRaw` image should have negligible steady-state CPU/GPU cost after upload.
-3. The same Hello Frame source should compile on Windows x64 and native Linux ARM64.
-4. HMD-relative placement at Z = -1 metre should put the panel ahead of the user in OpenVR coordinates.
-5. Native Steam Frame SteamVR may expose `IVROverlay` similarly to PC SteamVR.
+2. The static `SetOverlayRaw` image has negligible GPU impact after upload; CPU and memory were sampled, but GPU impact was not isolated.
 
-The fifth assumption is the central Sprint 0 risk and must not be promoted to documented or tested behavior without a native test.
+Linux ARM64 compilation, native `IVROverlay` access, HMD-relative placement, and coexistence with an on-device flat game have moved from assumptions to tested behavior.
 
 ---
 
@@ -219,7 +219,7 @@ The remaining unknowns are:
 7. Whether a future video texture can be transferred to the compositor without avoidable copies.
 8. Which native hardware-decoding API and texture-sharing route is preferable on Steam Frame.
 
-Items 11–12 affect later sprints and are not implemented in Hello Frame.
+Items 7–8 affect later sprints and are not implemented in Hello Frame.
 
 ---
 
@@ -296,6 +296,6 @@ Use when a required environment, particularly Steam Frame hardware/runtime acces
 
 ## Current conclusion
 
-Native Linux ARM64 OpenVR overlays are no longer merely theoretical: Hello Frame successfully initialized, created a regular overlay, loaded its generated image, registered a stable application manifest, and coexisted with a locally running flat game on Steam Frame.
+Native Linux ARM64 OpenVR overlays are no longer merely theoretical: Hello Frame successfully initialized, created a regular overlay, loaded its generated image, registered a stable application manifest, and remained visibly head-locked while the user played a locally running 2D game on Steam Frame.
 
-The final Sprint 0 success statement remains withheld until the registered overlay is observed over a standalone **VR scene application**. Current status is **partial success with strong positive evidence**.
+The project owner accepts this as a successful validation of the foundational native-overlay mechanism. Under the design document's stricter original criterion, coexistence with a standalone **VR scene application** remains the final untested case. The result is therefore recorded as **foundational success, with one VR-specific acceptance test pending**.

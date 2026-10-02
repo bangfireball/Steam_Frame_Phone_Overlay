@@ -12,7 +12,8 @@ The project is currently in **Sprint 0 — Hello Frame**, a feasibility experime
 - `[!]` PC SteamVR visual/runtime test — Steam Frame was not connected
 - `[x]` Linux ARM64 cross-build and emulated CLI smoke test
 - `[x]` Native Steam Frame deployment and overlay creation
-- `[~]` Cross-application test — confirmed with a standalone flat game; standalone VR game still required
+- `[x]` User-confirmed visible, head-locked overlay during a standalone 2D game
+- `[ ]` Strict original acceptance test with a standalone VR scene application
 
 See:
 
