@@ -22,7 +22,8 @@ PhoneCast VR aims to show an Android phone as a persistent VR overlay, first thr
 - `[x]` Global PC keyboard controls cover show/hide, scale, movement, distance, opacity, and reset
 - `[x]` Physical validation confirms portrait display and removal of the right-edge green bar
 - `[!]` Landscape currently fails; startup takes roughly 10–30 seconds; frame pacing is poor and latency is unusable
-- `[!]` Follow-up: validate PC keyboard overlay controls and VR-game coexistence, then fix orientation and streaming performance
+- `[x]` Phone overlay persists over a running VR game and PC keyboard controls are validated
+- `[!]` Follow-up: fix landscape orientation and streaming startup/frame-pacing/latency performance
 
 ## Sprint 4 VR streaming validation
 
@@ -42,7 +43,7 @@ Connect the Android sender to the PC as described below. The receiver keeps the 
 - `Home` — reset
 - `End` — quit
 
-The Windows OpenVR backend uses a reusable D3D11 texture rather than continuous `SetOverlayRaw` uploads. It selects SteamVR's requested DXGI adapter and flushes each update; both were required for a visible, smoothly updating VRLink overlay on the validation PC. Physical Android-to-headset picture validation succeeded. Validation over a running VR game and validation of controls/orientation are still required before Sprint 4 can be marked complete.
+The Windows OpenVR backend uses a reusable D3D11 texture rather than continuous `SetOverlayRaw` uploads. It selects SteamVR's requested DXGI adapter and flushes each update; both were required for a visible, smoothly updating VRLink overlay on the validation PC. Physical Android-to-headset picture, persistence over a running VR game, and PC keyboard controls are confirmed. Landscape and streaming performance still prevent Sprint 4 from being complete.
 
 The first phone frame currently takes roughly 10–30 seconds to appear, frame pacing is poor, and observed latency is not yet usable. Portrait works and the prior green edge is fixed, but landscape currently fails. Sprint 4's PC keyboard shortcuts control the overlay itself only; they do not interact with Android. Headset-native placement and phone control are later placement/interaction work. Phone audio is not part of the visual MVP and is tracked as an optional later sprint.
 

@@ -56,7 +56,7 @@ This CPU upload is intentional for foundation validation. It is not the planned 
 6. Poll overlay and system quit events.
 7. Hide/destroy the overlay and call `VR_Shutdown`.
 
-`Receiver::Stop` is idempotent. The OpenVR renderer also stops in its destructor.
+`Receiver::Stop` is idempotent. The OpenVR renderer also stops in its destructor. `VREvent_ProcessQuit` is informational about an arbitrary VR process and is deliberately not treated as a receiver shutdown request; doing so caused PhoneCast to exit when a VR scene application transitioned. Only explicit runtime/driver quit events stop the overlay.
 
 ## Platform mapping
 

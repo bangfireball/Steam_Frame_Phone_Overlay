@@ -161,8 +161,8 @@ int ParseDuration(int argc, char** argv) {
 }
 
 bool IsQuitEvent(std::uint32_t eventType) {
-    return eventType == vr::VREvent_Quit || eventType == vr::VREvent_ProcessQuit ||
-           eventType == vr::VREvent_DriverRequestedQuit;
+    // ProcessQuit may describe an unrelated scene process during an application transition.
+    return eventType == vr::VREvent_Quit || eventType == vr::VREvent_DriverRequestedQuit;
 }
 
 void RegisterApplicationManifest(vr::IVRApplications* applications, const char* executablePath) {

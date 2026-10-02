@@ -664,13 +664,14 @@ docs/protocol.md
 - `[x]` Windows clean build, automated tests, and generated-texture OpenVR runtime test
 - `[x]` Physical Android stream visible in the SteamVR headset
 - `[x]` D3D11 overlay uses SteamVR's DXGI adapter and explicitly flushes updates; generated animation is visually smooth
-- `[ ]` Validate the phone overlay over a running VR game
-- `[ ]` Physical validation of PC keyboard overlay controls
+- `[x]` Phone overlay remains visible over a running VR game
+- `[x]` Physical validation of PC keyboard overlay controls
 - `[~]` Orientation validation: portrait works; landscape currently fails
 - `[x]` Physical validation confirms the right-edge green bar is fixed
 - `[!]` Phone-stream frame pacing is poor and observed latency is currently unusable
 - `[~]` Initial overlay appearance takes approximately 10–30 seconds; measure codec-configuration/keyframe wait and reduce startup delay
 - `[ ]` Record quantitative sustained FPS and glass-to-glass latency measurements
+- `[x]` Overlay lifecycle ignores unrelated `VREvent_ProcessQuit` events during VR scene transitions
 - `[!]` Test-environment hazard: starting SteamVR under Windows RDP can break VRLink D3D11 texture creation and produce a gray stream; test only from the physical console session (documented in `docs/development.md`)
 
 ## Objective

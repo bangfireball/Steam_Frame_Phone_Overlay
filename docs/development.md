@@ -57,7 +57,9 @@ If the failure recurs, stop SteamVR, transfer/log into the physical console sess
 
 The 2026-10-02 physical Sprint 4 test subsequently confirmed a visible Android screen in the headset. On the multi-GPU host, OpenVR D3D11 overlays were invisible until the renderer used the adapter returned by `GetDXGIOutputInfo`; updates advanced only about once per five seconds until the D3D11 context was explicitly flushed. The corrected generated animation was visually smooth before the phone stream was retested successfully.
 
-Current physical-test limitations: initial phone-overlay appearance takes roughly 10–30 seconds, frame pacing is poor, observed latency is unusable, and landscape fails while portrait works. The prior right-edge green bar is fixed. Sprint 4 keyboard shortcuts adjust only the overlay; headset-native placement and interaction with Android are not implemented. Phone audio remains on the phone because audio transport is outside the visual MVP.
+Current physical-test limitations: initial phone-overlay appearance takes roughly 10–30 seconds, frame pacing is poor, observed latency is unusable, and landscape fails while portrait works. The prior right-edge green bar is fixed. Persistence over a running VR game and the PC keyboard overlay controls are confirmed. Sprint 4 keyboard shortcuts adjust only the overlay; headset-native placement and interaction with Android are not implemented. Phone audio remains on the phone because audio transport is outside the visual MVP.
+
+OpenVR's `VREvent_ProcessQuit` may refer to an unrelated scene application. It must not terminate the receiver; only explicit runtime/driver quit events should do so. Treating it as a shutdown request caused the overlay process to exit during the first VR-game transition test.
 
 Useful overlay receiver options:
 

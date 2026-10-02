@@ -21,8 +21,9 @@ constexpr char kOverlayKey[] = "com.phonecastvr.receiver.phone";
 constexpr char kOverlayName[] = "PhoneCast VR Receiver";
 
 bool IsQuitEvent(std::uint32_t type) {
-    return type == vr::VREvent_Quit || type == vr::VREvent_ProcessQuit ||
-           type == vr::VREvent_DriverRequestedQuit;
+    // VREvent_ProcessQuit reports that some VR process exited; it is not a request
+    // for this overlay process to stop during scene-application transitions.
+    return type == vr::VREvent_Quit || type == vr::VREvent_DriverRequestedQuit;
 }
 
 }  // namespace
