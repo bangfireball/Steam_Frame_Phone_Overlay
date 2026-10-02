@@ -89,10 +89,11 @@ A physical Android sender connected to the Windows receiver, authenticated, reco
 
 Known defects from that test and current follow-up status:
 
-- the original test showed a green bar along the right edge; Sprint 4 now separates Media Foundation's aligned coded dimensions from the phone's visible dimensions, but the correction still requires physical revalidation;
-- playback was visibly stuttering and has not yet met the approximately 30 FPS acceptance target;
-- portrait/landscape streaming has not yet been revalidated end to end;
-- glass-to-glass latency has not been measured.
+- the original right-edge green bar was fixed by separating Media Foundation's aligned coded dimensions from the phone's visible dimensions; physical Sprint 4 validation confirmed the correction;
+- portrait display works in-headset, but landscape currently fails;
+- playback remains visibly stuttering and has not met the approximately 30 FPS acceptance target;
+- the first visible overlay frame takes approximately 10–30 seconds;
+- observed latency is currently unusable, although quantitative glass-to-glass latency has not yet been recorded.
 
 ## Diagnostics and limitations
 

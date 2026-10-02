@@ -57,7 +57,7 @@ If the failure recurs, stop SteamVR, transfer/log into the physical console sess
 
 The 2026-10-02 physical Sprint 4 test subsequently confirmed a visible Android screen in the headset. On the multi-GPU host, OpenVR D3D11 overlays were invisible until the renderer used the adapter returned by `GetDXGIOutputInfo`; updates advanced only about once per five seconds until the D3D11 context was explicitly flushed. The corrected generated animation was visually smooth before the phone stream was retested successfully.
 
-Current limitations: initial phone-overlay appearance takes several seconds; headset-native placement and phone interaction are not implemented; and phone audio remains on the phone because audio transport is outside the visual MVP.
+Current physical-test limitations: initial phone-overlay appearance takes roughly 10–30 seconds, frame pacing is poor, observed latency is unusable, and landscape fails while portrait works. The prior right-edge green bar is fixed. Sprint 4 keyboard shortcuts adjust only the overlay; headset-native placement and interaction with Android are not implemented. Phone audio remains on the phone because audio transport is outside the visual MVP.
 
 Useful overlay receiver options:
 

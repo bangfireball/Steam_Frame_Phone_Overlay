@@ -20,7 +20,9 @@ PhoneCast VR aims to show an Android phone as a persistent VR overlay, first thr
 - `[x]` Phone stream receiver feeds a reusable D3D11-backed OpenVR texture on SteamVR's selected DXGI adapter
 - `[x]` Explicit D3D11 flushing produces visually smooth generated-overlay animation
 - `[x]` Global PC keyboard controls cover show/hide, scale, movement, distance, opacity, and reset
-- `[!]` Follow-up: validate controls, orientation, VR-game coexistence, startup delay, sustained frame pacing, and the green-edge correction
+- `[x]` Physical validation confirms portrait display and removal of the right-edge green bar
+- `[!]` Landscape currently fails; startup takes roughly 10–30 seconds; frame pacing is poor and latency is unusable
+- `[!]` Follow-up: validate PC keyboard overlay controls and VR-game coexistence, then fix orientation and streaming performance
 
 ## Sprint 4 VR streaming validation
 
@@ -42,7 +44,7 @@ Connect the Android sender to the PC as described below. The receiver keeps the 
 
 The Windows OpenVR backend uses a reusable D3D11 texture rather than continuous `SetOverlayRaw` uploads. It selects SteamVR's requested DXGI adapter and flushes each update; both were required for a visible, smoothly updating VRLink overlay on the validation PC. Physical Android-to-headset picture validation succeeded. Validation over a running VR game and validation of controls/orientation are still required before Sprint 4 can be marked complete.
 
-The first phone frame currently takes several seconds to appear. Headset-native moving and phone interaction are later placement/interaction work; Sprint 4 currently uses the documented PC keyboard shortcuts. Phone audio is not part of the visual MVP and is tracked as an optional later sprint.
+The first phone frame currently takes roughly 10–30 seconds to appear, frame pacing is poor, and observed latency is not yet usable. Portrait works and the prior green edge is fixed, but landscape currently fails. Sprint 4's PC keyboard shortcuts control the overlay itself only; they do not interact with Android. Headset-native placement and phone control are later placement/interaction work. Phone audio is not part of the visual MVP and is tracked as an optional later sprint.
 
 ## Sprint 3 streaming validation
 

@@ -665,10 +665,12 @@ docs/protocol.md
 - `[x]` Physical Android stream visible in the SteamVR headset
 - `[x]` D3D11 overlay uses SteamVR's DXGI adapter and explicitly flushes updates; generated animation is visually smooth
 - `[ ]` Validate the phone overlay over a running VR game
-- `[ ]` Physical validation of keyboard controls and orientation changes
-- `[ ]` Confirm green-edge removal and measure sustained phone-stream frame pacing
-- `[ ]` Record VR performance and glass-to-glass latency observations
-- `[!]` Initial overlay appearance takes several seconds; measure keyframe/configuration wait and reduce startup delay
+- `[ ]` Physical validation of PC keyboard overlay controls
+- `[~]` Orientation validation: portrait works; landscape currently fails
+- `[x]` Physical validation confirms the right-edge green bar is fixed
+- `[!]` Phone-stream frame pacing is poor and observed latency is currently unusable
+- `[~]` Initial overlay appearance takes approximately 10–30 seconds; measure codec-configuration/keyframe wait and reduce startup delay
+- `[ ]` Record quantitative sustained FPS and glass-to-glass latency measurements
 - `[!]` Test-environment hazard: starting SteamVR under Windows RDP can break VRLink D3D11 texture creation and produce a gray stream; test only from the physical console session (documented in `docs/development.md`)
 
 ## Objective
@@ -858,7 +860,7 @@ Provide a button-based fallback.
 
 Allow interaction with the displayed phone.
 
-Implement VR pointer/raycast interaction. This sprint also provides the headset-native interaction path; Sprint 4's PC keyboard shortcuts are only development/MVP fallback controls.
+Implement VR pointer/raycast interaction. This sprint also provides the headset-native interaction path; Sprint 4's PC keyboard shortcuts control only the overlay's visibility/placement/appearance and do not interact with the displayed phone.
 
 ```text
 Controller
