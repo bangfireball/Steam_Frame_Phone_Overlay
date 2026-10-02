@@ -569,7 +569,7 @@ Prioritize latency and reliability.
 
 # Sprint 3 — Phone → PC Streaming
 
-**Status:** `[~] In progress — implementation complete enough for physical-device validation`
+**Status:** `[~] In progress — end-to-end picture validated; performance and landscape remain unresolved`
 
 - `[x]` Transport alternatives researched and decision documented
 - `[x]` Versioned, bounded binary framing protocol
@@ -583,9 +583,9 @@ Prioritize latency and reliability.
 - `[x]` Physical Android-to-PC picture validation
 - `[!]` Approximately 30 FPS LAN validation — current preview is visibly stuttering
 - `[x]` Receiver restart/reconnection validation
-- `[ ]` Portrait/landscape streaming validation
-- `[~]` Latency measurement — decoder measured near 5.6 ms; glass-to-glass latency not yet recorded
-- `[!]` Known rendering defect: green bar appears on the right edge of the decoded picture
+- `[~]` Orientation validation — portrait works end to end; landscape currently fails
+- `[!]` Latency — decoder measures roughly 5–6 ms, but observed end-to-end latency is currently unusable and glass-to-glass latency is not quantified
+- `[x]` Right-edge green bar fixed by separating coded and visible decoder dimensions; physically confirmed in Sprint 4
 - `[!]` Security limitation: pairing gates the stream, but Sprint 3 transport is not encrypted
 
 ## Objective
@@ -653,14 +653,14 @@ docs/protocol.md
 
 # Sprint 4 — Phone Screen in VR
 
-**Status:** `[~] In progress — Android screen visible in PC-streamed SteamVR; controls and game coexistence still need validation`
+**Status:** `[~] In progress — first visual MVP path works over a VR game; performance and landscape block completion`
 
 - `[x]` Shared paired TCP video server used by desktop and VR receivers
 - `[x]` Windows Media Foundation decoder connected to the OpenVR overlay
 - `[x]` Reusable D3D11 texture submission through `SetOverlayTexture` on Windows
-- `[x]` Aspect-preserving portrait/landscape texture updates
+- `[~]` Aspect-preserving dimension updates implemented; portrait works but landscape fails physically
 - `[x]` Global show/hide, scale, distance, opacity, move, and reset controls
-- `[x]` Decoder visible-versus-coded dimension handling intended to remove the green edge
+- `[x]` Decoder visible-versus-coded dimension handling removes the green edge
 - `[x]` Windows clean build, automated tests, and generated-texture OpenVR runtime test
 - `[x]` Physical Android stream visible in the SteamVR headset
 - `[x]` D3D11 overlay uses SteamVR's DXGI adapter and explicitly flushes updates; generated animation is visually smooth
@@ -673,6 +673,44 @@ docs/protocol.md
 - `[ ]` Record quantitative sustained FPS and glass-to-glass latency measurements
 - `[x]` Overlay lifecycle ignores unrelated `VREvent_ProcessQuit` events during VR scene transitions
 - `[!]` Test-environment hazard: starting SteamVR under Windows RDP can break VRLink D3D11 texture creation and produce a gray stream; test only from the physical console session (documented in `docs/development.md`)
+
+## Session Handoff Snapshot — 2026-10-02
+
+Last validated commits:
+
+- `9bb524f` — Sprint 4 Android-to-VR implementation;
+- `63cdab3` — physical headset findings recorded;
+- `5169822` — overlay survives VR scene transitions.
+
+Physically confirmed on Windows PC → VRLink → Steam Frame:
+
+- Android portrait screen appears as a head-relative OpenVR overlay;
+- overlay remains visible over a running VR game;
+- PC keyboard controls work;
+- generated D3D11 animation is smooth after selecting OpenVR's DXGI adapter and flushing updates;
+- the right-edge green bar is fixed.
+
+Current blockers, in priority order:
+
+1. Fix poor phone-stream frame pacing and unusable perceived latency.
+2. Reduce the approximately 10–30 second first-frame delay.
+3. Fix landscape reconfiguration.
+4. Record sustained FPS, queue/drop behavior, and quantitative glass-to-glass latency.
+
+Useful evidence for the next session:
+
+- Media Foundation decode itself is roughly 5–6 ms, so it does not explain the full latency.
+- During the successful game test, diagnostics accumulated thousands of receiver-queue drops while decoded FPS rose toward roughly 48, suggesting producer/consumer pacing and queue policy need investigation.
+- The current Windows path still performs NV12 → CPU RGBA → D3D11 upload.
+- Do not test through RDP; confirm `query session` shows the user on `console` before launching SteamVR.
+- Sprint 4 keyboard controls adjust only the overlay. Phone input is Sprint 7/8, and optional phone audio is Sprint 13.
+
+Recommended next work:
+
+1. instrument per-stage timestamps and one-second rolling counters rather than lifetime averages;
+2. inspect Android encoder output cadence versus the configured 30 FPS;
+3. inspect receiver queue policy, arbitrary inter-frame drops, keyframe retention, and Media Foundation output draining;
+4. retest startup and steady-state pacing before beginning Sprint 5.
 
 ## Objective
 
