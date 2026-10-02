@@ -6,7 +6,7 @@ Sprint 3 status: **implementation in progress; physical-device streaming validat
 
 ## Transport decision
 
-Sprint 3 uses one persistent, low-delay TCP connection initiated by the Android sender. The receiver listens on TCP port `47990` by default and enables `TCP_NODELAY`.
+Sprint 3 uses one persistent, low-delay TCP connection initiated by the Android sender. The receiver listens on TCP port `49321` by default and enables `TCP_NODELAY`.
 
 This is an intentionally narrow first implementation:
 

@@ -6,7 +6,7 @@ import java.io.IOException;
 
 final class StreamProtocol {
     static final int VERSION = 1;
-    static final int DEFAULT_PORT = 47990;
+    static final int DEFAULT_PORT = 49321;
     static final int TYPE_HELLO = 1;
     static final int TYPE_VIDEO_CONFIG = 2;
     static final int TYPE_VIDEO_FRAME = 3;

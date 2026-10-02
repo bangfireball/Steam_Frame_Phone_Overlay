@@ -129,8 +129,9 @@ private:
             SetStatus("Could not create listening socket");
             return;
         }
-        BOOL reuse = TRUE;
-        setsockopt(server, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
+        BOOL exclusive = TRUE;
+        setsockopt(server, SOL_SOCKET, SO_EXCLUSIVEADDRUSE,
+                   reinterpret_cast<const char*>(&exclusive), sizeof(exclusive));
         sockaddr_in address{};
         address.sin_family = AF_INET;
         address.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -217,7 +218,7 @@ void PrintUsage() {
 
 int main(int argc, char** argv) {
     std::string pairCode;
-    std::uint16_t port = 47990;
+    std::uint16_t port = 49321;
     for (int index = 1; index < argc; ++index) {
         const std::string option = argv[index];
         if (option == "--help" || option == "-h") {

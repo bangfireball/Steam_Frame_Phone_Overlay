@@ -32,7 +32,7 @@ Sprint 3 desktop streaming receiver:
 .\out\build\windows-x64\bin\phonecast-stream-receiver.exe --pair-code 123456
 ```
 
-The Android sender connects to the PC's LAN IPv4 address on TCP port `47990`. Windows Firewall must permit inbound private-network TCP traffic for the receiver. The pairing code must contain exactly six digits. The current protocol is not encrypted; use only a trusted development LAN.
+The Android sender connects to the PC's LAN IPv4 address on TCP port `49321`. Windows Firewall must permit inbound private-network TCP traffic for the receiver. The pairing code must contain exactly six digits. The current protocol is not encrypted; use only a trusted development LAN.
 
 Useful overlay receiver options:
 

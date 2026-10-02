@@ -24,7 +24,7 @@ Start the Windows desktop receiver with a six-digit code:
 .\out\build\windows-x64\bin\phonecast-stream-receiver.exe --pair-code 123456
 ```
 
-Allow TCP port `47990` through Windows Firewall. In the Android app, enter the PC's LAN IPv4 address and the same code, then press **Start casting**. The desktop window reports connection state, decoded FPS, bitrate, and dropped frames.
+Allow TCP port `49321` through Windows Firewall. In the Android app, enter the PC's LAN IPv4 address and the same code, then press **Start casting**. The desktop window reports connection state, decoded FPS, bitrate, and dropped frames.
 
 The current transport is LAN-only framed TCP and is **not encrypted**. See [`docs/protocol.md`](docs/protocol.md) before testing.
 
