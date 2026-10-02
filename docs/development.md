@@ -75,6 +75,33 @@ Useful overlay receiver options:
 
 Use `--help` for ranges and defaults.
 
+### Sparse-update latency regression (2026-10-02)
+
+The Windows decoder now enables low-latency mode before configuring its media
+types. Previously, its internal buffering could hold a screen update until more
+frames arrived, despite millisecond decode times and an empty TCP receive queue.
+See Microsoft's [H.264 decoder attributes](https://learn.microsoft.com/en-us/windows/win32/medfound/h-264-video-decoder)
+and [low-latency property](https://learn.microsoft.com/en-us/windows/win32/medfound/codecapi-avlowlatencymode).
+
+`phonecast-mf-sparse-frame-latency` tests an IDR and two P-frames with no future
+input or EOS drain allowed before each picture appears. It fails before the fix
+and passes afterward on the Windows development host. It needs Media Foundation,
+not SteamVR, a phone, or FFmpeg. Fixture generation is documented in
+`tests/fixtures/README.md`.
+
+A full build and all nine tests passed in `out/build/windows-x64-latency` while
+the old VR receiver remained running. To physically retest, exit the old receiver
+(Ctrl+Alt+End), then run from the console session:
+
+```powershell
+.\out\build\windows-x64-latency\bin\phonecast-vr-stream-receiver.exe --pair-code 123456
+```
+
+No sender reinstall is required. Compare an isolated phone tap followed by no
+motion, continuous scrolling, and startup; use the desktop receiver separately
+for comparison. End-to-end improvement has not yet been physically measured.
+Sparse `rx-fps=0` on a static screen is not alone evidence of capture failure.
+
 ## Linux ARM64 receiver cross-build
 
 Install an AArch64 GNU compiler, then configure with the checked-in toolchain:

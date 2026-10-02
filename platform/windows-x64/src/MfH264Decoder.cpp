@@ -17,6 +17,11 @@ namespace {
 constexpr GUID kH264DecoderClsid = {0x62ce7e72, 0x4c71, 0x4d20,
     {0xb1, 0x5d, 0x45, 0x28, 0x31, 0xa8, 0x7d, 0x9d}};
 
+// MF_LOW_LATENCY / CODECAPI_AVLowLatencyMode. Keep the GUID local, as with
+// the decoder CLSID, for MinGW headers targeting pre-Windows-8 by default.
+constexpr GUID kLowLatency = {0x9c27891a, 0xed7a, 0x40e1,
+    {0x88, 0xe8, 0xb2, 0x27, 0x27, 0xa0, 0x24, 0xee}};
+
 template <typename T> void Release(T*& value) {
     if (value != nullptr) {
         value->Release();
@@ -109,6 +114,20 @@ bool MfH264Decoder::Start(std::uint32_t width, std::uint32_t height, std::string
                               IID_PPV_ARGS(&state.transform));
     if (FAILED(result)) {
         error = HResultMessage("Creating the Media Foundation H.264 decoder", result);
+        state.Reset();
+        return false;
+    }
+
+    // Screen capture is not a continuous movie: a static screen can leave the
+    // next input seconds away. Disable the decoder's internal look-ahead, not
+    // just our receive queue. MF_LOW_LATENCY shares CODECAPI_AVLowLatencyMode's
+    // GUID; the H.264 decoder expects a UINT32 value via IMFAttributes.
+    IMFAttributes* attributes = nullptr;
+    result = state.transform->GetAttributes(&attributes);
+    if (SUCCEEDED(result)) result = attributes->SetUINT32(kLowLatency, TRUE);
+    Release(attributes);
+    if (FAILED(result)) {
+        error = HResultMessage("Enabling low-latency H.264 decoding", result);
         state.Reset();
         return false;
     }

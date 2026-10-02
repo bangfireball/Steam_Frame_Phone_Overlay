@@ -703,8 +703,8 @@ Current blockers, in priority order:
 Most important evidence:
 
 - The receiver is not accumulating a delayed queue. In the latest run, queue age was generally about 5–15 ms, Media Foundation decode about 2.5–3 ms at 590 × 1280, D3D/OpenVR submission about 0.2–0.3 ms, queue depth zero, and receiver drops/resyncs zero during steady-state streaming.
-- During visible lag, diagnostics repeatedly report `rx-fps=0` for many consecutive seconds while the TCP connection remains established. The delay therefore occurs before a complete frame reaches `TcpVideoServer`: Android capture/composition, MediaCodec input/output, the Android sender queue, or a blocked TCP write.
-- When Android does deliver motion, the complete downstream path sustains approximately 30 FPS and renders roughly 25–30 FPS. Optimizing Media Foundation or D3D cannot explain or fix the multi-second stalls.
+- During visible lag, diagnostics repeatedly report `rx-fps=0` for many consecutive seconds while the TCP connection remains established. This establishes sparse incoming video, but does **not** by itself prove a sender stall: static-screen capture can legitimately stop producing frames while the decoder retains the last update internally. Android capture/composition, MediaCodec output, the sender queue, and blocked TCP writes remain possible additional causes.
+- When Android does deliver motion, the complete downstream path sustains approximately 30 FPS and renders roughly 25–30 FPS. Fast decode calls and an empty receive queue do not measure buffering inside Media Foundation; the follow-up below reproduces that missing source of latency.
 - `KEY_MAX_FPS_TO_ENCODER=30` fixed the original 90–120 FPS flood. `KEY_REPEAT_PREVIOUS_FRAME_AFTER` did not provide a reliable heartbeat on the test codec and was removed.
 - The latest sender uses a 1280-pixel long edge, two-second keyframe interval, CBR when supported, the advertised low-latency codec feature when supported, no B-frames, and a cached keyframe for reconnect. These reduced bandwidth and decode cost but did not eliminate the upstream stalls.
 - Latest startup example: config at approximately 343 ms, decoder initialization 14 ms, first keyframe at 374 ms, but first decoded/submitted frame at approximately 4.93 seconds. An earlier run waited approximately 16.5 seconds for the first keyframe.
@@ -712,13 +712,24 @@ Most important evidence:
 - Do not test through RDP; confirm `query session` shows the user on `console` before launching SteamVR.
 - At handoff time, the VR receiver was running on TCP port `49321` with pairing code `123456`; process IDs are ephemeral and must be rechecked.
 
+### Decoder latency follow-up — 2026-10-02
+
+- `[x]` Reproduced hidden Media Foundation buffering with a generated H.264 regression fixture: the initial IDR produced no output until future input with the old configuration.
+- `[x]` Enabled `MF_LOW_LATENCY` (the `CODECAPI_AVLowLatencyMode` GUID, UINT32) before decoder media-type negotiation. Failure to enable it is reported rather than silently accepting buffering.
+- `[x]` The same test now produces the IDR and each subsequent P-frame immediately, without future input or an end-of-stream drain. This affects both desktop and VR receivers; no Android APK change is needed.
+- `[x]` Full Windows build and all nine CTest tests pass in `out/build/windows-x64-latency`. The original build's VR executable was locked by the running receiver, which was left undisturbed.
+- `[ ]` Restart with the fixed receiver and physically measure startup and action-to-visible latency. No phone was attached through ADB during this follow-up. Do not claim that all 2–5 second delays are resolved until retested.
+
+The prior inference that decoder buffering was ruled out was incorrect. Milliseconds spent inside `Submit` measure work, not how long a picture waits for future input. Sparse screen updates can turn a small decoder look-ahead into seconds of visible delay. Test this smaller, reproduced fix before replacing Android's capture path.
+
 Recommended next work:
 
-1. Instrument Android with one-second rolling counters and timings for encoder output callbacks, presentation-time-to-callback delay, sender queue depth/drops, bytes written, and per-write blocking time. Send these diagnostics to the receiver or expose them clearly in the app; receiver-only timing cannot isolate the remaining upstream stage.
-2. Add sender watchdog telemetry for time since the last encoded frame and last successful socket write. Do not infer capture health from an established TCP connection.
-3. Investigate a controlled Android capture path if direct `VirtualDisplay → MediaCodec Surface` continues to stall. The leading candidate is `VirtualDisplay → SurfaceTexture/external-OES texture → EGL → MediaCodec input Surface`, rendered at an application-controlled cadence. This is more work but would provide deterministic frame pacing and force current composition into the encoder.
-4. Before replacing the capture path, test whether periodically requesting a sync frame changes callback cadence, and record the selected codec name/capabilities plus whether CBR and low-latency mode were actually enabled. A sync request cannot solve a missing input buffer, so treat this only as a diagnostic.
-5. Retest startup and steady-state latency using the desktop preview as well as VR to confirm the sender result independently of VRLink, then return to landscape handling.
+1. Physically retest the low-latency receiver with single taps followed by an idle screen, continuous scrolling, and first-frame startup, using desktop preview and VR separately.
+2. If stalls remain, instrument Android with one-second rolling counters and timings for encoder output callbacks, presentation-time-to-callback delay, sender queue depth/drops, bytes written, and per-write blocking time. Send these diagnostics to the receiver or expose them clearly in the app; receiver-only timing cannot isolate the remaining upstream stage.
+3. Add sender watchdog telemetry for time since the last encoded frame and last successful socket write. Do not infer capture health from an established TCP connection.
+4. Investigate a controlled Android capture path if direct `VirtualDisplay → MediaCodec Surface` continues to stall. The leading candidate is `VirtualDisplay → SurfaceTexture/external-OES texture → EGL → MediaCodec input Surface`, rendered at an application-controlled cadence. This is more work but would provide deterministic frame pacing and force current composition into the encoder.
+5. Before replacing the capture path, test whether periodically requesting a sync frame changes callback cadence, and record the selected codec name/capabilities plus whether CBR and low-latency mode were actually enabled. A sync request cannot solve a missing input buffer, so treat this only as a diagnostic.
+6. Retest startup and steady-state latency using the desktop preview as well as VR to confirm the sender result independently of VRLink, then return to landscape handling.
 
 ## Objective
 
