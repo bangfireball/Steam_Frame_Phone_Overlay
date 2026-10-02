@@ -2,11 +2,13 @@
   "source": "builtin",
   "applications": [
     {
-      "app_key": "com.phonecastvr.experiments.hello-frame",
+      "app_key": "com.phonecastvr.hello-frame",
       "launch_type": "binary",
+      "binary_path": "hello-frame",
       "binary_path_windows": "hello-frame.exe",
       "binary_path_linux": "hello-frame",
-      "is_dashboard_overlay": false,
+      "binary_path_linux_arm": "hello-frame",
+      "is_dashboard_overlay": true,
       "strings": {
         "en_us": {
           "name": "PhoneCast VR - Hello Frame"

@@ -227,7 +227,8 @@ Performance, architecture, and proof of feasibility come first.
 - `[x]` Windows x64 build validation
 - `[!]` PC SteamVR runtime validation — headset not connected
 - `[x]` Linux ARM64 cross-build validation
-- `[!]` Steam Frame standalone runtime validation — headset unavailable
+- `[x]` Native Steam Frame overlay creation and raw-image validation
+- `[~]` Standalone coexistence — confirmed with a flat game; VR game test pending
 
 ## Objective
 

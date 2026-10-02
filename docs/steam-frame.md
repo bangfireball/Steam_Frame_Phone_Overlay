@@ -13,10 +13,11 @@ Sprint: 0 — Hello Frame
 | Windows x64 build | `[x]` | MinGW-w64 release build and CLI tests pass |
 | PC SteamVR overlay without a game | `[!]` | Blocked: Steam Frame headset was not connected |
 | PC SteamVR overlay over a running game | `[!]` | Blocked: Steam Frame headset was not connected |
-| Linux ARM64 build | `[x]` | Debian cross-build produced an AArch64 ELF; emulated CLI smoke test passes |
-| Native Steam Frame overlay without a game | `[!]` | Blocked: headset was not reachable on the network |
-| Native overlay over a standalone game | `[!]` | Blocked: headset was not reachable on the network |
-| Overlay controller input during a game | `[!]` | Blocked until display/coexistence succeeds |
+| Linux ARM64 build | `[x]` | Debian cross-build produced an AArch64 ELF; emulated and native CLI tests pass |
+| Native Steam Frame overlay without a game | `[x]` | OpenVR initialized, raw image loaded, overlay stayed visible, clean shutdown |
+| Native overlay over a standalone flat game | `[x]` | Registered overlay stayed alive for the complete timed test while Balatro ran locally |
+| Native overlay over a standalone VR game | `[~]` | Native mechanism is promising; a VR scene application test is still pending |
+| Overlay controller input during a game | `[ ]` | Not implemented or tested in Sprint 0 display prototype |
 
 The highest-priority question remains unresolved until tested on Steam Frame hardware:
 
@@ -128,7 +129,40 @@ This confirms source/build portability to ARM64. It does **not** confirm that St
 
 **Result:** BLOCKED
 
-SteamVR 2.17.10 and its VRLink driver are installed on the Windows host, but no wireless Steam Frame HMD was connected during the test window. SteamVR reported the wireless-HMD-not-connected state, and the headset hostname was not resolvable. Visual overlay, game coexistence, and performance tests could therefore not be performed.
+SteamVR 2.17.10 and its VRLink driver are installed on the Windows host, but no wireless Steam Frame HMD was connected to PC SteamVR during the test window. SteamVR reported the wireless-HMD-not-connected state. The PC visual overlay and PC game-coexistence tests were therefore not performed.
+
+### Native Steam Frame overlay — 2026-10-02
+
+**Result:** PASS for native overlay creation; PARTIAL for the final cross-VR-application requirement
+
+Environment:
+
+- SteamOS build `20260922.6101926`
+- Linux kernel `6.18.0-gfbdbca41fd45`, AArch64
+- Native SteamVR runtime `2.17.10`, architecture `linuxarm64`
+- OpenVR client SDK `2.15.6`
+- Deployment account/host: `steamos@frame`
+- Binary: cross-built AArch64 PIE with OpenVR linked statically
+
+Observed:
+
+1. The uploaded binary executed natively on Steam Frame.
+2. `VR_Init(..., VRApplication_Overlay)` succeeded against `/opt/steamvr`.
+3. `CreateOverlay`, the HMD-relative transform, `SetOverlayRaw`, and `ShowOverlay` all succeeded.
+4. SteamVR emitted `VREvent_ImageLoaded` for the generated 640×240 image.
+5. A 15-second timed test completed without runtime errors and shut down cleanly.
+6. The runtime registered the process as `VRApplication_Overlay` and loaded legacy Frame controller bindings, although input was not enabled by the prototype.
+7. During a longer run the process used approximately 16.7 MiB resident memory and about 0.9% CPU as sampled over its first minute. This is an initial observation, not a final performance benchmark.
+
+Application lifecycle finding:
+
+- An initially unregistered overlay was sent a quit request when a locally running application transition occurred.
+- Steam Frame requires the ARM-specific manifest field `binary_path_linux_arm`; `binary_path_linux` alone is insufficient on this runtime.
+- With `binary_path_linux_arm` present, SteamVR installed the stable app key `com.phonecastvr.hello-frame`.
+- The manifest marks the process as a dashboard-overlay application even though the program creates a regular scene overlay. This allows SteamVR to classify it as an overlay application intended to coexist with another application.
+- After registration, Hello Frame ran for the full timed test while the standalone, on-device Balatro process was active.
+
+This is strong evidence that native third-party OpenVR overlays function on Steam Frame and can coexist with another locally running application. It is **not yet the final success condition**, because Balatro is a flat application rather than a standalone VR scene application. A registered-overlay launch-order test with a native/on-device VR title remains required.
 
 ### Test record template
 
@@ -172,18 +206,18 @@ The fifth assumption is the central Sprint 0 risk and must not be promoted to do
 
 ## Unknown behavior
 
-1. Whether native Steam Frame applications can initialize as `VRApplication_Overlay`.
-2. Whether `IVROverlay::CreateOverlay` succeeds in the standalone runtime.
-3. Whether the compositor displays that overlay over another standalone application.
-4. Whether SteamOS leaves the overlay process running when a game launches.
-5. Whether launch order changes the result.
-6. Whether controller events can reach the overlay while a game owns focus.
-7. Whether an application manifest or special launch metadata is required.
-8. Whether the overlay survives dashboard transitions, game switching, headset sleep, and wake.
-9. Whether Steam Frame policy restricts auto-start or long-running background overlay processes.
-10. Whether OpenXR overlay-session support is advertised by the installed runtime.
-11. Whether a future video texture can be transferred to the compositor without avoidable copies.
-12. Which native hardware-decoding API and texture-sharing route is preferable on Steam Frame.
+Native `VRApplication_Overlay` initialization, regular overlay creation, raw-image loading, and coexistence with a locally running flat application are now tested successfully.
+
+The remaining unknowns are:
+
+1. Whether the compositor keeps the registered overlay visible over a standalone VR scene application.
+2. Whether a registered overlay launched before a VR game survives the game transition.
+3. Whether controller events can reach the overlay while a VR game owns focus.
+4. Whether the overlay survives dashboard transitions, VR game switching, headset sleep, and wake.
+5. Whether Steam Frame policy permits auto-start and indefinite background overlay operation.
+6. Whether OpenXR overlay-session support is advertised by the installed runtime.
+7. Whether a future video texture can be transferred to the compositor without avoidable copies.
+8. Which native hardware-decoding API and texture-sharing route is preferable on Steam Frame.
 
 Items 11–12 affect later sprints and are not implemented in Hello Frame.
 
@@ -201,7 +235,9 @@ The Sprint 0 executable intentionally uses:
 - `SetOverlayRaw` for a one-time static upload;
 - a 0.55-metre physical width;
 - an HMD-relative transform one metre forward;
-- a low-frequency event loop with clean shutdown.
+- a low-frequency event loop with clean shutdown;
+- persistent registration of the adjacent `.vrmanifest` through `IVRApplications`;
+- `is_dashboard_overlay` classification and the Steam Frame-specific `binary_path_linux_arm` manifest path.
 
 It intentionally avoids DirectX, OpenGL, Vulkan, Qt, SDL, networking, decoding, and reusable production interfaces. `SetOverlayRaw` is a feasibility mechanism, not the planned streaming renderer.
 
@@ -260,6 +296,6 @@ Use when a required environment, particularly Steam Frame hardware/runtime acces
 
 ## Current conclusion
 
-PC OpenVR overlay behavior is sufficiently documented to justify the Hello Frame baseline. Native Linux ARM64 development is documented and the OpenVR client library has ARM64 source-build support.
+Native Linux ARM64 OpenVR overlays are no longer merely theoretical: Hello Frame successfully initialized, created a regular overlay, loaded its generated image, registered a stable application manifest, and coexisted with a locally running flat game on Steam Frame.
 
-However, no primary source reviewed here guarantees persistent third-party overlays over another **standalone** Steam Frame application. That behavior remains **unknown** until the native test is completed.
+The final Sprint 0 success statement remains withheld until the registered overlay is observed over a standalone **VR scene application**. Current status is **partial success with strong positive evidence**.

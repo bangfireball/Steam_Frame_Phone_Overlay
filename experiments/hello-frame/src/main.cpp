@@ -7,6 +7,7 @@
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <limits>
 #include <string>
@@ -16,7 +17,8 @@
 
 namespace {
 
-constexpr char kOverlayKey[] = "com.phonecastvr.experiments.hello-frame";
+constexpr char kApplicationKey[] = "com.phonecastvr.hello-frame";
+constexpr char kOverlayKey[] = "com.phonecastvr.hello-frame.panel";
 constexpr char kOverlayName[] = "PhoneCast VR - Hello Frame";
 constexpr std::uint32_t kTextureWidth = 640;
 constexpr std::uint32_t kTextureHeight = 240;
@@ -163,6 +165,44 @@ bool IsQuitEvent(std::uint32_t eventType) {
            eventType == vr::VREvent_DriverRequestedQuit;
 }
 
+void RegisterApplicationManifest(vr::IVRApplications* applications, const char* executablePath) {
+    if (applications == nullptr) {
+        Log("warning", "OpenVR did not provide IVRApplications; manifest was not registered.");
+        return;
+    }
+
+    std::error_code pathError;
+    const auto absoluteExecutable = std::filesystem::absolute(executablePath, pathError);
+    if (pathError) {
+        Log("warning", "Could not resolve the executable path; manifest was not registered.");
+        return;
+    }
+
+    const auto manifest = absoluteExecutable.parent_path() / "hello-frame.vrmanifest";
+    if (!std::filesystem::exists(manifest)) {
+        Log("warning", "Application manifest not found next to the executable: " + manifest.string());
+        return;
+    }
+
+    const vr::EVRApplicationError error =
+        applications->AddApplicationManifest(manifest.string().c_str(), false);
+    if (error != vr::VRApplicationError_None) {
+        const char* errorName = applications->GetApplicationsErrorNameFromEnum(error);
+        Log("warning", "AddApplicationManifest failed: " +
+                           std::string(errorName != nullptr ? errorName : "unknown error") +
+                           " (" + std::to_string(static_cast<int>(error)) + ")");
+        return;
+    }
+
+    if (!applications->IsApplicationInstalled(kApplicationKey)) {
+        Log("warning", "SteamVR accepted the manifest path but did not install " +
+                           std::string(kApplicationKey) + ". Check the runtime log for schema errors.");
+        return;
+    }
+
+    Log("info", "Registered application manifest for " + std::string(kApplicationKey) + '.');
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -181,6 +221,8 @@ int main(int argc, char** argv) {
                   << " (" << static_cast<int>(initError) << ")\n";
         return EXIT_FAILURE;
     }
+
+    RegisterApplicationManifest(vr::VRApplications(), argv[0]);
 
     vr::IVROverlay* overlayApi = vr::VROverlay();
     if (overlayApi == nullptr) {
