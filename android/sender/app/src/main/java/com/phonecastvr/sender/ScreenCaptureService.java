@@ -192,6 +192,10 @@ public final class ScreenCaptureService extends Service {
         // Surface producers may run at the display refresh rate despite KEY_FRAME_RATE.
         // This encoder-side cap drops excess input before H.264 dependencies are created.
         format.setFloat(MediaFormat.KEY_MAX_FPS_TO_ENCODER, CaptureConfig.FRAME_RATE);
+        // MediaProjection can become extremely sparse for mostly-static screens.
+        // Repeat the latest submitted surface frame at 10 FPS so a one-frame UI
+        // transition cannot remain invisible until the next animation or gesture.
+        format.setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L);
         format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL,
                 CaptureConfig.I_FRAME_INTERVAL_SECONDS);
         format.setInteger(MediaFormat.KEY_PRIORITY, 0);

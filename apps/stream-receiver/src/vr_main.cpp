@@ -206,7 +206,11 @@ int main(int argc, char** argv) {
                               << " dimensions=" << message.width << 'x' << message.height << '\n';
                     configReported = true;
                 }
+                const auto decoderStartBegan = std::chrono::steady_clock::now();
                 decoderStarted = decoder.Start(message.width, message.height, error);
+                const double decoderStartMillis = std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - decoderStartBegan).count();
+                std::cout << "[diagnostics] decoder-start-ms=" << decoderStartMillis << '\n';
                 if (!decoderStarted) std::cerr << error << '\n';
                 continue;
             }

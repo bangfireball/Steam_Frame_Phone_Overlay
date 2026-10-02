@@ -224,10 +224,10 @@ struct TcpVideoServer::Implementation {
     std::thread thread;
     mutable std::mutex statusMutex;
     std::string status;
-    // Absorb short TCP/Android scheduler bursts without repeatedly throwing away
-    // an otherwise decodable prediction chain. At the target 30 FPS this is
-    // still bounded to substantially less than one second of video.
-    static constexpr std::size_t kMaximumQueuedMessages = 8;
+    // Absorb startup and short TCP/Android scheduler bursts without repeatedly
+    // throwing away an otherwise decodable prediction chain. The decoder is
+    // faster than the target 30 FPS and drains this queue after initialization.
+    static constexpr std::size_t kMaximumQueuedMessages = 16;
     mutable std::mutex queueMutex;
     std::deque<QueuedMessage> messages;
     std::uint64_t receivedFrames{};
