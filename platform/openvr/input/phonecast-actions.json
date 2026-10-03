@@ -1,0 +1,46 @@
+{
+  "action_sets": [
+    {
+      "name": "/actions/phonecast",
+      "usage": "leftright"
+    }
+  ],
+  "actions": [
+    { "name": "/actions/phonecast/in/glance_left", "type": "boolean" },
+    { "name": "/actions/phonecast/in/glance_right", "type": "boolean" },
+    { "name": "/actions/phonecast/in/calibrate_left", "type": "boolean" },
+    { "name": "/actions/phonecast/in/calibrate_right", "type": "boolean" },
+    { "name": "/actions/phonecast/in/grip_left", "type": "boolean" },
+    { "name": "/actions/phonecast/in/grip_right", "type": "boolean" },
+    { "name": "/actions/phonecast/in/trigger_left", "type": "boolean" },
+    { "name": "/actions/phonecast/in/trigger_right", "type": "boolean" },
+    { "name": "/actions/phonecast/in/axis_left", "type": "vector2" },
+    { "name": "/actions/phonecast/in/axis_right", "type": "vector2" }
+  ],
+  "default_bindings": [
+    {
+      "controller_type": "frame_controller",
+      "binding_url": "phonecast-bindings-frame-controller.json"
+    },
+    {
+      "controller_type": "generic",
+      "binding_url": "phonecast-bindings-generic.json"
+    }
+  ],
+  "localization": [
+    {
+      "language_tag": "en_US",
+      "/actions/phonecast": "PhoneCast",
+      "/actions/phonecast/in/glance_left": "Left Glance / Next State",
+      "/actions/phonecast/in/glance_right": "Right Glance / Next State",
+      "/actions/phonecast/in/calibrate_left": "Calibrate Left Hand",
+      "/actions/phonecast/in/calibrate_right": "Calibrate Right Hand",
+      "/actions/phonecast/in/grip_left": "Left Calibration Modifier",
+      "/actions/phonecast/in/grip_right": "Right Calibration Modifier",
+      "/actions/phonecast/in/trigger_left": "Left Scale / Distance Modifier",
+      "/actions/phonecast/in/trigger_right": "Right Scale / Distance Modifier",
+      "/actions/phonecast/in/axis_left": "Left Calibration Axis",
+      "/actions/phonecast/in/axis_right": "Right Calibration Axis"
+    }
+  ]
+}

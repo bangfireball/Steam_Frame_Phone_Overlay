@@ -13,16 +13,19 @@ PhoneCast VR aims to show an Android phone as a persistent VR overlay, first thr
 
 ## Sprint 4 VR streaming validation
 
-Start SteamVR, then run the VR stream receiver with a six-digit code:
+For normal Windows use, double-click **`Start PhoneCast VR.cmd`** from the repository root. It refuses to run through Remote Desktop, starts SteamVR when necessary, launches the receiver with pairing code `123456` on port `49321`, and writes logs under `out/logs`. Double-click **`Stop PhoneCast VR.cmd`** to stop it.
+
+The equivalent manual command is:
 
 ```powershell
 .\out\build\windows-x64\bin\phonecast-vr-stream-receiver.exe --pair-code 123456
 ```
 
-Connect the Android sender to the PC as described below. The receiver starts hidden while continuing to decode. Click either controller's primary axis/touchpad to cycle `Hidden -> Glance -> Expanded -> Pinned -> Hidden`. The Glance preview follows the initiating hand; Expanded and Pinned restore normal placement. Hold **Ctrl+Alt** while pressing:
+Connect the Android sender to the PC as described below. The receiver starts hidden while continuing to decode. Short-click either thumbstick to cycle `Hidden -> Glance -> Expanded -> Pinned -> Hidden`. Hold a thumbstick for the configurable 0.6-second default to open the radial menu on that hand, release, point toward an item, and click to select. Its Settings wedge opens a controller-navigated in-headset configuration panel. The Glance preview follows the initiating hand; Expanded and Pinned restore normal placement. Hold **Ctrl+Alt** while pressing:
 
 - `G` — cycle glance states
 - `P` — quick Hidden/Expanded toggle
+- `S` — open the in-headset settings panel
 - `+` / `-` — scale
 - arrow keys — move
 - `Page Up` / `Page Down` — nearer/farther

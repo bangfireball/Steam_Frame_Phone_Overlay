@@ -4,8 +4,11 @@
 
 namespace phonecast::vr {
 
-GlanceController::GlanceController(float previewScale)
-    : previewScale_(std::max(0.25F, std::min(1.0F, previewScale))) {}
+GlanceController::GlanceController(float previewScale) { SetPreviewScale(previewScale); }
+
+void GlanceController::SetPreviewScale(float previewScale) noexcept {
+    previewScale_ = std::max(0.25F, std::min(1.0F, previewScale));
+}
 
 void GlanceController::Cycle(GlanceHand hand) noexcept {
     hand_ = hand;

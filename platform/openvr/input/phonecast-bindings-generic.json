@@ -1,0 +1,69 @@
+{
+  "controller_type": "generic",
+  "name": "PhoneCast generic controller bindings",
+  "description": "Controller shortcuts for the PhoneCast overlay",
+  "bindings": {
+    "/actions/phonecast": {
+      "sources": [
+        {
+          "path": "/user/hand/left/input/joystick",
+          "mode": "joystick",
+          "inputs": {
+            "click": { "output": "/actions/phonecast/in/glance_left" },
+            "position": { "output": "/actions/phonecast/in/axis_left" }
+          }
+        },
+        {
+          "path": "/user/hand/right/input/joystick",
+          "mode": "joystick",
+          "inputs": {
+            "click": { "output": "/actions/phonecast/in/glance_right" },
+            "position": { "output": "/actions/phonecast/in/axis_right" }
+          }
+        },
+        {
+          "path": "/user/hand/left/input/application_menu",
+          "mode": "button",
+          "inputs": {
+            "click": { "output": "/actions/phonecast/in/calibrate_left" }
+          }
+        },
+        {
+          "path": "/user/hand/right/input/application_menu",
+          "mode": "button",
+          "inputs": {
+            "click": { "output": "/actions/phonecast/in/calibrate_right" }
+          }
+        },
+        {
+          "path": "/user/hand/left/input/grip",
+          "mode": "button",
+          "inputs": {
+            "click": { "output": "/actions/phonecast/in/grip_left" }
+          }
+        },
+        {
+          "path": "/user/hand/right/input/grip",
+          "mode": "button",
+          "inputs": {
+            "click": { "output": "/actions/phonecast/in/grip_right" }
+          }
+        },
+        {
+          "path": "/user/hand/left/input/trigger",
+          "mode": "button",
+          "inputs": {
+            "click": { "output": "/actions/phonecast/in/trigger_left" }
+          }
+        },
+        {
+          "path": "/user/hand/right/input/trigger",
+          "mode": "button",
+          "inputs": {
+            "click": { "output": "/actions/phonecast/in/trigger_right" }
+          }
+        }
+      ]
+    }
+  }
+}

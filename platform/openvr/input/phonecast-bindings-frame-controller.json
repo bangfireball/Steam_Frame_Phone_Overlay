@@ -1,0 +1,85 @@
+{
+  "controller_type": "frame_controller",
+  "name": "PhoneCast bindings for Steam Frame Controller",
+  "description": "Controller shortcuts for the PhoneCast overlay",
+  "bindings": {
+    "/actions/phonecast": {
+      "sources": [
+        {
+          "path": "/user/hand/left/input/thumbstick",
+          "mode": "joystick",
+          "inputs": {
+            "click": { "output": "/actions/phonecast/in/glance_left" },
+            "position": { "output": "/actions/phonecast/in/axis_left" }
+          }
+        },
+        {
+          "path": "/user/hand/right/input/thumbstick",
+          "mode": "joystick",
+          "inputs": {
+            "click": { "output": "/actions/phonecast/in/glance_right" },
+            "position": { "output": "/actions/phonecast/in/axis_right" }
+          }
+        },
+        {
+          "path": "/user/hand/left/input/view",
+          "mode": "button",
+          "inputs": {
+            "click": { "output": "/actions/phonecast/in/calibrate_left" }
+          }
+        },
+        {
+          "path": "/user/hand/right/input/menu",
+          "mode": "button",
+          "inputs": {
+            "click": { "output": "/actions/phonecast/in/calibrate_right" }
+          }
+        },
+        {
+          "path": "/user/hand/left/input/grip",
+          "mode": "button",
+          "parameters": {
+            "click_activate_threshold": "0.1",
+            "click_deactivate_threshold": "0.05"
+          },
+          "inputs": {
+            "click": { "output": "/actions/phonecast/in/grip_left" }
+          }
+        },
+        {
+          "path": "/user/hand/right/input/grip",
+          "mode": "button",
+          "parameters": {
+            "click_activate_threshold": "0.1",
+            "click_deactivate_threshold": "0.05"
+          },
+          "inputs": {
+            "click": { "output": "/actions/phonecast/in/grip_right" }
+          }
+        },
+        {
+          "path": "/user/hand/left/input/trigger",
+          "mode": "button",
+          "parameters": {
+            "click_activate_threshold": "0.55",
+            "click_deactivate_threshold": "0.5"
+          },
+          "inputs": {
+            "click": { "output": "/actions/phonecast/in/trigger_left" }
+          }
+        },
+        {
+          "path": "/user/hand/right/input/trigger",
+          "mode": "button",
+          "parameters": {
+            "click_activate_threshold": "0.55",
+            "click_deactivate_threshold": "0.5"
+          },
+          "inputs": {
+            "click": { "output": "/actions/phonecast/in/trigger_right" }
+          }
+        }
+      ]
+    }
+  }
+}

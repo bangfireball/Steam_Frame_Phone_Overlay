@@ -6,6 +6,7 @@
 #include "phonecast/vr/overlay/GlanceController.h"
 #include "phonecast/vr/overlay/OverlayController.h"
 #include "phonecast/vr/overlay/OverlaySettingsStore.h"
+#include "phonecast/vr/overlay/SettingsMenuController.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -31,6 +32,7 @@ void PrintUsage() {
               << "Global controls (hold Ctrl+Alt):\n"
               << "  P          Quick show/hide expanded view\n"
               << "  G          Cycle Hidden/Glance/Expanded/Pinned\n"
+              << "  S          Open in-headset settings\n"
               << "  + / -      Scale up/down\n"
               << "  Arrows     Move overlay\n"
               << "  PageUp/Down  Move nearer/farther\n"
@@ -39,9 +41,10 @@ void PrintUsage() {
               << "  L / R      Left/right-controller-locked\n"
               << "  Home       Reset appearance and position\n"
               << "  End        Quit PhoneCast\n\n"
-              << "Click either controller's primary axis/pad to cycle Hidden, Glance, Expanded, and Pinned.\n"
+              << "Click either thumbstick to cycle Hidden, Glance, Expanded, and Pinned.\n"
+              << "Hold either thumbstick for 0.6 seconds to open its radial menu; point and click to select.\n"
               << "In VR, point at the overlay and hold trigger to grab it; release to world-lock it.\n"
-              << "Press either controller menu button to select that hand and enter/leave calibration:\n"
+              << "Press left View or right Menu to select that hand and enter/leave calibration:\n"
               << "  Axis             Lateral / height\n"
               << "  Grip + axis      Yaw / tilt\n"
               << "  Trigger + axis   Scale / distance\n"
@@ -96,9 +99,11 @@ phonecast::vr::OverlaySettings SettingsForStream(
     return adjusted;
 }
 
-bool PollControl(OverlayAction& action, bool& glanceCycle, bool& quickToggle, bool& quit) {
+bool PollControl(OverlayAction& action, bool& glanceCycle, bool& quickToggle,
+                 bool& openSettings, bool& quit) {
     glanceCycle = false;
     quickToggle = false;
+    openSettings = false;
     quit = false;
     const bool modified = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 &&
                           (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
@@ -122,6 +127,7 @@ bool PollControl(OverlayAction& action, bool& glanceCycle, bool& quickToggle, bo
     }
     if (Pressed('G') && modified) glanceCycle = true;
     if (Pressed('P') && modified) quickToggle = true;
+    if (Pressed('S') && modified) openSettings = true;
     if (Pressed(VK_END) && modified) quit = true;
     return found;
 }
@@ -178,7 +184,8 @@ int main(int argc, char** argv) {
     }
     phonecast::vr::OverlayController controls;
     controls.ReplaceSettings(initialSettings);
-    phonecast::vr::GlanceController glance;
+    phonecast::vr::GlanceController glance(initialSettings.glancePreviewScale);
+    phonecast::vr::SettingsMenuController settingsMenu;
     if (!renderer.Start(controls.Settings(), error)) {
         const auto mode = controls.Settings().placementMode;
         const bool controllerMode =
@@ -241,18 +248,75 @@ int main(int argc, char** argv) {
         OverlayAction action{};
         bool glanceCycle = false;
         bool quickToggle = false;
+        bool keyboardSettings = false;
         bool quit = false;
-        const bool settingsAction = PollControl(action, glanceCycle, quickToggle, quit);
+        const bool settingsAction = PollControl(
+            action, glanceCycle, quickToggle, keyboardSettings, quit);
         phonecast::vr::GlanceInput glanceInput{};
         const bool controllerCycle = renderer.TakeGlanceInput(glanceInput);
-        if (settingsAction || glanceCycle || quickToggle || controllerCycle) {
+        phonecast::vr::RadialMenuSelection radialSelection{};
+        const bool radialSelected = renderer.TakeRadialMenuSelection(radialSelection);
+        if (!settingsMenu.IsOpen() &&
+            (settingsAction || glanceCycle || quickToggle || keyboardSettings ||
+             controllerCycle || radialSelected)) {
             const auto previousSettings = controls.Settings();
-            if (settingsAction) controls.Apply(action);
+            bool saveSettings = settingsAction;
+            bool openSettingsRequested = keyboardSettings;
+            if (keyboardSettings) settingsMenu.Open(controls.Settings());
+            if (settingsAction) {
+                controls.Apply(action);
+                if (action == OverlayAction::LeftControllerLocked)
+                    glance.SetHand(phonecast::vr::GlanceHand::Left);
+                else if (action == OverlayAction::RightControllerLocked)
+                    glance.SetHand(phonecast::vr::GlanceHand::Right);
+            }
             if (glanceCycle) glance.Cycle(glance.Hand());
             if (quickToggle) glance.ToggleExpanded();
             if (controllerCycle) {
                 glance.Cycle(glanceInput == phonecast::vr::GlanceInput::LeftController
                     ? phonecast::vr::GlanceHand::Left : phonecast::vr::GlanceHand::Right);
+            }
+            if (radialSelected) {
+                const auto hand = radialSelection.hand == phonecast::vr::GlanceInput::LeftController
+                    ? phonecast::vr::GlanceHand::Left : phonecast::vr::GlanceHand::Right;
+                glance.SetHand(hand);
+                switch (radialSelection.action) {
+                    case phonecast::vr::RadialMenuAction::ToggleVisible:
+                        glance.ToggleExpanded();
+                        break;
+                    case phonecast::vr::RadialMenuAction::ShowGlance:
+                        glance.ShowGlance(hand);
+                        break;
+                    case phonecast::vr::RadialMenuAction::ShowPinned:
+                        glance.ShowPinned();
+                        break;
+                    case phonecast::vr::RadialMenuAction::HeadLocked:
+                        controls.Apply(OverlayAction::HeadLocked);
+                        glance.ShowPinned();
+                        saveSettings = true;
+                        break;
+                    case phonecast::vr::RadialMenuAction::WorldLocked:
+                        controls.Apply(OverlayAction::WorldLocked);
+                        glance.ShowPinned();
+                        saveSettings = true;
+                        break;
+                    case phonecast::vr::RadialMenuAction::LeftControllerLocked:
+                        controls.Apply(OverlayAction::LeftControllerLocked);
+                        glance.SetHand(phonecast::vr::GlanceHand::Left);
+                        glance.ShowPinned();
+                        saveSettings = true;
+                        break;
+                    case phonecast::vr::RadialMenuAction::RightControllerLocked:
+                        controls.Apply(OverlayAction::RightControllerLocked);
+                        glance.SetHand(phonecast::vr::GlanceHand::Right);
+                        glance.ShowPinned();
+                        saveSettings = true;
+                        break;
+                    case phonecast::vr::RadialMenuAction::OpenSettings:
+                        settingsMenu.Open(controls.Settings());
+                        openSettingsRequested = true;
+                        break;
+                }
             }
             const auto displayedSettings = SettingsForStream(
                 glance.PresentationSettings(controls.Settings()), streamWidth, streamHeight);
@@ -264,23 +328,66 @@ int main(int argc, char** argv) {
                 std::string ignored;
                 renderer.ApplySettings(SettingsForStream(previousSettings, streamWidth, streamHeight), ignored);
                 renderer.SetVisible(false, ignored);
-            } else if (settingsAction && !settingsStore.Save(controls.Settings(), error)) {
-                std::cerr << "Warning: " << error << '\n';
+            } else {
+                if (saveSettings && !settingsStore.Save(controls.Settings(), error))
+                    std::cerr << "Warning: " << error << '\n';
+                if (openSettingsRequested &&
+                    !renderer.ShowSettingsMenu(settingsMenu.View(), error)) {
+                    std::cerr << error << '\n';
+                    settingsMenu.Close();
+                }
             }
         }
         if (quit) break;
 
+        phonecast::vr::SettingsMenuCommand settingsCommand{};
+        if (settingsMenu.IsOpen() && renderer.TakeSettingsMenuInput(settingsCommand)) {
+            const auto result = settingsMenu.Handle(settingsCommand);
+            if (result == phonecast::vr::SettingsMenuResult::Updated ||
+                result == phonecast::vr::SettingsMenuResult::Applied) {
+                controls.ReplaceSettings(settingsMenu.Draft());
+                glance.SetPreviewScale(settingsMenu.Draft().glancePreviewScale);
+                const auto displayed = SettingsForStream(
+                    glance.PresentationSettings(controls.Settings()), streamWidth, streamHeight);
+                if (!renderer.ApplySettings(displayed, error))
+                    std::cerr << error << '\n';
+            } else if (result == phonecast::vr::SettingsMenuResult::Cancelled) {
+                controls.ReplaceSettings(settingsMenu.Original());
+                glance.SetPreviewScale(settingsMenu.Original().glancePreviewScale);
+                const auto displayed = SettingsForStream(
+                    glance.PresentationSettings(controls.Settings()), streamWidth, streamHeight);
+                if (!renderer.ApplySettings(displayed, error))
+                    std::cerr << error << '\n';
+            }
+
+            if (result == phonecast::vr::SettingsMenuResult::Applied) {
+                if (!settingsStore.Save(controls.Settings(), error))
+                    std::cerr << "Warning: " << error << '\n';
+                if (!renderer.HideSettingsMenu(error)) std::cerr << error << '\n';
+            } else if (result == phonecast::vr::SettingsMenuResult::Cancelled) {
+                if (!renderer.HideSettingsMenu(error)) std::cerr << error << '\n';
+            } else if (!renderer.ShowSettingsMenu(settingsMenu.View(), error)) {
+                std::cerr << error << '\n';
+                settingsMenu.Close();
+            }
+        }
+
         phonecast::vr::OverlaySettings vrUpdate;
         if (renderer.TakeSettingsUpdate(vrUpdate)) {
-            auto merged = controls.Settings();
-            merged.placementMode = vrUpdate.placementMode;
-            merged.leftController = vrUpdate.leftController;
-            merged.rightController = vrUpdate.rightController;
-            merged.worldTransform = vrUpdate.worldTransform;
-            merged.worldTransformValid = vrUpdate.worldTransformValid;
-            controls.ReplaceSettings(merged);
-            if (!settingsStore.Save(controls.Settings(), error))
-                std::cerr << "Warning: " << error << '\n';
+            if (settingsMenu.IsOpen()) {
+                settingsMenu.MergeRendererUpdate(vrUpdate);
+                controls.ReplaceSettings(settingsMenu.Draft());
+            } else {
+                auto merged = controls.Settings();
+                merged.placementMode = vrUpdate.placementMode;
+                merged.leftController = vrUpdate.leftController;
+                merged.rightController = vrUpdate.rightController;
+                merged.worldTransform = vrUpdate.worldTransform;
+                merged.worldTransformValid = vrUpdate.worldTransformValid;
+                controls.ReplaceSettings(merged);
+                if (!settingsStore.Save(controls.Settings(), error))
+                    std::cerr << "Warning: " << error << '\n';
+            }
         }
 
         const bool connected = server.Connected();

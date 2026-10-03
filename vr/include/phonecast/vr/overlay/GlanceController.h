@@ -23,6 +23,11 @@ public:
     // A single controller action advances the complete fallback flow:
     // Hidden -> Glance -> Expanded -> Pinned -> Hidden.
     void Cycle(GlanceHand hand) noexcept;
+    void SetHand(GlanceHand hand) noexcept { hand_ = hand; }
+    void ShowGlance(GlanceHand hand) noexcept { hand_ = hand; state_ = GlanceState::Glance; }
+    void ShowPinned() noexcept { state_ = GlanceState::Pinned; }
+    void SetPreviewScale(float previewScale) noexcept;
+    [[nodiscard]] float PreviewScale() const noexcept { return previewScale_; }
     void ToggleExpanded() noexcept;
     void Dismiss() noexcept { state_ = GlanceState::Hidden; }
 

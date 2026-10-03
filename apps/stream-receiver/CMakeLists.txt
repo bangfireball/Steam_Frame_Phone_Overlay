@@ -45,10 +45,26 @@ add_custom_command(TARGET phonecast-vr-stream-receiver POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${PROJECT_SOURCE_DIR}/platform/openvr/manifest/phonecast-receiver.vrmanifest"
         "$<TARGET_FILE_DIR:phonecast-vr-stream-receiver>"
-    COMMENT "Copying the OpenVR runtime and receiver manifest"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${PROJECT_SOURCE_DIR}/platform/openvr/input/phonecast-actions.json"
+        "$<TARGET_FILE_DIR:phonecast-vr-stream-receiver>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${PROJECT_SOURCE_DIR}/platform/openvr/input/phonecast-bindings-frame-controller.json"
+        "$<TARGET_FILE_DIR:phonecast-vr-stream-receiver>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${PROJECT_SOURCE_DIR}/platform/openvr/input/phonecast-bindings-generic.json"
+        "$<TARGET_FILE_DIR:phonecast-vr-stream-receiver>"
+    COMMENT "Copying the OpenVR runtime, manifests, and input bindings"
 )
 
 install(TARGETS phonecast-stream-receiver phonecast-vr-stream-receiver RUNTIME DESTINATION .)
+install(FILES
+    "${PROJECT_SOURCE_DIR}/platform/openvr/manifest/phonecast-receiver.vrmanifest"
+    "${PROJECT_SOURCE_DIR}/platform/openvr/input/phonecast-actions.json"
+    "${PROJECT_SOURCE_DIR}/platform/openvr/input/phonecast-bindings-frame-controller.json"
+    "${PROJECT_SOURCE_DIR}/platform/openvr/input/phonecast-bindings-generic.json"
+    DESTINATION .
+)
 
 if(BUILD_TESTING)
     add_test(NAME stream-receiver-cli-help COMMAND phonecast-stream-receiver --help)

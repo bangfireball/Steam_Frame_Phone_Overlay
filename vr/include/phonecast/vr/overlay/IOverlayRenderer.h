@@ -3,7 +3,9 @@
 #include "phonecast/core/streaming/VideoFrame.h"
 
 #include <array>
+#include <cstdint>
 #include <string>
+#include <vector>
 
 namespace phonecast::vr {
 
@@ -24,6 +26,38 @@ enum class ControllerOrientation {
 enum class GlanceInput {
     LeftController,
     RightController
+};
+
+enum class RadialMenuAction {
+    ToggleVisible,
+    ShowGlance,
+    ShowPinned,
+    HeadLocked,
+    WorldLocked,
+    LeftControllerLocked,
+    RightControllerLocked,
+    OpenSettings
+};
+
+struct RadialMenuSelection {
+    RadialMenuAction action{RadialMenuAction::ToggleVisible};
+    GlanceInput hand{GlanceInput::LeftController};
+};
+
+enum class SettingsMenuCommand {
+    PreviousItem,
+    NextItem,
+    Decrease,
+    Increase,
+    Activate,
+    Back
+};
+
+struct SettingsMenuView {
+    std::string title;
+    std::vector<std::string> labels;
+    std::vector<std::string> values;
+    std::size_t selectedIndex{0};
 };
 
 struct ControllerCalibration {
@@ -52,6 +86,8 @@ struct OverlaySettings {
         0.0F, 1.0F, 0.0F, 1.2F,
         0.0F, 0.0F, 1.0F, -1.0F};
     bool worldTransformValid{false};
+    float glancePreviewScale{0.55F};
+    std::uint32_t radialLongPressMilliseconds{600};
 };
 
 class IOverlayRenderer {
@@ -67,6 +103,21 @@ public:
     virtual bool TakeSettingsUpdate(OverlaySettings& settings) { (void)settings; return false; }
     // Reports a controller reveal/cycle action without putting OpenVR types in the app.
     virtual bool TakeGlanceInput(GlanceInput& input) { (void)input; return false; }
+    // Reports a selection from the optional controller radial menu.
+    virtual bool TakeRadialMenuSelection(RadialMenuSelection& selection) {
+        (void)selection;
+        return false;
+    }
+    virtual bool ShowSettingsMenu(const SettingsMenuView& view, std::string& error) {
+        (void)view;
+        error = "The renderer does not support an in-headset settings menu.";
+        return false;
+    }
+    virtual bool HideSettingsMenu(std::string& error) { error.clear(); return true; }
+    virtual bool TakeSettingsMenuInput(SettingsMenuCommand& command) {
+        (void)command;
+        return false;
+    }
     virtual void Stop() noexcept = 0;
 };
 

@@ -5,6 +5,7 @@
 #include "phonecast/vr/overlay/GlanceController.h"
 #include "phonecast/vr/overlay/OverlayController.h"
 #include "phonecast/vr/overlay/OverlaySettingsStore.h"
+#include "phonecast/vr/overlay/SettingsMenuController.h"
 
 #include <filesystem>
 #include <iostream>
@@ -201,7 +202,10 @@ void TestGlanceMode() {
     phonecast::vr::GlanceController glance;
     Check(glance.State() == phonecast::vr::GlanceState::Hidden && !glance.Visible(),
           "glance mode starts hidden");
-    glance.Cycle(phonecast::vr::GlanceHand::Right);
+    glance.SetHand(phonecast::vr::GlanceHand::Right);
+    Check(glance.Hand() == phonecast::vr::GlanceHand::Right,
+          "keyboard fallback can select the glance hand");
+    glance.Cycle(glance.Hand());
     auto presented = glance.PresentationSettings(base);
     Check(glance.State() == phonecast::vr::GlanceState::Glance && glance.Visible() &&
               presented.placementMode == phonecast::vr::PlacementMode::RightControllerLocked &&
@@ -224,6 +228,14 @@ void TestGlanceMode() {
           "quick toggle opens the expanded view");
     glance.ToggleExpanded();
     Check(!glance.Visible(), "quick toggle hides a visible view");
+    glance.ShowGlance(phonecast::vr::GlanceHand::Left);
+    presented = glance.PresentationSettings(base);
+    Check(glance.State() == phonecast::vr::GlanceState::Glance &&
+              presented.placementMode == phonecast::vr::PlacementMode::LeftControllerLocked,
+          "radial menu can request a left-hand glance preview");
+    glance.ShowPinned();
+    Check(glance.State() == phonecast::vr::GlanceState::Pinned && glance.Visible(),
+          "radial menu can pin the normal presentation");
 }
 
 void TestOverlaySettingsPersistence() {
@@ -244,6 +256,8 @@ void TestOverlaySettingsPersistence() {
     saved.leftController.scale = 1.4F;
     saved.leftController.orientation = phonecast::vr::ControllerOrientation::ControllerRelative;
     saved.rightController.orientation = phonecast::vr::ControllerOrientation::Wrist;
+    saved.glancePreviewScale = 0.7F;
+    saved.radialLongPressMilliseconds = 850;
     std::string error;
     Check(store.Save(saved, error), "overlay settings save");
     phonecast::vr::OverlaySettings loaded;
@@ -259,9 +273,60 @@ void TestOverlaySettingsPersistence() {
               loaded.leftController.yawDegrees == -15.0F &&
               loaded.leftController.scale == 1.4F &&
               loaded.leftController.orientation == phonecast::vr::ControllerOrientation::ControllerRelative &&
-              loaded.rightController.orientation == phonecast::vr::ControllerOrientation::Wrist,
+              loaded.rightController.orientation == phonecast::vr::ControllerOrientation::Wrist &&
+              loaded.glancePreviewScale == 0.7F &&
+              loaded.radialLongPressMilliseconds == 850,
           "overlay settings round trip");
     std::filesystem::remove(path, ignored);
+}
+
+void TestSettingsMenu() {
+    phonecast::vr::OverlaySettings initial;
+    initial.widthMeters = 0.65F;
+    phonecast::vr::SettingsMenuController menu;
+    menu.Open(initial);
+    Check(menu.IsOpen() && menu.View().title == "PHONECAST SETTINGS",
+          "settings menu opens at its root");
+    auto rendererUpdate = initial;
+    rendererUpdate.worldTransformValid = true;
+    rendererUpdate.worldTransform[3] = 1.25F;
+    menu.MergeRendererUpdate(rendererUpdate);
+    Check(menu.Draft().worldTransformValid && menu.Draft().worldTransform[3] == 1.25F &&
+              !menu.Original().worldTransformValid,
+          "renderer-created anchors merge into the draft without changing cancel state");
+    menu.Handle(phonecast::vr::SettingsMenuCommand::Activate);
+    Check(menu.View().title == "APPEARANCE", "settings menu opens Appearance");
+    Check(menu.Handle(phonecast::vr::SettingsMenuCommand::Increase) ==
+              phonecast::vr::SettingsMenuResult::Updated &&
+              menu.Draft().widthMeters > initial.widthMeters,
+          "settings changes update the transactional draft");
+    menu.Handle(phonecast::vr::SettingsMenuCommand::Back);
+    for (int index = 0; index < 5; ++index)
+        menu.Handle(phonecast::vr::SettingsMenuCommand::NextItem);
+    Check(menu.Handle(phonecast::vr::SettingsMenuCommand::Activate) ==
+              phonecast::vr::SettingsMenuResult::Applied && !menu.IsOpen(),
+          "settings can be applied explicitly");
+
+    menu.Open(initial);
+    menu.Handle(phonecast::vr::SettingsMenuCommand::NextItem);
+    menu.Handle(phonecast::vr::SettingsMenuCommand::NextItem);
+    menu.Handle(phonecast::vr::SettingsMenuCommand::NextItem);
+    menu.Handle(phonecast::vr::SettingsMenuCommand::NextItem);
+    menu.Handle(phonecast::vr::SettingsMenuCommand::Activate);
+    Check(menu.View().title == "GLANCE AND CONTROLS", "Glance settings are reachable");
+    menu.Handle(phonecast::vr::SettingsMenuCommand::Increase);
+    menu.Handle(phonecast::vr::SettingsMenuCommand::NextItem);
+    menu.Handle(phonecast::vr::SettingsMenuCommand::Increase);
+    Check(menu.Draft().glancePreviewScale > initial.glancePreviewScale &&
+              menu.Draft().radialLongPressMilliseconds > initial.radialLongPressMilliseconds,
+          "Glance preview and long-press settings are editable");
+    Check(menu.Handle(phonecast::vr::SettingsMenuCommand::Back) ==
+              phonecast::vr::SettingsMenuResult::None,
+          "Back returns from a settings page");
+    Check(menu.Handle(phonecast::vr::SettingsMenuCommand::Back) ==
+              phonecast::vr::SettingsMenuResult::Cancelled && !menu.IsOpen() &&
+              menu.Original().widthMeters == initial.widthMeters,
+          "Back from the root cancels the transaction");
 }
 
 void TestReceiverLifecycle() {
@@ -295,6 +360,7 @@ int main() {
     TestOverlayControls();
     TestGlanceMode();
     TestOverlaySettingsPersistence();
+    TestSettingsMenu();
     TestReceiverLifecycle();
     if (failures == 0) std::cout << "All PhoneCast tests passed.\n";
     return failures == 0 ? 0 : 1;

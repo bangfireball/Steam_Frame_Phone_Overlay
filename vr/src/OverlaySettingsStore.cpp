@@ -1,6 +1,7 @@
 #include "phonecast/vr/overlay/OverlaySettingsStore.h"
 
 #include <cmath>
+#include <cstdint>
 #include <fstream>
 #include <iomanip>
 #include <map>
@@ -54,6 +55,19 @@ bool ParseFloat(const std::string& text, float minimum, float maximum, float& va
         if (end != text.size() || !std::isfinite(parsed) || parsed < minimum || parsed > maximum)
             return false;
         value = parsed;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool ParseUnsigned(const std::string& text, std::uint32_t minimum, std::uint32_t maximum,
+                   std::uint32_t& value) {
+    try {
+        std::size_t end = 0;
+        const auto parsed = std::stoul(text, &end);
+        if (end != text.size() || parsed < minimum || parsed > maximum) return false;
+        value = static_cast<std::uint32_t>(parsed);
         return true;
     } catch (...) {
         return false;
@@ -125,6 +139,18 @@ bool OverlaySettingsStore::Load(OverlaySettings& settings, bool& found, std::str
             return false;
         }
     }
+    const auto previewScale = values.find("glance_preview_scale");
+    if (previewScale != values.end() &&
+        !ParseFloat(previewScale->second, 0.25F, 1.0F, loaded.glancePreviewScale)) {
+        error = "Overlay settings contain an invalid Glance preview scale.";
+        return false;
+    }
+    const auto longPress = values.find("radial_long_press_ms");
+    if (longPress != values.end() &&
+        !ParseUnsigned(longPress->second, 250, 1500, loaded.radialLongPressMilliseconds)) {
+        error = "Overlay settings contain an invalid radial-menu long-press duration.";
+        return false;
+    }
     loaded.worldTransformValid = values["world_valid"] == "1";
     for (std::size_t index = 0; index < loaded.worldTransform.size(); ++index) {
         if (!ParseFloat(values["world_" + std::to_string(index)], -10000.0F, 10000.0F,
@@ -160,7 +186,9 @@ bool OverlaySettingsStore::Save(const OverlaySettings& settings, std::string& er
            << "distance=" << settings.distanceMeters << '\n'
            << "alpha=" << settings.alpha << '\n'
            << "offset_x=" << settings.offsetXMeters << '\n'
-           << "offset_y=" << settings.offsetYMeters << '\n';
+           << "offset_y=" << settings.offsetYMeters << '\n'
+           << "glance_preview_scale=" << settings.glancePreviewScale << '\n'
+           << "radial_long_press_ms=" << settings.radialLongPressMilliseconds << '\n';
     const auto writeController = [&](const char* prefix, const ControllerCalibration& calibration) {
         output << prefix << "_distance=" << calibration.distanceMeters << '\n'
                << prefix << "_height=" << calibration.heightMeters << '\n'

@@ -902,6 +902,8 @@ Settings persist between sessions.
 - `[x]` In-headset controller calibration controls with live adjustment and per-hand reset
 - `[x]` Tracking-loss behavior retains the last valid overlay transform and resumes on recovery
 - `[x]` Windows clean build and all automated tests
+- `[x]` Legacy `GetControllerState` polling replaced with explicit SteamVR Input actions and a Steam Frame controller binding; runtime accepted the action manifest and binding
+- `[!]` Physical keyboard fallback test: right-controller lock worked, but left-controller lock did not behave as expected; the rebuilt receiver needs physical retesting
 - `[ ]` Physical headset tuning and approval of defaults, stability, and ergonomics
 
 ## Objective
@@ -940,7 +942,15 @@ Do not guess a universal pose. Validate the options in-headset and choose defaul
 - `[x]` Hidden startup with decoding retained for immediate reveal
 - `[x]` Gesture reliability investigation and documented deferral criteria
 - `[x]` Automated state and presentation tests
-- `[ ]` Physical headset approval of controls, preview size, transitions, and ergonomics
+- `[x]` Failed legacy controller polling replaced with explicit SteamVR Input actions and a Steam Frame controller binding; runtime accepted the action manifest and binding, with physical retesting pending
+- `[x]` Keyboard-driven state transitions and live, quick reveal physically confirmed
+- `[x]` Keyboard left/right placement selection now also selects the hand used by the next keyboard-driven Glance preview
+- `[x]` Experimental long-press thumbstick radial menu with show/hide, glance, pin, placement, and reset actions
+- `[x]` Settings entry in the radial menu
+- `[x]` Separate in-headset settings panel for PhoneCast configuration
+- `[x]` Controller-only settings navigation, live editing, explicit apply/cancel, and intentional reset without requiring the PC keyboard
+- `[x]` Settings changed in-headset persist through the portable settings model only when applied
+- `[ ]` Physical headset approval of controller controls, long-press threshold/radial-menu ergonomics, settings usability, and 55% preview size/offsets
 
 ## Objective
 
@@ -985,6 +995,33 @@ Full phone overlay
 Investigate reliable gesture detection before implementing complex gesture logic.
 
 Provide a button-based fallback.
+
+## In-Headset Settings
+
+Expand Sprint 6 beyond reveal controls with a PhoneCast settings section that can be opened from a **Settings** item in the radial menu. The user should not need the PC keyboard or edit configuration files for ordinary overlay setup.
+
+The first settings surface should cover functionality that already exists:
+
+- overlay visibility, scale, opacity, distance, and reset;
+- head-, world-, left-controller-, and right-controller placement;
+- independent left/right controller calibration and orientation behavior from Sprint 5.1;
+- Glance preview scale and the provisional radial-menu long-press threshold;
+- concise connection and active-backend status where useful.
+
+Use a separate in-headset panel or menu layer rather than drawing settings into the streamed phone image. Keep its settings/state model platform-independent so the same UI behavior can be reused by the Steam Frame native backend. Platform renderers may implement the actual compositor surface.
+
+Do not pull future performance presets, Android remote-control permissions, notifications, or standalone lifecycle settings into Sprint 6 before their owning sprints establish those models. The settings section should be extensible so those categories can be added later.
+
+### Acceptance Criteria
+
+- The radial menu contains a clear Settings entry.
+- Settings can be opened, navigated, changed, applied/cancelled, and closed using VR controllers.
+- Existing appearance, placement, controller-calibration, and Glance settings are available without a PC keyboard.
+- Changes render live where safe and persist across receiver restarts only when applied.
+- Cancel restores the pre-edit values; reset requires an intentional action.
+- The panel is readable and does not unnecessarily obstruct central gameplay view.
+- Input has a reliable escape/cancel path and does not remain captured after closing settings.
+- Defaults, long-press behavior, and settings ergonomics are physically approved in-headset.
 
 ---
 

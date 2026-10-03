@@ -23,6 +23,10 @@ public:
     bool PumpEvents() override;
     bool TakeSettingsUpdate(vr::OverlaySettings& settings) override;
     bool TakeGlanceInput(vr::GlanceInput& input) override;
+    bool TakeRadialMenuSelection(vr::RadialMenuSelection& selection) override;
+    bool ShowSettingsMenu(const vr::SettingsMenuView& view, std::string& error) override;
+    bool HideSettingsMenu(std::string& error) override;
+    bool TakeSettingsMenuInput(vr::SettingsMenuCommand& command) override;
     void Stop() noexcept override;
 
 private:

@@ -2,6 +2,7 @@ add_library(phonecast-vr
     src/GlanceController.cpp
     src/OverlayController.cpp
     src/OverlaySettingsStore.cpp
+    src/SettingsMenuController.cpp
 )
 target_include_directories(phonecast-vr PUBLIC include)
 target_link_libraries(phonecast-vr PUBLIC phonecast-core)

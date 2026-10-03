@@ -3,16 +3,21 @@
 #include <openvr.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <d3d11.h>
 #include <dxgi1_2.h>
+#else
+#include <unistd.h>
 #endif
 
 namespace phonecast::platform::openvr {
@@ -22,6 +27,24 @@ namespace {
 constexpr char kApplicationKey[] = "com.phonecastvr.receiver";
 constexpr char kOverlayKey[] = "com.phonecastvr.receiver.phone";
 constexpr char kOverlayName[] = "PhoneCast VR Receiver";
+constexpr char kMenuOverlayKey[] = "com.phonecastvr.receiver.radial-menu";
+constexpr char kMenuOverlayName[] = "PhoneCast Controls";
+constexpr char kSettingsOverlayKey[] = "com.phonecastvr.receiver.settings";
+constexpr char kSettingsOverlayName[] = "PhoneCast Settings";
+constexpr std::uint32_t kMenuTextureSize = 512;
+constexpr std::uint32_t kSettingsTextureWidth = 768;
+constexpr std::uint32_t kSettingsTextureHeight = 512;
+constexpr std::array<const char*, 8> kMenuLabels{
+    "SHOW", "GLANCE", "PIN", "RIGHT", "SETTINGS", "WORLD", "HEAD", "LEFT"};
+constexpr std::array<phonecast::vr::RadialMenuAction, 8> kMenuActions{
+    phonecast::vr::RadialMenuAction::ToggleVisible,
+    phonecast::vr::RadialMenuAction::ShowGlance,
+    phonecast::vr::RadialMenuAction::ShowPinned,
+    phonecast::vr::RadialMenuAction::RightControllerLocked,
+    phonecast::vr::RadialMenuAction::OpenSettings,
+    phonecast::vr::RadialMenuAction::WorldLocked,
+    phonecast::vr::RadialMenuAction::HeadLocked,
+    phonecast::vr::RadialMenuAction::LeftControllerLocked};
 
 bool IsQuitEvent(std::uint32_t type) {
     // VREvent_ProcessQuit reports that some VR process exited; it is not a request
@@ -119,6 +142,189 @@ vr::HmdMatrix34_t InverseRigid(const vr::HmdMatrix34_t& matrix) {
     return result;
 }
 
+using Glyph = std::array<const char*, 7>;
+const std::unordered_map<char, Glyph> kMenuGlyphs{
+    {'A', {"01110", "10001", "10001", "11111", "10001", "10001", "10001"}},
+    {'B', {"11110", "10001", "10001", "11110", "10001", "10001", "11110"}},
+    {'C', {"01111", "10000", "10000", "10000", "10000", "10000", "01111"}},
+    {'D', {"11110", "10001", "10001", "10001", "10001", "10001", "11110"}},
+    {'E', {"11111", "10000", "10000", "11110", "10000", "10000", "11111"}},
+    {'F', {"11111", "10000", "10000", "11110", "10000", "10000", "10000"}},
+    {'G', {"01110", "10001", "10000", "10111", "10001", "10001", "01110"}},
+    {'H', {"10001", "10001", "10001", "11111", "10001", "10001", "10001"}},
+    {'I', {"11111", "00100", "00100", "00100", "00100", "00100", "11111"}},
+    {'K', {"10001", "10010", "10100", "11000", "10100", "10010", "10001"}},
+    {'L', {"10000", "10000", "10000", "10000", "10000", "10000", "11111"}},
+    {'M', {"10001", "11011", "10101", "10101", "10001", "10001", "10001"}},
+    {'N', {"10001", "11001", "10101", "10011", "10001", "10001", "10001"}},
+    {'O', {"01110", "10001", "10001", "10001", "10001", "10001", "01110"}},
+    {'P', {"11110", "10001", "10001", "11110", "10000", "10000", "10000"}},
+    {'R', {"11110", "10001", "10001", "11110", "10100", "10010", "10001"}},
+    {'S', {"01111", "10000", "10000", "01110", "00001", "00001", "11110"}},
+    {'T', {"11111", "00100", "00100", "00100", "00100", "00100", "00100"}},
+    {'U', {"10001", "10001", "10001", "10001", "10001", "10001", "01110"}},
+    {'V', {"10001", "10001", "10001", "10001", "10001", "01010", "00100"}},
+    {'W', {"10001", "10001", "10001", "10101", "10101", "10101", "01010"}},
+    {'Y', {"10001", "10001", "01010", "00100", "00100", "00100", "00100"}},
+    {'Z', {"11111", "00001", "00010", "00100", "01000", "10000", "11111"}},
+    {'0', {"01110", "10001", "10011", "10101", "11001", "10001", "01110"}},
+    {'1', {"00100", "01100", "00100", "00100", "00100", "00100", "01110"}},
+    {'2', {"01110", "10001", "00001", "00010", "00100", "01000", "11111"}},
+    {'3', {"11110", "00001", "00001", "01110", "00001", "00001", "11110"}},
+    {'4', {"00010", "00110", "01010", "10010", "11111", "00010", "00010"}},
+    {'5', {"11111", "10000", "10000", "11110", "00001", "00001", "11110"}},
+    {'6', {"01110", "10000", "10000", "11110", "10001", "10001", "01110"}},
+    {'7', {"11111", "00001", "00010", "00100", "01000", "01000", "01000"}},
+    {'8', {"01110", "10001", "10001", "01110", "10001", "10001", "01110"}},
+    {'9', {"01110", "10001", "10001", "01111", "00001", "00001", "01110"}},
+    {'.', {"00000", "00000", "00000", "00000", "00000", "00110", "00110"}},
+    {'-', {"00000", "00000", "00000", "11111", "00000", "00000", "00000"}},
+    {'>', {"10000", "01000", "00100", "00010", "00100", "01000", "10000"}}
+};
+
+void SetMenuPixel(std::vector<std::uint8_t>& image, int x, int y,
+                  const std::array<std::uint8_t, 4>& color) {
+    if (x < 0 || y < 0 || x >= static_cast<int>(kMenuTextureSize) ||
+        y >= static_cast<int>(kMenuTextureSize)) return;
+    const auto offset = (static_cast<std::size_t>(y) * kMenuTextureSize +
+                         static_cast<std::size_t>(x)) * 4U;
+    std::copy(color.begin(), color.end(), image.begin() + static_cast<std::ptrdiff_t>(offset));
+}
+
+void DrawMenuLabel(std::vector<std::uint8_t>& image, const std::string& label,
+                   int centerX, int centerY, int scale) {
+    constexpr std::array<std::uint8_t, 4> color{245, 249, 255, 255};
+    const int advance = 6 * scale;
+    const int width = static_cast<int>(label.size()) * advance - scale;
+    int cursorX = centerX - width / 2;
+    const int originY = centerY - 7 * scale / 2;
+    for (const char character : label) {
+        const auto glyph = kMenuGlyphs.find(character);
+        if (glyph != kMenuGlyphs.end()) {
+            for (int row = 0; row < 7; ++row) {
+                for (int column = 0; column < 5; ++column) {
+                    if (glyph->second[static_cast<std::size_t>(row)][column] != '1') continue;
+                    for (int yy = 0; yy < scale; ++yy)
+                        for (int xx = 0; xx < scale; ++xx)
+                            SetMenuPixel(image, cursorX + column * scale + xx,
+                                         originY + row * scale + yy, color);
+                }
+            }
+        }
+        cursorX += advance;
+    }
+}
+
+void SetSettingsPixel(std::vector<std::uint8_t>& image, int x, int y,
+                      const std::array<std::uint8_t, 4>& color) {
+    if (x < 0 || y < 0 || x >= static_cast<int>(kSettingsTextureWidth) ||
+        y >= static_cast<int>(kSettingsTextureHeight)) return;
+    const auto offset = (static_cast<std::size_t>(y) * kSettingsTextureWidth +
+                         static_cast<std::size_t>(x)) * 4U;
+    std::copy(color.begin(), color.end(), image.begin() + static_cast<std::ptrdiff_t>(offset));
+}
+
+void FillSettingsRect(std::vector<std::uint8_t>& image, int x, int y, int width, int height,
+                      const std::array<std::uint8_t, 4>& color) {
+    for (int row = y; row < y + height; ++row)
+        for (int column = x; column < x + width; ++column)
+            SetSettingsPixel(image, column, row, color);
+}
+
+void DrawSettingsLabel(std::vector<std::uint8_t>& image, const std::string& label,
+                       int centerX, int centerY, int scale,
+                       const std::array<std::uint8_t, 4>& color) {
+    const int advance = 6 * scale;
+    const int width = static_cast<int>(label.size()) * advance - scale;
+    int cursorX = centerX - width / 2;
+    const int originY = centerY - 7 * scale / 2;
+    for (const char character : label) {
+        const auto glyph = kMenuGlyphs.find(character);
+        if (glyph != kMenuGlyphs.end()) {
+            for (int row = 0; row < 7; ++row) {
+                for (int column = 0; column < 5; ++column) {
+                    if (glyph->second[static_cast<std::size_t>(row)][column] != '1') continue;
+                    for (int yy = 0; yy < scale; ++yy)
+                        for (int xx = 0; xx < scale; ++xx)
+                            SetSettingsPixel(image, cursorX + column * scale + xx,
+                                             originY + row * scale + yy, color);
+                }
+            }
+        }
+        cursorX += advance;
+    }
+}
+
+std::vector<std::uint8_t> MakeSettingsTexture(const phonecast::vr::SettingsMenuView& view) {
+    constexpr std::array<std::uint8_t, 4> background{8, 14, 24, 250};
+    constexpr std::array<std::uint8_t, 4> border{42, 160, 235, 255};
+    constexpr std::array<std::uint8_t, 4> selected{24, 92, 145, 255};
+    constexpr std::array<std::uint8_t, 4> text{245, 249, 255, 255};
+    constexpr std::array<std::uint8_t, 4> value{125, 218, 255, 255};
+    std::vector<std::uint8_t> image(
+        static_cast<std::size_t>(kSettingsTextureWidth) * kSettingsTextureHeight * 4U, 0);
+    FillSettingsRect(image, 0, 0, static_cast<int>(kSettingsTextureWidth),
+                     static_cast<int>(kSettingsTextureHeight), background);
+    FillSettingsRect(image, 0, 0, static_cast<int>(kSettingsTextureWidth), 6, border);
+    FillSettingsRect(image, 0, static_cast<int>(kSettingsTextureHeight) - 6,
+                     static_cast<int>(kSettingsTextureWidth), 6, border);
+    FillSettingsRect(image, 0, 0, 6, static_cast<int>(kSettingsTextureHeight), border);
+    FillSettingsRect(image, static_cast<int>(kSettingsTextureWidth) - 6, 0, 6,
+                     static_cast<int>(kSettingsTextureHeight), border);
+    DrawSettingsLabel(image, view.title, static_cast<int>(kSettingsTextureWidth / 2), 38, 3, text);
+    const int rowHeight = 48;
+    const int firstRow = 88;
+    for (std::size_t index = 0; index < view.labels.size(); ++index) {
+        const int centerY = firstRow + static_cast<int>(index) * rowHeight;
+        if (index == view.selectedIndex)
+            FillSettingsRect(image, 20, centerY - 20,
+                             static_cast<int>(kSettingsTextureWidth) - 40, 40, selected);
+        DrawSettingsLabel(image, view.labels[index], 215, centerY, 2, text);
+        if (index < view.values.size())
+            DrawSettingsLabel(image, view.values[index], 600, centerY, 2, value);
+    }
+    return image;
+}
+
+std::vector<std::uint8_t> MakeRadialMenuTexture(int selected, bool currentlyVisible) {
+    std::vector<std::uint8_t> image(
+        static_cast<std::size_t>(kMenuTextureSize) * kMenuTextureSize * 4U, 0);
+    const float center = static_cast<float>(kMenuTextureSize) * 0.5F;
+    const float outerRadius = center - 8.0F;
+    const float innerRadius = 72.0F;
+    const float sectorSize = 2.0F * kPi / 8.0F;
+    for (std::uint32_t y = 0; y < kMenuTextureSize; ++y) {
+        for (std::uint32_t x = 0; x < kMenuTextureSize; ++x) {
+            const float dx = static_cast<float>(x) - center;
+            const float dy = center - static_cast<float>(y);
+            const float radius = std::sqrt(dx * dx + dy * dy);
+            if (radius > outerRadius) continue;
+            std::array<std::uint8_t, 4> color{12, 18, 30, 235};
+            if (radius >= innerRadius) {
+                float angle = std::atan2(dx, dy);
+                if (angle < 0.0F) angle += 2.0F * kPi;
+                const int sector = static_cast<int>(std::floor((angle + sectorSize * 0.5F) / sectorSize)) % 8;
+                color = sector == selected
+                    ? std::array<std::uint8_t, 4>{28, 145, 235, 250}
+                    : std::array<std::uint8_t, 4>{25, 42, 64, 240};
+                const float boundary = std::fmod(angle + sectorSize * 0.5F, sectorSize);
+                if (boundary < 0.018F || boundary > sectorSize - 0.018F)
+                    color = {80, 112, 145, 255};
+            }
+            SetMenuPixel(image, static_cast<int>(x), static_cast<int>(y), color);
+        }
+    }
+    for (int index = 0; index < 8; ++index) {
+        const float angle = static_cast<float>(index) * sectorSize;
+        const int x = static_cast<int>(center + std::sin(angle) * 164.0F);
+        const int y = static_cast<int>(center - std::cos(angle) * 164.0F);
+        const std::string label = index == 0 && currentlyVisible ? "HIDE" : kMenuLabels[index];
+        DrawMenuLabel(image, label, x, y, label.size() > 5 ? 2 : 3);
+    }
+    DrawMenuLabel(image, "MENU", static_cast<int>(center), static_cast<int>(center), 3);
+    return image;
+}
+
 }  // namespace
 
 class OpenVrOverlayRenderer::Impl {
@@ -155,6 +361,20 @@ public:
             return;
         }
         logger.Log(core::LogLevel::Info, "openvr", std::string("Registered ") + kApplicationKey + '.');
+#ifdef _WIN32
+        const auto processId = static_cast<std::uint32_t>(GetCurrentProcessId());
+#else
+        const auto processId = static_cast<std::uint32_t>(getpid());
+#endif
+        const auto identifyResult = applications->IdentifyApplication(processId, kApplicationKey);
+        if (identifyResult != vr::VRApplicationError_None) {
+            const char* identifyName = applications->GetApplicationsErrorNameFromEnum(identifyResult);
+            logger.Log(core::LogLevel::Warning, "openvr",
+                       std::string("IdentifyApplication failed: ") +
+                       (identifyName != nullptr ? identifyName : "unknown error"));
+        } else {
+            logger.Log(core::LogLevel::Info, "openvr", "Associated this process with the registered application key.");
+        }
     }
 
     vr::TrackedDeviceIndex_t DeviceForMode(phonecast::vr::PlacementMode mode) const {
@@ -306,35 +526,299 @@ public:
         calibrationDirty = false;
     }
 
-    void PollControllerCalibration() {
-        const auto leftDevice = system->GetTrackedDeviceIndexForControllerRole(
-            vr::TrackedControllerRole_LeftHand);
-        const auto rightDevice = system->GetTrackedDeviceIndexForControllerRole(
-            vr::TrackedControllerRole_RightHand);
-        vr::VRControllerState_t leftState{};
-        vr::VRControllerState_t rightState{};
-        const bool haveLeft = leftDevice != vr::k_unTrackedDeviceIndexInvalid &&
-            system->GetControllerState(leftDevice, &leftState, sizeof(leftState));
-        const bool haveRight = rightDevice != vr::k_unTrackedDeviceIndexInvalid &&
-            system->GetControllerState(rightDevice, &rightState, sizeof(rightState));
-        const auto leftRising = haveLeft
-            ? leftState.ulButtonPressed & ~previousLeftControllerButtons : 0;
-        const auto rightRising = haveRight
-            ? rightState.ulButtonPressed & ~previousRightControllerButtons : 0;
-        previousLeftControllerButtons = haveLeft ? leftState.ulButtonPressed : 0;
-        previousRightControllerButtons = haveRight ? rightState.ulButtonPressed : 0;
-        const auto menuMask = vr::ButtonMaskFromId(vr::k_EButton_ApplicationMenu);
-        const auto padMask = vr::ButtonMaskFromId(vr::k_EButton_SteamVR_Touchpad);
-        if (!calibrationActive && (leftRising & padMask) != 0) {
-            pendingGlanceInput = phonecast::vr::GlanceInput::LeftController;
-            hasPendingGlanceInput = true;
-        } else if (!calibrationActive && (rightRising & padMask) != 0) {
-            pendingGlanceInput = phonecast::vr::GlanceInput::RightController;
+    struct HandActions {
+        vr::VRActionHandle_t glance{vr::k_ulInvalidActionHandle};
+        vr::VRActionHandle_t calibrate{vr::k_ulInvalidActionHandle};
+        vr::VRActionHandle_t grip{vr::k_ulInvalidActionHandle};
+        vr::VRActionHandle_t trigger{vr::k_ulInvalidActionHandle};
+        vr::VRActionHandle_t axis{vr::k_ulInvalidActionHandle};
+    };
+
+    struct HandInput {
+        bool available{false};
+        bool glanceDown{false};
+        bool glancePressed{false};
+        bool glanceReleased{false};
+        bool calibratePressed{false};
+        bool grip{false};
+        bool trigger{false};
+        float x{0.0F};
+        float y{0.0F};
+    };
+
+    struct HoldState {
+        bool tracking{false};
+        std::chrono::steady_clock::time_point started{};
+    };
+
+    bool ResolveAction(const char* name, vr::VRActionHandle_t& handle) {
+        const auto result = inputApi->GetActionHandle(name, &handle);
+        if (result == vr::VRInputError_None) return true;
+        logger.Log(core::LogLevel::Warning, "openvr-input",
+                   std::string("GetActionHandle failed for ") + name + " (" +
+                   std::to_string(static_cast<int>(result)) + ").");
+        return false;
+    }
+
+    bool InitializeControllerInput() {
+        inputApi = vr::VRInput();
+        if (inputApi == nullptr) {
+            logger.Log(core::LogLevel::Warning, "openvr-input", "IVRInput is unavailable; controller shortcuts are disabled.");
+            return false;
+        }
+        std::error_code pathError;
+        const auto executable = std::filesystem::absolute(executablePath, pathError);
+        const auto manifest = executable.parent_path() / "phonecast-actions.json";
+        if (pathError || !std::filesystem::exists(manifest)) {
+            logger.Log(core::LogLevel::Warning, "openvr-input", "phonecast-actions.json was not found beside the executable.");
+            return false;
+        }
+        auto result = inputApi->SetActionManifestPath(manifest.string().c_str());
+        if (result != vr::VRInputError_None) {
+            logger.Log(core::LogLevel::Warning, "openvr-input",
+                       "SetActionManifestPath failed (" + std::to_string(static_cast<int>(result)) + ").");
+            return false;
+        }
+        result = inputApi->GetActionSetHandle("/actions/phonecast", &actionSet);
+        if (result != vr::VRInputError_None) {
+            logger.Log(core::LogLevel::Warning, "openvr-input",
+                       "GetActionSetHandle failed (" + std::to_string(static_cast<int>(result)) + ").");
+            return false;
+        }
+        const bool resolved =
+            ResolveAction("/actions/phonecast/in/glance_left", leftActions.glance) &&
+            ResolveAction("/actions/phonecast/in/glance_right", rightActions.glance) &&
+            ResolveAction("/actions/phonecast/in/calibrate_left", leftActions.calibrate) &&
+            ResolveAction("/actions/phonecast/in/calibrate_right", rightActions.calibrate) &&
+            ResolveAction("/actions/phonecast/in/grip_left", leftActions.grip) &&
+            ResolveAction("/actions/phonecast/in/grip_right", rightActions.grip) &&
+            ResolveAction("/actions/phonecast/in/trigger_left", leftActions.trigger) &&
+            ResolveAction("/actions/phonecast/in/trigger_right", rightActions.trigger) &&
+            ResolveAction("/actions/phonecast/in/axis_left", leftActions.axis) &&
+            ResolveAction("/actions/phonecast/in/axis_right", rightActions.axis);
+        if (!resolved) return false;
+        logger.Log(core::LogLevel::Info, "openvr-input", "Explicit SteamVR Input actions initialized.");
+        return true;
+    }
+
+    bool ReadDigital(vr::VRActionHandle_t action, bool& state, bool& rising,
+                     bool& falling) const {
+        vr::InputDigitalActionData_t data{};
+        const auto result = inputApi->GetDigitalActionData(
+            action, &data, sizeof(data), vr::k_ulInvalidInputValueHandle);
+        if (result != vr::VRInputError_None || !data.bActive) return false;
+        state = data.bState;
+        rising = data.bChanged && data.bState;
+        falling = data.bChanged && !data.bState;
+        return true;
+    }
+
+    HandInput ReadHandInput(const HandActions& actions) const {
+        HandInput input{};
+        bool ignoredRising = false;
+        bool ignoredFalling = false;
+        bool calibrate = false;
+        const bool haveGlance = ReadDigital(actions.glance, input.glanceDown,
+                                            input.glancePressed, input.glanceReleased);
+        const bool haveCalibrate = ReadDigital(actions.calibrate, calibrate,
+                                               input.calibratePressed, ignoredFalling);
+        const bool haveGrip = ReadDigital(actions.grip, input.grip, ignoredRising, ignoredFalling);
+        const bool haveTrigger = ReadDigital(actions.trigger, input.trigger, ignoredRising, ignoredFalling);
+        vr::InputAnalogActionData_t axis{};
+        const auto axisResult = inputApi->GetAnalogActionData(
+            actions.axis, &axis, sizeof(axis), vr::k_ulInvalidInputValueHandle);
+        const bool haveAxis = axisResult == vr::VRInputError_None && axis.bActive;
+        if (haveAxis) {
+            input.x = axis.x;
+            input.y = axis.y;
+        }
+        input.available = haveGlance || haveCalibrate || haveGrip || haveTrigger || haveAxis;
+        return input;
+    }
+
+    bool PollExplicitInput(HandInput& left, HandInput& right) {
+        vr::VRActiveActionSet_t active{};
+        active.ulActionSet = actionSet;
+        active.ulRestrictedToDevice = vr::k_ulInvalidInputValueHandle;
+        const auto result = inputApi->UpdateActionState(&active, sizeof(active), 1);
+        if (result != vr::VRInputError_None) {
+            if (!actionUpdateErrorReported) {
+                logger.Log(core::LogLevel::Warning, "openvr-input",
+                           "UpdateActionState failed (" + std::to_string(static_cast<int>(result)) + ").");
+                actionUpdateErrorReported = true;
+            }
+            return false;
+        }
+        left = ReadHandInput(leftActions);
+        right = ReadHandInput(rightActions);
+        return true;
+    }
+
+    void PollLegacyInput(HandInput& left, HandInput& right) {
+        const auto read = [this](vr::ETrackedControllerRole role, std::uint64_t& previous) {
+            HandInput input{};
+            const auto device = system->GetTrackedDeviceIndexForControllerRole(role);
+            vr::VRControllerState_t state{};
+            if (device == vr::k_unTrackedDeviceIndexInvalid ||
+                !system->GetControllerState(device, &state, sizeof(state))) return input;
+            const auto oldButtons = previous;
+            const auto rising = state.ulButtonPressed & ~oldButtons;
+            const auto falling = oldButtons & ~state.ulButtonPressed;
+            previous = state.ulButtonPressed;
+            input.available = true;
+            const auto padMask = vr::ButtonMaskFromId(vr::k_EButton_SteamVR_Touchpad);
+            input.glanceDown = (state.ulButtonPressed & padMask) != 0;
+            input.glancePressed = (rising & padMask) != 0;
+            input.glanceReleased = (falling & padMask) != 0;
+            input.calibratePressed = (rising & vr::ButtonMaskFromId(vr::k_EButton_ApplicationMenu)) != 0;
+            input.grip = (state.ulButtonPressed & vr::ButtonMaskFromId(vr::k_EButton_Grip)) != 0;
+            input.trigger = (state.ulButtonPressed & vr::ButtonMaskFromId(vr::k_EButton_SteamVR_Trigger)) != 0;
+            input.x = state.rAxis[0].x;
+            input.y = state.rAxis[0].y;
+            return input;
+        };
+        left = read(vr::TrackedControllerRole_LeftHand, previousLeftControllerButtons);
+        right = read(vr::TrackedControllerRole_RightHand, previousRightControllerButtons);
+    }
+
+    void UpdateRadialMenuTransform() {
+        if (!radialMenuVisible || menuOverlay == vr::k_ulOverlayHandleInvalid) return;
+        auto settings = currentSettings;
+        settings.placementMode = radialMenuLeft
+            ? phonecast::vr::PlacementMode::LeftControllerLocked
+            : phonecast::vr::PlacementMode::RightControllerLocked;
+        vr::HmdMatrix34_t transform{};
+        if (ControllerTransform(settings, transform))
+            overlayApi->SetOverlayTransformAbsolute(
+                menuOverlay, vr::TrackingUniverseStanding, &transform);
+    }
+
+    void RenderRadialMenu() {
+        if (menuOverlay == vr::k_ulOverlayHandleInvalid) return;
+        auto image = MakeRadialMenuTexture(radialMenuSelection, desiredVisible);
+        const auto result = overlayApi->SetOverlayRaw(
+            menuOverlay, image.data(), kMenuTextureSize, kMenuTextureSize, 4);
+        if (result != vr::VROverlayError_None)
+            logger.Log(core::LogLevel::Warning, "openvr-menu", "Failed to update the radial menu texture.");
+    }
+
+    void OpenRadialMenu(bool left, bool waitForRelease) {
+        if (menuOverlay == vr::k_ulOverlayHandleInvalid) return;
+        radialMenuLeft = left;
+        radialMenuSelection = 0;
+        radialAwaitRelease = waitForRelease;
+        radialMenuVisible = true;
+        RenderRadialMenu();
+        UpdateRadialMenuTransform();
+        overlayApi->ShowOverlay(menuOverlay);
+        logger.Log(core::LogLevel::Info, "openvr-menu",
+                   left ? "Radial menu opened on the left hand."
+                        : "Radial menu opened on the right hand.");
+    }
+
+    void CloseRadialMenu() {
+        if (menuOverlay != vr::k_ulOverlayHandleInvalid) overlayApi->HideOverlay(menuOverlay);
+        radialMenuVisible = false;
+        radialAwaitRelease = false;
+    }
+
+    bool HandleSettingsMenu(const HandInput& left, const HandInput& right) {
+        if (!settingsMenuVisible) return false;
+        const auto& active = settingsMenuLeft ? left : right;
+        if (!hasPendingSettingsMenuCommand &&
+            (left.calibratePressed || right.calibratePressed)) {
+            pendingSettingsMenuCommand = phonecast::vr::SettingsMenuCommand::Back;
+            hasPendingSettingsMenuCommand = true;
+        } else if (!hasPendingSettingsMenuCommand && active.glancePressed) {
+            pendingSettingsMenuCommand = phonecast::vr::SettingsMenuCommand::Activate;
+            hasPendingSettingsMenuCommand = true;
+        }
+        const float magnitude = std::sqrt(active.x * active.x + active.y * active.y);
+        if (magnitude < 0.30F) {
+            settingsAxisLatched = false;
+        } else if (!settingsAxisLatched && !hasPendingSettingsMenuCommand) {
+            if (std::fabs(active.y) >= std::fabs(active.x))
+                pendingSettingsMenuCommand = active.y > 0.0F
+                    ? phonecast::vr::SettingsMenuCommand::PreviousItem
+                    : phonecast::vr::SettingsMenuCommand::NextItem;
+            else
+                pendingSettingsMenuCommand = active.x > 0.0F
+                    ? phonecast::vr::SettingsMenuCommand::Increase
+                    : phonecast::vr::SettingsMenuCommand::Decrease;
+            hasPendingSettingsMenuCommand = true;
+            settingsAxisLatched = true;
+        }
+        return true;
+    }
+
+    bool HandleRadialMenu(const HandInput& left, const HandInput& right) {
+        if (!radialMenuVisible) return false;
+        const auto& active = radialMenuLeft ? left : right;
+        UpdateRadialMenuTransform();
+        const float magnitude = std::sqrt(active.x * active.x + active.y * active.y);
+        if (magnitude > 0.35F) {
+            float angle = std::atan2(active.x, active.y);
+            if (angle < 0.0F) angle += 2.0F * kPi;
+            const float sectorSize = 2.0F * kPi / 8.0F;
+            const int selected = static_cast<int>(
+                std::floor((angle + sectorSize * 0.5F) / sectorSize)) % 8;
+            if (selected != radialMenuSelection) {
+                radialMenuSelection = selected;
+                RenderRadialMenu();
+            }
+        }
+        if (active.glanceReleased) radialAwaitRelease = false;
+        if (left.calibratePressed || right.calibratePressed) {
+            CloseRadialMenu();
+            logger.Log(core::LogLevel::Info, "openvr-menu", "Radial menu cancelled.");
+        } else if (!radialAwaitRelease && active.glancePressed) {
+            pendingRadialMenuSelection.action = kMenuActions[radialMenuSelection];
+            pendingRadialMenuSelection.hand = radialMenuLeft
+                ? phonecast::vr::GlanceInput::LeftController
+                : phonecast::vr::GlanceInput::RightController;
+            hasPendingRadialMenuSelection = true;
+            CloseRadialMenu();
+            logger.Log(core::LogLevel::Info, "openvr-menu", "Radial menu selection accepted.");
+        }
+        return true;
+    }
+
+    bool HandleGlancePress(bool left, const HandInput& input, HoldState& hold) {
+        if (input.glancePressed) {
+            hold.tracking = true;
+            hold.started = std::chrono::steady_clock::now();
+        }
+        if (hold.tracking && input.glanceDown &&
+            std::chrono::steady_clock::now() - hold.started >=
+                std::chrono::milliseconds(currentSettings.radialLongPressMilliseconds)) {
+            hold.tracking = false;
+            OpenRadialMenu(left, true);
+            return true;
+        }
+        if (hold.tracking && input.glanceReleased) {
+            hold.tracking = false;
+            pendingGlanceInput = left
+                ? phonecast::vr::GlanceInput::LeftController
+                : phonecast::vr::GlanceInput::RightController;
             hasPendingGlanceInput = true;
         }
-        const bool selectLeft = (leftRising & menuMask) != 0 &&
+        return false;
+    }
+
+    void PollControllerCalibration() {
+        HandInput left{};
+        HandInput right{};
+        if (!explicitInputReady || !PollExplicitInput(left, right)) PollLegacyInput(left, right);
+
+        if (HandleSettingsMenu(left, right)) return;
+        if (HandleRadialMenu(left, right)) return;
+        if (!calibrationActive) {
+            if (HandleGlancePress(true, left, leftHold)) return;
+            if (HandleGlancePress(false, right, rightHold)) return;
+        }
+        const bool selectLeft = left.calibratePressed &&
             currentSettings.placementMode != phonecast::vr::PlacementMode::LeftControllerLocked;
-        const bool selectRight = (rightRising & menuMask) != 0 &&
+        const bool selectRight = right.calibratePressed &&
             currentSettings.placementMode != phonecast::vr::PlacementMode::RightControllerLocked;
         if (selectLeft || selectRight) {
             if (calibrationDirty) PublishCalibration();
@@ -358,14 +842,10 @@ public:
 
         const bool leftSelected =
             currentSettings.placementMode == phonecast::vr::PlacementMode::LeftControllerLocked;
-        if ((leftSelected && !haveLeft) || (!leftSelected && !haveRight)) return;
-        const auto& state = leftSelected ? leftState : rightState;
-        const auto pressed = state.ulButtonPressed;
-        const auto rising = leftSelected ? leftRising : rightRising;
-        const auto gripMask = vr::ButtonMaskFromId(vr::k_EButton_Grip);
-        const auto triggerMask = vr::ButtonMaskFromId(vr::k_EButton_SteamVR_Trigger);
+        const auto& state = leftSelected ? left : right;
+        if (!state.available) return;
 
-        if ((rising & menuMask) != 0) {
+        if (state.calibratePressed) {
             calibrationActive = !calibrationActive;
             if (!calibrationActive && calibrationDirty) PublishCalibration();
             logger.Log(core::LogLevel::Info, "openvr", calibrationActive
@@ -375,8 +855,8 @@ public:
         if (!calibrationActive) return;
 
         auto& calibration = ControllerFor(currentSettings);
-        if ((rising & padMask) != 0) {
-            if ((pressed & gripMask) != 0) {
+        if (state.glancePressed) {
+            if (state.grip) {
                 calibration = {};
                 logger.Log(core::LogLevel::Info, "openvr", "Controller calibration reset for the active hand.");
             } else {
@@ -392,19 +872,19 @@ public:
         const auto now = std::chrono::steady_clock::now();
         if (now - lastCalibrationAdjustment < std::chrono::milliseconds(40)) return;
         lastCalibrationAdjustment = now;
-        float x = state.rAxis[0].x;
-        float y = state.rAxis[0].y;
+        float x = state.x;
+        float y = state.y;
         if (std::fabs(x) < 0.18F) x = 0.0F;
         if (std::fabs(y) < 0.18F) y = 0.0F;
         if (x == 0.0F && y == 0.0F) {
-            if (calibrationDirty && (pressed & (gripMask | triggerMask | padMask)) == 0)
+            if (calibrationDirty && !state.grip && !state.trigger && !state.glancePressed)
                 PublishCalibration();
             return;
         }
-        if ((pressed & gripMask) != 0) {
+        if (state.grip) {
             calibration.yawDegrees = Clamp(calibration.yawDegrees + x * 2.0F, -180.0F, 180.0F);
             calibration.tiltDegrees = Clamp(calibration.tiltDegrees + y * 2.0F, -180.0F, 180.0F);
-        } else if ((pressed & triggerMask) != 0) {
+        } else if (state.trigger) {
             calibration.scale = Clamp(calibration.scale + x * 0.02F, 0.25F, 3.0F);
             calibration.distanceMeters = Clamp(calibration.distanceMeters - y * 0.005F, 0.05F, 2.0F);
         } else {
@@ -510,7 +990,29 @@ public:
     std::string executablePath;
     vr::IVRSystem* system{nullptr};
     vr::IVROverlay* overlayApi{nullptr};
+    vr::IVRInput* inputApi{nullptr};
+    vr::VRActionSetHandle_t actionSet{vr::k_ulInvalidActionSetHandle};
+    HandActions leftActions{};
+    HandActions rightActions{};
+    bool explicitInputReady{false};
+    bool actionUpdateErrorReported{false};
     vr::VROverlayHandle_t overlay{vr::k_ulOverlayHandleInvalid};
+    vr::VROverlayHandle_t menuOverlay{vr::k_ulOverlayHandleInvalid};
+    vr::VROverlayHandle_t settingsOverlay{vr::k_ulOverlayHandleInvalid};
+    bool settingsMenuVisible{false};
+    bool settingsMenuLeft{true};
+    bool settingsAxisLatched{false};
+    phonecast::vr::SettingsMenuCommand pendingSettingsMenuCommand{
+        phonecast::vr::SettingsMenuCommand::Back};
+    bool hasPendingSettingsMenuCommand{false};
+    bool radialMenuVisible{false};
+    bool radialMenuLeft{true};
+    bool radialAwaitRelease{false};
+    int radialMenuSelection{0};
+    phonecast::vr::RadialMenuSelection pendingRadialMenuSelection{};
+    bool hasPendingRadialMenuSelection{false};
+    HoldState leftHold{};
+    HoldState rightHold{};
     bool shown{false};
     bool desiredVisible{true};
     bool hasFrame{false};
@@ -556,6 +1058,7 @@ bool OpenVrOverlayRenderer::Start(const phonecast::vr::OverlaySettings& settings
     }
 
     impl_->RegisterManifest();
+    impl_->explicitInputReady = impl_->InitializeControllerInput();
     impl_->overlayApi = vr::VROverlay();
     if (impl_->overlayApi == nullptr) {
         error = "OpenVR did not provide IVROverlay.";
@@ -563,12 +1066,33 @@ bool OpenVrOverlayRenderer::Start(const phonecast::vr::OverlaySettings& settings
         return false;
     }
     if (!impl_->OverlayCall(impl_->overlayApi->CreateOverlay(kOverlayKey, kOverlayName, &impl_->overlay),
-                            "CreateOverlay", error)) {
+                            "CreateOverlay", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->CreateOverlay(
+                                kMenuOverlayKey, kMenuOverlayName, &impl_->menuOverlay),
+                            "Create radial menu overlay", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayWidthInMeters(impl_->menuOverlay, 0.34F),
+                            "Set radial menu width", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlaySortOrder(impl_->menuOverlay, 100U),
+                            "Set radial menu sort order", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->CreateOverlay(
+                                kSettingsOverlayKey, kSettingsOverlayName, &impl_->settingsOverlay),
+                            "Create settings overlay", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayWidthInMeters(impl_->settingsOverlay, 0.72F),
+                            "Set settings width", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlaySortOrder(impl_->settingsOverlay, 101U),
+                            "Set settings sort order", error)) {
         Stop();
         return false;
     }
 
-    if (!impl_->OverlayCall(impl_->overlayApi->SetOverlayInputMethod(
+    auto settingsTransform = vr::HmdMatrix34_t{{{1.0F, 0.0F, 0.0F, 0.22F},
+                                                 {0.0F, 1.0F, 0.0F, 0.0F},
+                                                 {0.0F, 0.0F, 1.0F, -0.85F}}};
+    if (!impl_->OverlayCall(impl_->overlayApi->SetOverlayTransformTrackedDeviceRelative(
+                                impl_->settingsOverlay, vr::k_unTrackedDeviceIndex_Hmd,
+                                &settingsTransform),
+                            "Set settings transform", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayInputMethod(
                                 impl_->overlay, vr::VROverlayInputMethod_Mouse),
                             "SetOverlayInputMethod", error) ||
         !impl_->OverlayCall(impl_->overlayApi->SetOverlayFlag(
@@ -692,11 +1216,74 @@ bool OpenVrOverlayRenderer::TakeGlanceInput(phonecast::vr::GlanceInput& input) {
     return true;
 }
 
+bool OpenVrOverlayRenderer::TakeRadialMenuSelection(
+        phonecast::vr::RadialMenuSelection& selection) {
+    if (!impl_->hasPendingRadialMenuSelection) return false;
+    selection = impl_->pendingRadialMenuSelection;
+    impl_->hasPendingRadialMenuSelection = false;
+    return true;
+}
+
+bool OpenVrOverlayRenderer::ShowSettingsMenu(
+        const phonecast::vr::SettingsMenuView& view, std::string& error) {
+    if (impl_->overlayApi == nullptr ||
+        impl_->settingsOverlay == vr::k_ulOverlayHandleInvalid) {
+        error = "The OpenVR settings overlay is unavailable.";
+        return false;
+    }
+    auto image = MakeSettingsTexture(view);
+    if (!impl_->OverlayCall(impl_->overlayApi->SetOverlayRaw(
+                                impl_->settingsOverlay, image.data(),
+                                kSettingsTextureWidth, kSettingsTextureHeight, 4),
+                            "Set settings texture", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->ShowOverlay(impl_->settingsOverlay),
+                            "Show settings overlay", error)) return false;
+    impl_->settingsMenuLeft = impl_->radialMenuLeft;
+    impl_->settingsMenuVisible = true;
+    impl_->logger.Log(core::LogLevel::Info, "openvr-settings", "In-headset settings menu shown.");
+    error.clear();
+    return true;
+}
+
+bool OpenVrOverlayRenderer::HideSettingsMenu(std::string& error) {
+    if (impl_->overlayApi == nullptr ||
+        impl_->settingsOverlay == vr::k_ulOverlayHandleInvalid) {
+        error = "The OpenVR settings overlay is unavailable.";
+        return false;
+    }
+    if (!impl_->OverlayCall(impl_->overlayApi->HideOverlay(impl_->settingsOverlay),
+                            "Hide settings overlay", error)) return false;
+    impl_->settingsMenuVisible = false;
+    impl_->settingsAxisLatched = false;
+    impl_->hasPendingSettingsMenuCommand = false;
+    impl_->logger.Log(core::LogLevel::Info, "openvr-settings", "In-headset settings menu hidden.");
+    error.clear();
+    return true;
+}
+
+bool OpenVrOverlayRenderer::TakeSettingsMenuInput(
+        phonecast::vr::SettingsMenuCommand& command) {
+    if (!impl_->hasPendingSettingsMenuCommand) return false;
+    command = impl_->pendingSettingsMenuCommand;
+    impl_->hasPendingSettingsMenuCommand = false;
+    return true;
+}
+
 void OpenVrOverlayRenderer::Stop() noexcept {
+    if (impl_->overlayApi != nullptr && impl_->settingsOverlay != vr::k_ulOverlayHandleInvalid) {
+        impl_->overlayApi->HideOverlay(impl_->settingsOverlay);
+        impl_->overlayApi->DestroyOverlay(impl_->settingsOverlay);
+    }
+    if (impl_->overlayApi != nullptr && impl_->menuOverlay != vr::k_ulOverlayHandleInvalid) {
+        impl_->overlayApi->HideOverlay(impl_->menuOverlay);
+        impl_->overlayApi->DestroyOverlay(impl_->menuOverlay);
+    }
     if (impl_->overlayApi != nullptr && impl_->overlay != vr::k_ulOverlayHandleInvalid) {
         impl_->overlayApi->HideOverlay(impl_->overlay);
         impl_->overlayApi->DestroyOverlay(impl_->overlay);
     }
+    impl_->settingsOverlay = vr::k_ulOverlayHandleInvalid;
+    impl_->menuOverlay = vr::k_ulOverlayHandleInvalid;
     impl_->overlay = vr::k_ulOverlayHandleInvalid;
     impl_->overlayApi = nullptr;
     impl_->shown = false;
@@ -704,6 +1291,20 @@ void OpenVrOverlayRenderer::Stop() noexcept {
     impl_->hasFrame = false;
     impl_->hasPendingSettings = false;
     impl_->hasPendingGlanceInput = false;
+    impl_->hasPendingRadialMenuSelection = false;
+    impl_->hasPendingSettingsMenuCommand = false;
+    impl_->settingsMenuVisible = false;
+    impl_->settingsAxisLatched = false;
+    impl_->radialMenuVisible = false;
+    impl_->radialAwaitRelease = false;
+    impl_->leftHold = {};
+    impl_->rightHold = {};
+    impl_->explicitInputReady = false;
+    impl_->actionUpdateErrorReported = false;
+    impl_->inputApi = nullptr;
+    impl_->actionSet = vr::k_ulInvalidActionSetHandle;
+    impl_->leftActions = {};
+    impl_->rightActions = {};
     impl_->calibrationActive = false;
     impl_->calibrationDirty = false;
     impl_->previousLeftControllerButtons = 0;
