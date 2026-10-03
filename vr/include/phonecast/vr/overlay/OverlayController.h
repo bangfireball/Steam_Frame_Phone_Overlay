@@ -20,6 +20,12 @@ enum class OverlayAction {
     WorldLocked,
     LeftControllerLocked,
     RightControllerLocked,
+    ControllerTiltUp,
+    ControllerTiltDown,
+    ControllerYawLeft,
+    ControllerYawRight,
+    ControllerOrientationNext,
+    ResetControllerCalibration,
     Reset
 };
 

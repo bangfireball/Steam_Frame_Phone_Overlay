@@ -894,7 +894,15 @@ Settings persist between sessions.
 
 # Sprint 5.1 — Controller Placement Calibration
 
-**Status:** `[ ] Not started — deferred placement polish`
+**Status:** `[~] In progress — implementation and automated tests complete; physical calibration pending`
+
+- `[x]` Independent persisted left- and right-controller calibration profiles
+- `[x]` Distance, height, lateral position, tilt, yaw, and scale adjustment
+- `[x]` Controller-relative, face-user, world-upright, and wrist orientation modes
+- `[x]` In-headset controller calibration controls with live adjustment and per-hand reset
+- `[x]` Tracking-loss behavior retains the last valid overlay transform and resumes on recovery
+- `[x]` Windows clean build and all automated tests
+- `[ ]` Physical headset tuning and approval of defaults, stability, and ergonomics
 
 ## Objective
 

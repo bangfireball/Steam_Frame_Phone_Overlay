@@ -14,14 +14,32 @@ enum class PlacementMode {
     RightControllerLocked
 };
 
+enum class ControllerOrientation {
+    ControllerRelative,
+    FaceUser,
+    WorldUpright,
+    Wrist
+};
+
+struct ControllerCalibration {
+    float distanceMeters{0.18F};
+    float heightMeters{0.10F};
+    float lateralMeters{0.0F};
+    float tiltDegrees{0.0F};
+    float yawDegrees{0.0F};
+    float scale{1.0F};
+    ControllerOrientation orientation{ControllerOrientation::FaceUser};
+};
+
 struct OverlaySettings {
     float widthMeters{0.65F};
     float distanceMeters{1.0F};
-    float controllerDistanceMeters{0.18F};
     float alpha{1.0F};
     float offsetXMeters{0.0F};
     float offsetYMeters{0.0F};
     PlacementMode placementMode{PlacementMode::HeadLocked};
+    ControllerCalibration leftController{};
+    ControllerCalibration rightController{};
     // Row-major 3x4 standing-space transform. It is populated when a world
     // anchor is first created or when the user releases a controller grab.
     std::array<float, 12> worldTransform{

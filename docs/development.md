@@ -38,9 +38,19 @@ Sprint 4 OpenVR streaming receiver (start SteamVR first):
 .\out\build\windows-x64\bin\phonecast-vr-stream-receiver.exe --pair-code 123456
 ```
 
-The VR receiver uses global controls while **Ctrl+Alt** is held: `P` toggles visibility, `+/-` changes scale, arrows move, `Page Up/Down` changes distance, `]/[` changes opacity, `H/W` selects head/world lock, `L/R` selects left/right-controller lock, `Home` resets, and `End` quits. Point a SteamVR controller laser at the overlay and hold trigger to grab it directly; releasing creates a world-locked anchor at that pose.
+The VR receiver uses global controls while **Ctrl+Alt** is held: `P` toggles visibility, `+/-` changes scale, arrows move, `Page Up/Down` changes distance, `]/[` changes opacity, `H/W` selects head/world lock, `L/R` selects left/right-controller lock, `Home` resets, and `End` quits. In controller mode, scale, arrows, and distance modify only the selected hand's calibration. Point a SteamVR controller laser at the overlay and hold trigger to grab it directly; releasing creates a world-locked anchor at that pose.
 
-Overlay appearance and placement are saved by default to `%LOCALAPPDATA%\PhoneCastVR\overlay-settings.ini`. Use `--settings PATH` to select a different file. Selecting world lock snapshots the panel's current position into standing space. Selecting a controller requires that role to be available; an unavailable controller leaves the previous placement active. Sprint 5's placement behavior was physically approved over a PC SteamVR game on 2026-10-02. Controller ergonomics remain Sprint 5.1 polish.
+Controller-locked placement can be calibrated without the keyboard. From another placement mode, press either controller's application-menu button to select that hand and enter calibration. Press the selected hand's menu button again to leave or re-enter calibration; pressing the other hand's menu button switches hands. While active:
+
+- move the primary axis to adjust lateral position and height;
+- hold grip and move the axis to adjust yaw and tilt;
+- hold trigger and move the axis to adjust scale and distance;
+- click the pad/primary-axis button to cycle controller-relative, face-user, world-upright, and wrist orientation;
+- hold grip and click the pad to reset that hand.
+
+Direct overlay grabbing is disabled while calibration mode is active. Changes are live and are persisted when the axis returns to rest or calibration mode exits. Controller mappings depend on the OpenVR driver exposing the legacy application-menu, grip, trigger, and primary-axis controls; physical Steam Frame/VRLink validation is still required.
+
+Overlay appearance and placement are saved by default to `%LOCALAPPDATA%\PhoneCastVR\overlay-settings.ini`. Use `--settings PATH` to select a different file. Version 1 settings are migrated on load; version 2 stores independent hand profiles. Selecting world lock snapshots the panel's current position into standing space. Selecting a controller requires that role to be available; an unavailable controller leaves the previous placement active. Temporary tracking loss retains the most recent valid pose and updates resume after recovery. Sprint 5's placement behavior was physically approved over a PC SteamVR game on 2026-10-02; Sprint 5.1's controls and defaults await physical approval.
 
 The Windows receiver's overlay disappears when the user switches to a headset-native standalone game. That game is rendered by the headset's native compositor rather than the PC SteamVR compositor hosting this process, so this is expected for the current backend and does not block the PC-hosted Sprint 5 milestone. Native coexistence with a standalone VR scene still requires the Steam Frame ARM64 backend and validation tracked for Sprint 11.
 

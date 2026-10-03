@@ -2,6 +2,8 @@
 
 #include <openvr.h>
 
+#include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <string>
@@ -27,15 +29,53 @@ bool IsQuitEvent(std::uint32_t type) {
     return type == vr::VREvent_Quit || type == vr::VREvent_DriverRequestedQuit;
 }
 
+constexpr float kPi = 3.14159265358979323846F;
+
+float Clamp(float value, float minimum, float maximum) {
+    return std::max(minimum, std::min(maximum, value));
+}
+
+bool IsControllerMode(phonecast::vr::PlacementMode mode) {
+    return mode == phonecast::vr::PlacementMode::LeftControllerLocked ||
+           mode == phonecast::vr::PlacementMode::RightControllerLocked;
+}
+
+const phonecast::vr::ControllerCalibration& ControllerFor(
+        const phonecast::vr::OverlaySettings& settings) {
+    return settings.placementMode == phonecast::vr::PlacementMode::LeftControllerLocked
+        ? settings.leftController : settings.rightController;
+}
+
+phonecast::vr::ControllerCalibration& ControllerFor(phonecast::vr::OverlaySettings& settings) {
+    return settings.placementMode == phonecast::vr::PlacementMode::LeftControllerLocked
+        ? settings.leftController : settings.rightController;
+}
+
 vr::HmdMatrix34_t LocalTransform(const phonecast::vr::OverlaySettings& settings) {
-    const bool controller =
-        settings.placementMode == phonecast::vr::PlacementMode::LeftControllerLocked ||
-        settings.placementMode == phonecast::vr::PlacementMode::RightControllerLocked;
-    const float distance = controller ? settings.controllerDistanceMeters : settings.distanceMeters;
-    const float vertical = settings.offsetYMeters + (controller ? 0.10F : 0.0F);
     return {{{1.0F, 0.0F, 0.0F, settings.offsetXMeters},
-             {0.0F, 1.0F, 0.0F, vertical},
-             {0.0F, 0.0F, 1.0F, -distance}}};
+             {0.0F, 1.0F, 0.0F, settings.offsetYMeters},
+             {0.0F, 0.0F, 1.0F, -settings.distanceMeters}}};
+}
+
+vr::HmdMatrix34_t Rotation(float tiltDegrees, float yawDegrees) {
+    const float x = tiltDegrees * kPi / 180.0F;
+    const float y = yawDegrees * kPi / 180.0F;
+    const float cx = std::cos(x), sx = std::sin(x);
+    const float cy = std::cos(y), sy = std::sin(y);
+    return {{{cy, sy * sx, sy * cx, 0.0F},
+             {0.0F, cx, -sx, 0.0F},
+             {-sy, cy * sx, cy * cx, 0.0F}}};
+}
+
+vr::HmdMatrix34_t ControllerLocalTransform(
+        const phonecast::vr::ControllerCalibration& calibration,
+        float extraTilt = 0.0F, float extraYaw = 0.0F) {
+    auto result = Rotation(calibration.tiltDegrees + extraTilt,
+                           calibration.yawDegrees + extraYaw);
+    result.m[0][3] = calibration.lateralMeters;
+    result.m[1][3] = calibration.heightMeters;
+    result.m[2][3] = -calibration.distanceMeters;
+    return result;
 }
 
 vr::HmdMatrix34_t FromArray(const std::array<float, 12>& values) {
@@ -136,26 +176,37 @@ public:
         return true;
     }
 
-    bool ControllerFacingTransform(const phonecast::vr::OverlaySettings& settings,
-                                   vr::HmdMatrix34_t& absolute) const {
+    bool ControllerTransform(const phonecast::vr::OverlaySettings& settings,
+                             vr::HmdMatrix34_t& absolute) const {
         const auto controller = DeviceForMode(settings.placementMode);
+        const auto& calibration = ControllerFor(settings);
         vr::HmdMatrix34_t controllerPose{};
-        vr::HmdMatrix34_t hmdPose{};
-        if (!DevicePose(controller, controllerPose) ||
-            !DevicePose(vr::k_unTrackedDeviceIndex_Hmd, hmdPose)) return false;
+        if (!DevicePose(controller, controllerPose)) return false;
 
-        absolute = Multiply(controllerPose, LocalTransform(settings));
+        if (calibration.orientation == phonecast::vr::ControllerOrientation::ControllerRelative) {
+            absolute = Multiply(controllerPose, ControllerLocalTransform(calibration));
+            return true;
+        }
+        if (calibration.orientation == phonecast::vr::ControllerOrientation::Wrist) {
+            const float handYaw = settings.placementMode == phonecast::vr::PlacementMode::LeftControllerLocked
+                ? 20.0F : -20.0F;
+            absolute = Multiply(controllerPose, ControllerLocalTransform(calibration, -55.0F, handYaw));
+            return true;
+        }
+
+        vr::HmdMatrix34_t hmdPose{};
+        if (!DevicePose(vr::k_unTrackedDeviceIndex_Hmd, hmdPose)) return false;
+        absolute = Multiply(controllerPose, ControllerLocalTransform(calibration));
         float normal[3]{hmdPose.m[0][3] - absolute.m[0][3],
                         hmdPose.m[1][3] - absolute.m[1][3],
                         hmdPose.m[2][3] - absolute.m[2][3]};
+        if (calibration.orientation == phonecast::vr::ControllerOrientation::WorldUpright)
+            normal[1] = 0.0F;
         const float normalLength = std::sqrt(normal[0] * normal[0] + normal[1] * normal[1] +
                                              normal[2] * normal[2]);
         if (normalLength < 0.001F) return false;
         for (float& component : normal) component /= normalLength;
 
-        // Keep the panel upright in standing space while its front (+Z) faces
-        // the HMD. Use a stable horizontal axis directly above/below the head,
-        // where world-up cannot define a unique right vector.
         float right[3]{normal[2], 0.0F, -normal[0]};
         const float rightLength = std::sqrt(right[0] * right[0] + right[2] * right[2]);
         if (rightLength < 0.001F) {
@@ -174,6 +225,11 @@ public:
             absolute.m[row][1] = up[row];
             absolute.m[row][2] = normal[row];
         }
+        const float px = absolute.m[0][3], py = absolute.m[1][3], pz = absolute.m[2][3];
+        absolute = Multiply(absolute, Rotation(calibration.tiltDegrees, calibration.yawDegrees));
+        absolute.m[0][3] = px;
+        absolute.m[1][3] = py;
+        absolute.m[2][3] = pz;
         return true;
     }
 
@@ -186,7 +242,7 @@ public:
         }
         if (settings.placementMode == phonecast::vr::PlacementMode::LeftControllerLocked ||
             settings.placementMode == phonecast::vr::PlacementMode::RightControllerLocked)
-            return ControllerFacingTransform(settings, absolute);
+            return ControllerTransform(settings, absolute);
         vr::HmdMatrix34_t devicePose{};
         if (!DevicePose(vr::k_unTrackedDeviceIndex_Hmd, devicePose)) return false;
         absolute = Multiply(devicePose, LocalTransform(settings));
@@ -194,7 +250,9 @@ public:
     }
 
     bool ApplySettings(phonecast::vr::OverlaySettings settings, std::string& error) {
-        if (!OverlayCall(overlayApi->SetOverlayWidthInMeters(overlay, settings.widthMeters),
+        const float placementScale = IsControllerMode(settings.placementMode)
+            ? ControllerFor(settings).scale : 1.0F;
+        if (!OverlayCall(overlayApi->SetOverlayWidthInMeters(overlay, settings.widthMeters * placementScale),
                          "SetOverlayWidthInMeters", error) ||
             !OverlayCall(overlayApi->SetOverlayAlpha(overlay, settings.alpha),
                          "SetOverlayAlpha", error)) return false;
@@ -222,7 +280,7 @@ public:
                              "SetOverlayTransformTrackedDeviceRelative", error)) return false;
         } else {
             vr::HmdMatrix34_t transform{};
-            if (!ControllerFacingTransform(settings, transform)) {
+            if (!ControllerTransform(settings, transform)) {
                 error = "The selected VR controller or HMD pose is not available.";
                 return false;
             }
@@ -234,13 +292,121 @@ public:
         return true;
     }
 
-    void UpdateControllerFacing() {
+    void UpdateControllerPlacement() {
         if (grabbedDevice != vr::k_unTrackedDeviceIndexInvalid ||
-            (currentSettings.placementMode != phonecast::vr::PlacementMode::LeftControllerLocked &&
-             currentSettings.placementMode != phonecast::vr::PlacementMode::RightControllerLocked)) return;
+            !IsControllerMode(currentSettings.placementMode)) return;
         vr::HmdMatrix34_t transform{};
-        if (ControllerFacingTransform(currentSettings, transform))
+        if (ControllerTransform(currentSettings, transform))
             overlayApi->SetOverlayTransformAbsolute(overlay, vr::TrackingUniverseStanding, &transform);
+    }
+
+    void PublishCalibration() {
+        pendingSettings = currentSettings;
+        hasPendingSettings = true;
+        calibrationDirty = false;
+    }
+
+    void PollControllerCalibration() {
+        const auto leftDevice = system->GetTrackedDeviceIndexForControllerRole(
+            vr::TrackedControllerRole_LeftHand);
+        const auto rightDevice = system->GetTrackedDeviceIndexForControllerRole(
+            vr::TrackedControllerRole_RightHand);
+        vr::VRControllerState_t leftState{};
+        vr::VRControllerState_t rightState{};
+        const bool haveLeft = leftDevice != vr::k_unTrackedDeviceIndexInvalid &&
+            system->GetControllerState(leftDevice, &leftState, sizeof(leftState));
+        const bool haveRight = rightDevice != vr::k_unTrackedDeviceIndexInvalid &&
+            system->GetControllerState(rightDevice, &rightState, sizeof(rightState));
+        const auto leftRising = haveLeft
+            ? leftState.ulButtonPressed & ~previousLeftControllerButtons : 0;
+        const auto rightRising = haveRight
+            ? rightState.ulButtonPressed & ~previousRightControllerButtons : 0;
+        previousLeftControllerButtons = haveLeft ? leftState.ulButtonPressed : 0;
+        previousRightControllerButtons = haveRight ? rightState.ulButtonPressed : 0;
+        const auto menuMask = vr::ButtonMaskFromId(vr::k_EButton_ApplicationMenu);
+        const bool selectLeft = (leftRising & menuMask) != 0 &&
+            currentSettings.placementMode != phonecast::vr::PlacementMode::LeftControllerLocked;
+        const bool selectRight = (rightRising & menuMask) != 0 &&
+            currentSettings.placementMode != phonecast::vr::PlacementMode::RightControllerLocked;
+        if (selectLeft || selectRight) {
+            if (calibrationDirty) PublishCalibration();
+            currentSettings.placementMode = selectLeft
+                ? phonecast::vr::PlacementMode::LeftControllerLocked
+                : phonecast::vr::PlacementMode::RightControllerLocked;
+            calibrationActive = true;
+            std::string ignored;
+            ApplySettings(currentSettings, ignored);
+            PublishCalibration();
+            logger.Log(core::LogLevel::Info, "openvr",
+                       selectLeft ? "Left-controller calibration enabled."
+                                  : "Right-controller calibration enabled.");
+            return;
+        }
+        if (!IsControllerMode(currentSettings.placementMode)) {
+            if (calibrationDirty) PublishCalibration();
+            calibrationActive = false;
+            return;
+        }
+
+        const bool leftSelected =
+            currentSettings.placementMode == phonecast::vr::PlacementMode::LeftControllerLocked;
+        if ((leftSelected && !haveLeft) || (!leftSelected && !haveRight)) return;
+        const auto& state = leftSelected ? leftState : rightState;
+        const auto pressed = state.ulButtonPressed;
+        const auto rising = leftSelected ? leftRising : rightRising;
+        const auto gripMask = vr::ButtonMaskFromId(vr::k_EButton_Grip);
+        const auto triggerMask = vr::ButtonMaskFromId(vr::k_EButton_SteamVR_Trigger);
+        const auto padMask = vr::ButtonMaskFromId(vr::k_EButton_SteamVR_Touchpad);
+
+        if ((rising & menuMask) != 0) {
+            calibrationActive = !calibrationActive;
+            if (!calibrationActive && calibrationDirty) PublishCalibration();
+            logger.Log(core::LogLevel::Info, "openvr", calibrationActive
+                ? "Controller calibration enabled: axis moves; grip+axis rotates; trigger+axis scales/distances; pad click changes orientation."
+                : "Controller calibration disabled and saved.");
+        }
+        if (!calibrationActive) return;
+
+        auto& calibration = ControllerFor(currentSettings);
+        if ((rising & padMask) != 0) {
+            if ((pressed & gripMask) != 0) {
+                calibration = {};
+                logger.Log(core::LogLevel::Info, "openvr", "Controller calibration reset for the active hand.");
+            } else {
+                calibration.orientation = static_cast<phonecast::vr::ControllerOrientation>(
+                    (static_cast<int>(calibration.orientation) + 1) % 4);
+                logger.Log(core::LogLevel::Info, "openvr", "Controller orientation mode changed.");
+            }
+            calibrationDirty = true;
+            std::string ignored;
+            ApplySettings(currentSettings, ignored);
+        }
+
+        const auto now = std::chrono::steady_clock::now();
+        if (now - lastCalibrationAdjustment < std::chrono::milliseconds(40)) return;
+        lastCalibrationAdjustment = now;
+        float x = state.rAxis[0].x;
+        float y = state.rAxis[0].y;
+        if (std::fabs(x) < 0.18F) x = 0.0F;
+        if (std::fabs(y) < 0.18F) y = 0.0F;
+        if (x == 0.0F && y == 0.0F) {
+            if (calibrationDirty && (pressed & (gripMask | triggerMask | padMask)) == 0)
+                PublishCalibration();
+            return;
+        }
+        if ((pressed & gripMask) != 0) {
+            calibration.yawDegrees = Clamp(calibration.yawDegrees + x * 2.0F, -180.0F, 180.0F);
+            calibration.tiltDegrees = Clamp(calibration.tiltDegrees + y * 2.0F, -180.0F, 180.0F);
+        } else if ((pressed & triggerMask) != 0) {
+            calibration.scale = Clamp(calibration.scale + x * 0.02F, 0.25F, 3.0F);
+            calibration.distanceMeters = Clamp(calibration.distanceMeters - y * 0.005F, 0.05F, 2.0F);
+        } else {
+            calibration.lateralMeters = Clamp(calibration.lateralMeters + x * 0.005F, -1.0F, 1.0F);
+            calibration.heightMeters = Clamp(calibration.heightMeters + y * 0.005F, -1.0F, 1.0F);
+        }
+        calibrationDirty = true;
+        std::string ignored;
+        ApplySettings(currentSettings, ignored);
     }
 
     void BeginGrab(vr::TrackedDeviceIndex_t device) {
@@ -344,6 +510,11 @@ public:
     phonecast::vr::OverlaySettings currentSettings{};
     phonecast::vr::OverlaySettings pendingSettings{};
     bool hasPendingSettings{false};
+    bool calibrationActive{false};
+    bool calibrationDirty{false};
+    std::uint64_t previousLeftControllerButtons{0};
+    std::uint64_t previousRightControllerButtons{0};
+    std::chrono::steady_clock::time_point lastCalibrationAdjustment{};
     vr::TrackedDeviceIndex_t grabbedDevice{vr::k_unTrackedDeviceIndexInvalid};
     vr::HmdMatrix34_t grabRelative{};
 #ifdef _WIN32
@@ -472,13 +643,14 @@ bool OpenVrOverlayRenderer::SetVisible(bool visible, std::string& error) {
 
 bool OpenVrOverlayRenderer::PumpEvents() {
     if (impl_->overlayApi == nullptr || impl_->system == nullptr) return false;
-    impl_->UpdateControllerFacing();
+    impl_->UpdateControllerPlacement();
+    impl_->PollControllerCalibration();
     vr::VREvent_t event{};
     while (impl_->overlayApi->PollNextOverlayEvent(impl_->overlay, &event, sizeof(event))) {
-        if (event.eventType == vr::VREvent_MouseButtonDown &&
+        if (!impl_->calibrationActive && event.eventType == vr::VREvent_MouseButtonDown &&
             (event.data.mouse.button & vr::VRMouseButton_Left) != 0) {
             impl_->BeginGrab(event.trackedDeviceIndex);
-        } else if (event.eventType == vr::VREvent_MouseButtonUp &&
+        } else if (!impl_->calibrationActive && event.eventType == vr::VREvent_MouseButtonUp &&
                    (event.data.mouse.button & vr::VRMouseButton_Left) != 0) {
             impl_->EndGrab(event.trackedDeviceIndex);
         }
@@ -515,6 +687,10 @@ void OpenVrOverlayRenderer::Stop() noexcept {
     impl_->desiredVisible = true;
     impl_->hasFrame = false;
     impl_->hasPendingSettings = false;
+    impl_->calibrationActive = false;
+    impl_->calibrationDirty = false;
+    impl_->previousLeftControllerButtons = 0;
+    impl_->previousRightControllerButtons = 0;
     impl_->grabbedDevice = vr::k_unTrackedDeviceIndexInvalid;
 #ifdef _WIN32
     if (impl_->texture != nullptr) impl_->texture->Release();

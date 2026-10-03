@@ -37,7 +37,13 @@ void PrintUsage() {
               << "  L / R      Left/right-controller-locked\n"
               << "  Home       Reset appearance and position\n"
               << "  End        Quit PhoneCast\n\n"
-              << "In VR, point at the overlay and hold trigger to grab it; release to world-lock it.\n";
+              << "In VR, point at the overlay and hold trigger to grab it; release to world-lock it.\n"
+              << "Press either controller menu button to select that hand and enter/leave calibration:\n"
+              << "  Axis             Lateral / height\n"
+              << "  Grip + axis      Yaw / tilt\n"
+              << "  Trigger + axis   Scale / distance\n"
+              << "  Pad click        Cycle orientation\n"
+              << "  Grip + pad click Reset that hand's calibration\n";
 }
 
 std::filesystem::path DefaultSettingsPath() {
@@ -243,6 +249,8 @@ int main(int argc, char** argv) {
         if (renderer.TakeSettingsUpdate(vrUpdate)) {
             auto merged = controls.Settings();
             merged.placementMode = vrUpdate.placementMode;
+            merged.leftController = vrUpdate.leftController;
+            merged.rightController = vrUpdate.rightController;
             merged.worldTransform = vrUpdate.worldTransform;
             merged.worldTransformValid = vrUpdate.worldTransformValid;
             controls.ReplaceSettings(merged);

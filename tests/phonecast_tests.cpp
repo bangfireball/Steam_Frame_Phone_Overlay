@@ -169,6 +169,28 @@ void TestOverlayControls() {
     controls.Apply(phonecast::vr::OverlayAction::LeftControllerLocked);
     Check(controls.Settings().placementMode == phonecast::vr::PlacementMode::LeftControllerLocked,
           "left controller mode is selectable");
+    controls.Apply(phonecast::vr::OverlayAction::MoveRight);
+    controls.Apply(phonecast::vr::OverlayAction::MoveUp);
+    controls.Apply(phonecast::vr::OverlayAction::DistanceFarther);
+    controls.Apply(phonecast::vr::OverlayAction::ScaleDown);
+    controls.Apply(phonecast::vr::OverlayAction::ControllerTiltUp);
+    controls.Apply(phonecast::vr::OverlayAction::ControllerYawRight);
+    controls.Apply(phonecast::vr::OverlayAction::ControllerOrientationNext);
+    Check(controls.Settings().leftController.lateralMeters > 0.0F &&
+              controls.Settings().leftController.heightMeters > 0.10F &&
+              controls.Settings().leftController.distanceMeters > 0.18F &&
+              controls.Settings().leftController.scale < 1.0F &&
+              controls.Settings().leftController.tiltDegrees > 0.0F &&
+              controls.Settings().leftController.yawDegrees > 0.0F &&
+              controls.Settings().leftController.orientation ==
+                  phonecast::vr::ControllerOrientation::WorldUpright,
+          "active hand calibration is independently adjustable");
+    Check(controls.Settings().rightController.lateralMeters == 0.0F,
+          "inactive hand calibration is unchanged");
+    controls.Apply(phonecast::vr::OverlayAction::ResetControllerCalibration);
+    Check(controls.Settings().leftController.lateralMeters == 0.0F &&
+              controls.Settings().leftController.scale == 1.0F,
+          "active hand calibration resets");
 }
 
 void TestOverlaySettingsPersistence() {
@@ -181,6 +203,14 @@ void TestOverlaySettingsPersistence() {
     saved.worldTransformValid = true;
     saved.worldTransform[3] = 2.25F;
     saved.widthMeters = 0.9F;
+    saved.leftController.distanceMeters = 0.42F;
+    saved.leftController.heightMeters = -0.12F;
+    saved.leftController.lateralMeters = 0.08F;
+    saved.leftController.tiltDegrees = 25.0F;
+    saved.leftController.yawDegrees = -15.0F;
+    saved.leftController.scale = 1.4F;
+    saved.leftController.orientation = phonecast::vr::ControllerOrientation::ControllerRelative;
+    saved.rightController.orientation = phonecast::vr::ControllerOrientation::Wrist;
     std::string error;
     Check(store.Save(saved, error), "overlay settings save");
     phonecast::vr::OverlaySettings loaded;
@@ -188,7 +218,15 @@ void TestOverlaySettingsPersistence() {
     Check(store.Load(loaded, found, error) && found, "overlay settings load");
     Check(loaded.placementMode == phonecast::vr::PlacementMode::WorldLocked &&
               loaded.worldTransformValid && loaded.worldTransform[3] == 2.25F &&
-              loaded.widthMeters == 0.9F,
+              loaded.widthMeters == 0.9F &&
+              loaded.leftController.distanceMeters == 0.42F &&
+              loaded.leftController.heightMeters == -0.12F &&
+              loaded.leftController.lateralMeters == 0.08F &&
+              loaded.leftController.tiltDegrees == 25.0F &&
+              loaded.leftController.yawDegrees == -15.0F &&
+              loaded.leftController.scale == 1.4F &&
+              loaded.leftController.orientation == phonecast::vr::ControllerOrientation::ControllerRelative &&
+              loaded.rightController.orientation == phonecast::vr::ControllerOrientation::Wrist,
           "overlay settings round trip");
     std::filesystem::remove(path, ignored);
 }

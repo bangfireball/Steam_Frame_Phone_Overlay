@@ -28,6 +28,25 @@ bool ParseMode(const std::string& text, PlacementMode& mode) {
     return true;
 }
 
+const char* OrientationName(ControllerOrientation orientation) {
+    switch (orientation) {
+        case ControllerOrientation::ControllerRelative: return "controller-relative";
+        case ControllerOrientation::FaceUser: return "face-user";
+        case ControllerOrientation::WorldUpright: return "world-upright";
+        case ControllerOrientation::Wrist: return "wrist";
+    }
+    return "face-user";
+}
+
+bool ParseOrientation(const std::string& text, ControllerOrientation& orientation) {
+    if (text == "controller-relative") orientation = ControllerOrientation::ControllerRelative;
+    else if (text == "face-user") orientation = ControllerOrientation::FaceUser;
+    else if (text == "world-upright") orientation = ControllerOrientation::WorldUpright;
+    else if (text == "wrist") orientation = ControllerOrientation::Wrist;
+    else return false;
+    return true;
+}
+
 bool ParseFloat(const std::string& text, float minimum, float maximum, float& value) {
     try {
         std::size_t end = 0;
@@ -65,7 +84,8 @@ bool OverlaySettingsStore::Load(OverlaySettings& settings, bool& found, std::str
         }
         values[line.substr(0, separator)] = line.substr(separator + 1);
     }
-    if (values["version"] != "1") {
+    const bool legacy = values["version"] == "1";
+    if (!legacy && values["version"] != "2") {
         error = "Unsupported overlay settings version.";
         return false;
     }
@@ -74,13 +94,36 @@ bool OverlaySettingsStore::Load(OverlaySettings& settings, bool& found, std::str
     if (!ParseMode(values["mode"], loaded.placementMode) ||
         !ParseFloat(values["width"], 0.1F, 5.0F, loaded.widthMeters) ||
         !ParseFloat(values["distance"], 0.2F, 10.0F, loaded.distanceMeters) ||
-        !ParseFloat(values["controller_distance"], 0.05F, 2.0F,
-                    loaded.controllerDistanceMeters) ||
         !ParseFloat(values["alpha"], 0.0F, 1.0F, loaded.alpha) ||
         !ParseFloat(values["offset_x"], -3.0F, 3.0F, loaded.offsetXMeters) ||
         !ParseFloat(values["offset_y"], -3.0F, 3.0F, loaded.offsetYMeters)) {
         error = "Overlay settings contain an invalid value.";
         return false;
+    }
+    if (legacy) {
+        float distance = 0.0F;
+        if (!ParseFloat(values["controller_distance"], 0.05F, 2.0F, distance)) {
+            error = "Overlay settings contain an invalid controller distance.";
+            return false;
+        }
+        loaded.leftController.distanceMeters = distance;
+        loaded.rightController.distanceMeters = distance;
+    } else {
+        const auto parseController = [&](const char* prefix, ControllerCalibration& calibration) {
+            const std::string key(prefix);
+            return ParseFloat(values[key + "_distance"], 0.05F, 2.0F, calibration.distanceMeters) &&
+                ParseFloat(values[key + "_height"], -1.0F, 1.0F, calibration.heightMeters) &&
+                ParseFloat(values[key + "_lateral"], -1.0F, 1.0F, calibration.lateralMeters) &&
+                ParseFloat(values[key + "_tilt"], -180.0F, 180.0F, calibration.tiltDegrees) &&
+                ParseFloat(values[key + "_yaw"], -180.0F, 180.0F, calibration.yawDegrees) &&
+                ParseFloat(values[key + "_scale"], 0.25F, 3.0F, calibration.scale) &&
+                ParseOrientation(values[key + "_orientation"], calibration.orientation);
+        };
+        if (!parseController("left", loaded.leftController) ||
+            !parseController("right", loaded.rightController)) {
+            error = "Overlay settings contain an invalid controller calibration.";
+            return false;
+        }
     }
     loaded.worldTransformValid = values["world_valid"] == "1";
     for (std::size_t index = 0; index < loaded.worldTransform.size(); ++index) {
@@ -111,15 +154,25 @@ bool OverlaySettingsStore::Save(const OverlaySettings& settings, std::string& er
         return false;
     }
     output << std::setprecision(9)
-           << "version=1\n"
+           << "version=2\n"
            << "mode=" << ModeName(settings.placementMode) << '\n'
            << "width=" << settings.widthMeters << '\n'
            << "distance=" << settings.distanceMeters << '\n'
-           << "controller_distance=" << settings.controllerDistanceMeters << '\n'
            << "alpha=" << settings.alpha << '\n'
            << "offset_x=" << settings.offsetXMeters << '\n'
-           << "offset_y=" << settings.offsetYMeters << '\n'
-           << "world_valid=" << (settings.worldTransformValid ? 1 : 0) << '\n';
+           << "offset_y=" << settings.offsetYMeters << '\n';
+    const auto writeController = [&](const char* prefix, const ControllerCalibration& calibration) {
+        output << prefix << "_distance=" << calibration.distanceMeters << '\n'
+               << prefix << "_height=" << calibration.heightMeters << '\n'
+               << prefix << "_lateral=" << calibration.lateralMeters << '\n'
+               << prefix << "_tilt=" << calibration.tiltDegrees << '\n'
+               << prefix << "_yaw=" << calibration.yawDegrees << '\n'
+               << prefix << "_scale=" << calibration.scale << '\n'
+               << prefix << "_orientation=" << OrientationName(calibration.orientation) << '\n';
+    };
+    writeController("left", settings.leftController);
+    writeController("right", settings.rightController);
+    output << "world_valid=" << (settings.worldTransformValid ? 1 : 0) << '\n';
     for (std::size_t index = 0; index < settings.worldTransform.size(); ++index)
         output << "world_" << index << '=' << settings.worldTransform[index] << '\n';
     output.close();
