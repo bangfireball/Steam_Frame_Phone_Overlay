@@ -57,7 +57,7 @@ If the failure recurs, stop SteamVR, transfer/log into the physical console sess
 
 The 2026-10-02 physical Sprint 4 test subsequently confirmed a visible Android screen in the headset. On the multi-GPU host, OpenVR D3D11 overlays were invisible until the renderer used the adapter returned by `GetDXGIOutputInfo`; updates advanced only about once per five seconds until the D3D11 context was explicitly flushed. The corrected generated animation was visually smooth before the phone stream was retested successfully.
 
-Current physical-test limitations: initial phone-overlay appearance takes roughly 10–30 seconds, frame pacing is poor, observed latency is unusable, and landscape fails while portrait works. The prior right-edge green bar is fixed. Persistence over a running VR game and the PC keyboard overlay controls are confirmed. Sprint 4 keyboard shortcuts adjust only the overlay; headset-native placement and interaction with Android are not implemented. Phone audio remains on the phone because audio transport is outside the visual MVP.
+Current physical-test result: after enabling Media Foundation low-latency mode, the user reported near-instant initial appearance and touch-to-display response under one second, including isolated changes on static content; YouTube playback was watchable and the result was explicitly approved. These timings are user estimates rather than instrumented measurements. Landscape still fails while portrait works. The prior right-edge green bar is fixed. Persistence over a running VR game and the PC keyboard overlay controls are confirmed. Sprint 4 keyboard shortcuts adjust only the overlay; headset-native placement and interaction with Android are not implemented. Phone audio remains on the phone because audio transport is outside the visual MVP.
 
 OpenVR's `VREvent_ProcessQuit` may refer to an unrelated scene application. It must not terminate the receiver; only explicit runtime/driver quit events should do so. Treating it as a shutdown request caused the overlay process to exit during the first VR-game transition test.
 
@@ -100,8 +100,11 @@ the old VR receiver remained running. To physically retest, exit the old receive
 No sender reinstall is required. Compare an isolated phone tap followed by no
 motion, continuous scrolling, and startup; use the desktop receiver separately
 for comparison. After restarting the fixed receiver, the user physically retested
-and reported “this is perfect. very snappy.” End-to-end responsiveness improvement
-is qualitatively confirmed; quantitative latency and startup timings remain unmeasured.
+and reported “this is perfect. very snappy.” A follow-up covered startup, isolated
+updates on static content, and sustained dynamic content: startup was described as
+near-instant, touch-to-display as under one second and near-instant, and YouTube as
+watchable. The user explicitly approved the result. End-to-end responsiveness is
+qualitatively confirmed; quantitative latency and startup timings remain unmeasured.
 Sparse `rx-fps=0` on a static screen is not alone evidence of capture failure.
 
 ## Linux ARM64 receiver cross-build

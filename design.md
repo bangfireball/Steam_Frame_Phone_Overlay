@@ -569,7 +569,7 @@ Prioritize latency and reliability.
 
 # Sprint 3 — Phone → PC Streaming
 
-**Status:** `[~] In progress — end-to-end picture validated; performance and landscape remain unresolved`
+**Status:** `[~] In progress — end-to-end picture and responsive streaming validated; landscape remains unresolved`
 
 - `[x]` Transport alternatives researched and decision documented
 - `[x]` Versioned, bounded binary framing protocol
@@ -581,10 +581,10 @@ Prioritize latency and reliability.
 - `[x]` Aspect-preserving desktop preview and basic diagnostics
 - `[x]` C++ protocol tests, Windows build/tests, Android tests, APK, and lint
 - `[x]` Physical Android-to-PC picture validation
-- `[!]` Approximately 30 FPS LAN validation — current preview is visibly stuttering
+- `[x]` Smooth LAN streaming physically validated with dynamic content, including YouTube playback in VR
 - `[x]` Receiver restart/reconnection validation
 - `[~]` Orientation validation — portrait works end to end; landscape currently fails
-- `[!]` Latency — decoder measures roughly 5–6 ms, but observed end-to-end latency is currently unusable and glass-to-glass latency is not quantified
+- `[x]` Perceived latency physically accepted after enabling Media Foundation low-latency mode; touch-to-display was reported as near-instant and under one second, including isolated updates on static content (quantitative glass-to-glass measurement remains pending)
 - `[x]` Right-edge green bar fixed by separating coded and visible decoder dimensions; physically confirmed in Sprint 4
 - `[!]` Security limitation: pairing gates the stream, but Sprint 3 transport is not encrypted
 
@@ -653,7 +653,7 @@ docs/protocol.md
 
 # Sprint 4 — Phone Screen in VR
 
-**Status:** `[~] In progress — first visual MVP path works over a VR game; performance and landscape block completion`
+**Status:** `[~] In progress — responsive visual MVP path approved over a VR game; landscape blocks completion`
 
 - `[x]` Shared paired TCP video server used by desktop and VR receivers
 - `[x]` Windows Media Foundation decoder connected to the OpenVR overlay
@@ -668,9 +668,9 @@ docs/protocol.md
 - `[x]` Physical validation of PC keyboard overlay controls
 - `[~]` Orientation validation: portrait works; landscape currently fails
 - `[x]` Physical validation confirms the right-edge green bar is fixed
-- `[!]` Dynamic periods now sustain approximately 30 FPS, but output can stop for seconds and perceived latency remains approximately 2–5+ seconds
-- `[~]` Initial overlay appearance improved but remains variable (approximately 3.7–17.6 seconds in recent instrumented runs)
-- `[ ]` Record quantitative sustained FPS and glass-to-glass latency measurements
+- `[x]` Dynamic and static content are responsive after the decoder low-latency fix; YouTube playback is watchable and no multi-second stalls were reported in the latest physical approval test
+- `[x]` Initial overlay appearance physically reported as near-instant after the decoder low-latency fix
+- `[~]` Latency physically accepted as near-instant and under one second from touch to display; record quantitative sustained FPS and glass-to-glass measurements during the later performance pass
 - `[x]` Overlay lifecycle ignores unrelated `VREvent_ProcessQuit` events during VR scene transitions
 - `[!]` Test-environment hazard: starting SteamVR under Windows RDP can break VRLink D3D11 texture creation and produce a gray stream; test only from the physical console session (documented in `docs/development.md`)
 
@@ -719,18 +719,17 @@ Most important evidence:
 - `[x]` The same test now produces the IDR and each subsequent P-frame immediately, without future input or an end-of-stream drain. This affects both desktop and VR receivers; no Android APK change is needed.
 - `[x]` Full Windows build and all nine CTest tests pass in `out/build/windows-x64-latency`. The original build's VR executable was locked by the running receiver, which was left undisturbed.
 - `[x]` Restarted the fixed VR receiver in the physical console session; the user retested and reported “this is perfect. very snappy.” This confirms a substantial perceived responsiveness improvement in the phone-to-VR path.
-- `[ ]` Quantitatively measure startup and glass-to-glass latency; the user confirmation is qualitative, not a measured latency value. Landscape remains unverified.
+- `[x]` Follow-up VR validation covered startup, isolated/static updates, and sustained dynamic content. The user reported near-instant startup, touch-to-display latency under one second and near-instant even for static content, and watchable YouTube playback, then explicitly approved the result.
+- `[ ]` Quantitatively measure startup and glass-to-glass latency during the performance pass; current timing is a user estimate rather than an instrumented measurement. Landscape remains unverified.
 
-The prior inference that decoder buffering was ruled out was incorrect. Milliseconds spent inside `Submit` measure work, not how long a picture waits for future input. Sparse screen updates can turn a small decoder look-ahead into seconds of visible delay. The reproduced fix is now also user-confirmed as very responsive; replacing Android's capture path is not justified without new evidence of remaining stalls.
+The prior inference that decoder buffering was ruled out was incorrect. Milliseconds spent inside `Submit` measure work, not how long a picture waits for future input. Sparse screen updates can turn a small decoder look-ahead into seconds of visible delay. The reproduced fix is now user-approved across static and dynamic content; replacing or further instrumenting Android's capture path is not justified without new evidence of stalls.
 
 Recommended next work:
 
-1. Physically retest the low-latency receiver with single taps followed by an idle screen, continuous scrolling, and first-frame startup, using desktop preview and VR separately.
-2. If stalls remain, instrument Android with one-second rolling counters and timings for encoder output callbacks, presentation-time-to-callback delay, sender queue depth/drops, bytes written, and per-write blocking time. Send these diagnostics to the receiver or expose them clearly in the app; receiver-only timing cannot isolate the remaining upstream stage.
-3. Add sender watchdog telemetry for time since the last encoded frame and last successful socket write. Do not infer capture health from an established TCP connection.
-4. Investigate a controlled Android capture path if direct `VirtualDisplay → MediaCodec Surface` continues to stall. The leading candidate is `VirtualDisplay → SurfaceTexture/external-OES texture → EGL → MediaCodec input Surface`, rendered at an application-controlled cadence. This is more work but would provide deterministic frame pacing and force current composition into the encoder.
-5. Before replacing the capture path, test whether periodically requesting a sync frame changes callback cadence, and record the selected codec name/capabilities plus whether CBR and low-latency mode were actually enabled. A sync request cannot solve a missing input buffer, so treat this only as a diagnostic.
-6. Retest startup and steady-state latency using the desktop preview as well as VR to confirm the sender result independently of VRLink, then return to landscape handling.
+1. Fix landscape reconfiguration and physically verify portrait-to-landscape and landscape-to-portrait transitions.
+2. Record instrumented startup, sustained FPS, and glass-to-glass latency during the performance pass; the current under-one-second result is qualitative.
+3. Retest the desktop preview separately only if needed to isolate a future regression.
+4. Add sender telemetry or investigate a controlled Android capture path only if multi-second stalls recur.
 
 ## Objective
 
