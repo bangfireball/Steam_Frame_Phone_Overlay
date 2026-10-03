@@ -27,6 +27,7 @@ import android.util.Log;
 import android.view.Surface;
 import android.view.WindowManager;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicLong;
@@ -74,9 +75,22 @@ public final class ScreenCaptureService extends Service {
         }
 
         @Override public void onCapturedContentResize(int width, int height) {
+            Log.i(TAG, "Captured content resize callback: " + width + "x" + height);
             mainHandler.post(() -> reconfigureForSize(width, height));
         }
     };
+
+    private final DisplayManager.DisplayListener displayListener =
+            new DisplayManager.DisplayListener() {
+                @Override public void onDisplayAdded(int displayId) {}
+                @Override public void onDisplayRemoved(int displayId) {}
+
+                @Override public void onDisplayChanged(int displayId) {
+                    // onCapturedContentResize is authoritative on Android 14+, but this
+                    // catches devices/codecs that omit that callback during rotation.
+                    scheduleCurrentDisplaySizeCheck();
+                }
+            };
 
     @Override public void onCreate() {
         super.onCreate();
@@ -84,6 +98,8 @@ public final class ScreenCaptureService extends Service {
         codecThread = new HandlerThread("phonecast-avc-output");
         codecThread.start();
         codecHandler = new Handler(codecThread.getLooper());
+        DisplayManager displayManager = (DisplayManager) getSystemService(DISPLAY_SERVICE);
+        displayManager.registerDisplayListener(displayListener, mainHandler);
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -224,23 +240,27 @@ public final class ScreenCaptureService extends Service {
             }
 
             @Override public void onError(MediaCodec mediaCodec, MediaCodec.CodecException error) {
-                synchronized (encoderLock) {
-                    if (encoderSession != session) return;
-                }
+                if (!session.active) return;
                 Log.e(TAG, "H.264 encoder error", error);
                 mainHandler.post(() -> stopCapture("Encoder failed: " + safeMessage(error)));
             }
 
             @Override public void onOutputFormatChanged(MediaCodec mediaCodec, MediaFormat format) {
-                synchronized (encoderLock) {
-                    if (encoderSession != session) return;
-                }
+                if (!session.active) return;
                 Log.i(TAG, "H.264 output format: " + format);
+                byte[] config = codecConfigFromFormat(format);
+                NetworkStreamer streamer = networkStreamer;
+                if (config.length > 0 && streamer != null && session.markConfigOffered()) {
+                    streamer.offerConfig(config, session.size.width, session.size.height);
+                    Log.i(TAG, "Sent H.264 configuration from output format (" +
+                            session.size.width + "x" + session.size.height + ")");
+                }
             }
         }, codecHandler);
         try {
             codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             session.surface = codec.createInputSurface();
+            session.active = true;
             codec.start();
             return session;
         } catch (RuntimeException error) {
@@ -251,6 +271,7 @@ public final class ScreenCaptureService extends Service {
 
     private void handleEncodedOutput(EncoderSession session, MediaCodec codec, int index,
                                      MediaCodec.BufferInfo info) {
+        if (!session.active) return;
         try {
             ByteBuffer output = codec.getOutputBuffer(index);
             if (output != null && info.size > 0) {
@@ -261,8 +282,10 @@ public final class ScreenCaptureService extends Service {
                 encodedBytes.addAndGet(info.size);
                 NetworkStreamer streamer = networkStreamer;
                 if ((info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
-                    if (streamer != null) {
+                    if (streamer != null && session.markConfigOffered()) {
                         streamer.offerConfig(payload, session.size.width, session.size.height);
+                        Log.i(TAG, "Sent H.264 configuration from codec buffer (" +
+                                session.size.width + "x" + session.size.height + ")");
                     }
                 } else {
                     long sequence = encodedFrames.getAndIncrement();
@@ -312,6 +335,8 @@ public final class ScreenCaptureService extends Service {
         synchronized (encoderLock) {
             if (encoderSession != null && encoderSession.size.equals(requested)) return;
         }
+        Log.i(TAG, "Reconfiguring capture for source " + sourceWidth + "x" + sourceHeight +
+                " -> encoder " + requested.width + "x" + requested.height);
 
         try {
             virtualDisplay.setSurface(null);
@@ -328,6 +353,7 @@ public final class ScreenCaptureService extends Service {
             }
             virtualDisplay.resize(requested.width, requested.height, densityDpi);
             virtualDisplay.setSurface(replacement.surface);
+            requestSyncFrame();
             broadcastStatus(true, "Capture resized after orientation/content change", requested);
             Log.i(TAG, "Capture resized to " + requested.width + "x" + requested.height);
         } catch (IOException | RuntimeException error) {
@@ -338,15 +364,29 @@ public final class ScreenCaptureService extends Service {
 
     @Override public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        scheduleCurrentDisplaySizeCheck();
+    }
+
+    private void scheduleCurrentDisplaySizeCheck() {
+        if (stopping || projection == null) return;
+        mainHandler.removeCallbacks(currentDisplaySizeCheck);
+        mainHandler.post(currentDisplaySizeCheck);
+        // Some vendors notify display/configuration listeners before WindowMetrics
+        // reflects the new rotation. Check once more after that transition settles.
+        mainHandler.postDelayed(currentDisplaySizeCheck, 250);
+    }
+
+    private final Runnable currentDisplaySizeCheck = () -> {
+        if (stopping || projection == null) return;
         DisplayMetrics metrics = currentDisplayMetrics();
         reconfigureForSize(metrics.widthPixels, metrics.heightPixels);
-    }
+    };
 
     private DisplayMetrics currentDisplayMetrics() {
         DisplayMetrics metrics = new DisplayMetrics();
         WindowManager windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
         if (Build.VERSION.SDK_INT >= 30) {
-            Rect bounds = windowManager.getMaximumWindowMetrics().getBounds();
+            Rect bounds = windowManager.getCurrentWindowMetrics().getBounds();
             metrics.widthPixels = bounds.width();
             metrics.heightPixels = bounds.height();
             metrics.densityDpi = getResources().getConfiguration().densityDpi;
@@ -393,6 +433,9 @@ public final class ScreenCaptureService extends Service {
 
     @Override public void onDestroy() {
         stopping = true;
+        mainHandler.removeCallbacks(currentDisplaySizeCheck);
+        DisplayManager displayManager = (DisplayManager) getSystemService(DISPLAY_SERVICE);
+        displayManager.unregisterDisplayListener(displayListener);
         stopCaptureResources(true);
         setRunningPreference(false);
         if (codecThread != null) codecThread.quitSafely();
@@ -453,6 +496,19 @@ public final class ScreenCaptureService extends Service {
                 .putBoolean("capture_running", running).apply();
     }
 
+    private static byte[] codecConfigFromFormat(MediaFormat format) {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        for (int index = 0; index < 3; ++index) {
+            ByteBuffer data = format.getByteBuffer("csd-" + index);
+            if (data == null) continue;
+            ByteBuffer copy = data.duplicate();
+            byte[] part = new byte[copy.remaining()];
+            copy.get(part);
+            bytes.write(part, 0, part.length);
+        }
+        return bytes.toByteArray();
+    }
+
     private static String safeMessage(Throwable error) {
         return error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
     }
@@ -464,6 +520,8 @@ public final class ScreenCaptureService extends Service {
     private static final class EncoderSession {
         final MediaCodec codec;
         final CaptureConfig.Size size;
+        volatile boolean active;
+        private boolean configOffered;
         Surface surface;
 
         EncoderSession(MediaCodec codec, CaptureConfig.Size size) {
@@ -471,7 +529,14 @@ public final class ScreenCaptureService extends Service {
             this.size = size;
         }
 
+        synchronized boolean markConfigOffered() {
+            if (configOffered) return false;
+            configOffered = true;
+            return true;
+        }
+
         void release() {
+            active = false;
             try {
                 codec.stop();
             } catch (IllegalStateException ignored) {
