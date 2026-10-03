@@ -21,6 +21,11 @@ enum class ControllerOrientation {
     Wrist
 };
 
+enum class GlanceInput {
+    LeftController,
+    RightController
+};
+
 struct ControllerCalibration {
     float distanceMeters{0.18F};
     float heightMeters{0.10F};
@@ -60,6 +65,8 @@ public:
     virtual bool PumpEvents() = 0;
     // Reports placement changed directly in VR (for example after a grab).
     virtual bool TakeSettingsUpdate(OverlaySettings& settings) { (void)settings; return false; }
+    // Reports a controller reveal/cycle action without putting OpenVR types in the app.
+    virtual bool TakeGlanceInput(GlanceInput& input) { (void)input; return false; }
     virtual void Stop() noexcept = 0;
 };
 

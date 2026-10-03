@@ -4,27 +4,12 @@ PhoneCast VR aims to show an Android phone as a persistent VR overlay, first thr
 
 ## Current status
 
-- `[x]` Sprint 0 foundational native-overlay feasibility accepted
-- `[x]` Sprint 1 reusable receiver architecture implemented
-- `[x]` Windows x64 clean build and automated tests
-- `[x]` Windows OpenVR runtime accepted continuous generated-frame submissions
-- `[x]` Linux ARM64 cross-build produced an AArch64 receiver
-- `[x]` Sprint 1 animated texture visually confirmed on Steam Frame
-- `[!]` Continuous `SetOverlayRaw` uploads visibly flicker; this prototype path is not the final streaming renderer
-- `[!]` Follow-up: validate coexistence with a standalone VR scene application
-- `[x]` Sprint 2 Android sender complete and validated on a physical device
-- `[x]` Android debug APK builds, unit tests pass, and lint passes
-- `[~]` Sprint 3 phone-to-PC streaming visually confirmed on a physical device
-- `[!]` Sprint 3 follow-up: physically validate the decoder green-edge fix and improve visibly stuttering playback
-- `[~]` Sprint 4 Android screen is physically visible in the PC-streamed SteamVR headset
-- `[x]` Phone stream receiver feeds a reusable D3D11-backed OpenVR texture on SteamVR's selected DXGI adapter
-- `[x]` Explicit D3D11 flushing produces visually smooth generated-overlay animation
-- `[x]` Global PC keyboard controls cover show/hide, scale, movement, distance, opacity, and reset
-- `[x]` Physical validation confirms portrait display and removal of the right-edge green bar
-- `[!]` Landscape currently fails; startup takes roughly 10–30 seconds; frame pacing is poor and latency is unusable
-- `[x]` Phone overlay persists over a running VR game and PC keyboard controls are validated
-- `[~]` Receiver timing is only about 5–15 ms, locating the remaining delay upstream; a lower-bandwidth 1280p sender, CBR/low-latency codec features, two-second keyframes, and cached-keyframe startup are implemented for validation
-- `[!]` Follow-up: validate those changes, fix landscape orientation, and quantify glass-to-glass latency
+- `[x]` Sprints 0–4 complete: Android capture, paired LAN streaming, low-latency decoding, and a responsive PC-hosted OpenVR overlay are physically approved
+- `[x]` Sprint 5 placement complete for the PC-hosted path: head, world, left-controller, and right-controller modes with direct VR placement
+- `[~]` Sprint 5.1 controller calibration is implemented and tested; physical ergonomic tuning remains
+- `[~]` Sprint 6 glance mode is implemented and tested; joint physical review with Sprint 5.1 remains
+- `[!]` Native coexistence over a standalone VR scene and the Steam Frame decoder/rendering backend remain future validation and Sprint 11 work
+- `[!]` The current LAN transport is paired but not encrypted
 
 ## Sprint 4 VR streaming validation
 
@@ -34,19 +19,19 @@ Start SteamVR, then run the VR stream receiver with a six-digit code:
 .\out\build\windows-x64\bin\phonecast-vr-stream-receiver.exe --pair-code 123456
 ```
 
-Connect the Android sender to the PC as described below. The receiver keeps the overlay head-relative and preserves the decoded phone aspect ratio. Hold **Ctrl+Alt** while pressing:
+Connect the Android sender to the PC as described below. The receiver starts hidden while continuing to decode. Click either controller's primary axis/touchpad to cycle `Hidden -> Glance -> Expanded -> Pinned -> Hidden`. The Glance preview follows the initiating hand; Expanded and Pinned restore normal placement. Hold **Ctrl+Alt** while pressing:
 
-- `P` — show/hide
+- `G` — cycle glance states
+- `P` — quick Hidden/Expanded toggle
 - `+` / `-` — scale
 - arrow keys — move
 - `Page Up` / `Page Down` — nearer/farther
 - `]` / `[` — increase/decrease opacity
+- `H` / `W` / `L` / `R` — select head/world/left-controller/right-controller placement
 - `Home` — reset
 - `End` — quit
 
-The Windows OpenVR backend uses a reusable D3D11 texture rather than continuous `SetOverlayRaw` uploads. It selects SteamVR's requested DXGI adapter and flushes each update; both were required for a visible, smoothly updating VRLink overlay on the validation PC. Physical Android-to-headset picture, persistence over a running VR game, and PC keyboard controls are confirmed. Landscape and streaming performance still prevent Sprint 4 from being complete.
-
-Instrumentation first measured about 15.4 seconds from connection to first submitted phone frame and roughly 90–110 received FPS despite the requested 30 FPS. The encoder-side maximum-FPS control subsequently produced clean dynamic periods near 30 received/decoded FPS with no drops. Static output can still stop for seconds, and the attempted repeat-frame hint was ineffective on the test encoder. Since receiver queue/decode/render timing remains around 5–15 ms, the remaining 3–6+ second delay is upstream. The next build lowers the sender's long edge from 1920 to 1280, uses two-second keyframe intervals, enables advertised CBR/low-latency codec features, caches the latest keyframe for immediate connection startup, and removes ineffective surface hints. These changes require physical validation. Portrait works and the prior green edge is fixed, but landscape currently fails. Sprint 4's PC keyboard shortcuts control the overlay itself only; they do not interact with Android. Headset-native placement and phone control are later placement/interaction work. Phone audio is not part of the visual MVP and is tracked as an optional later sprint.
+The Windows OpenVR backend uses a reusable D3D11 texture on SteamVR's requested DXGI adapter. Media Foundation low-latency mode fixed sparse-screen buffering; portrait/landscape transitions, the right-edge padding fix, responsive static and dynamic content, and persistence over a PC SteamVR game are physically approved. Quantitative glass-to-glass measurement remains Sprint 10 work. See `docs/development.md` for placement calibration and `docs/glance-mode.md` for glance behavior and pending physical checks.
 
 ## Sprint 3 streaming validation
 

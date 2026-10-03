@@ -38,7 +38,9 @@ Sprint 4 OpenVR streaming receiver (start SteamVR first):
 .\out\build\windows-x64\bin\phonecast-vr-stream-receiver.exe --pair-code 123456
 ```
 
-The VR receiver uses global controls while **Ctrl+Alt** is held: `P` toggles visibility, `+/-` changes scale, arrows move, `Page Up/Down` changes distance, `]/[` changes opacity, `H/W` selects head/world lock, `L/R` selects left/right-controller lock, `Home` resets, and `End` quits. In controller mode, scale, arrows, and distance modify only the selected hand's calibration. Point a SteamVR controller laser at the overlay and hold trigger to grab it directly; releasing creates a world-locked anchor at that pose.
+The VR receiver starts in Sprint 6's **Hidden** state while continuing to decode video for immediate reveal. Click either controller's primary axis/touchpad to cycle `Hidden -> Glance -> Expanded -> Pinned -> Hidden`; Glance uses a small preview on the initiating hand, while Expanded and Pinned restore normal placement. `Ctrl+Alt+G` performs the same cycle with the last hand, and `Ctrl+Alt+P` quickly toggles Hidden/Expanded. See `docs/glance-mode.md` for the gesture decision and physical-test checklist.
+
+Other global controls while **Ctrl+Alt** is held are: `+/-` changes scale, arrows move, `Page Up/Down` changes distance, `]/[` changes opacity, `H/W` selects head/world lock, `L/R` selects left/right-controller lock, `Home` resets, and `End` quits. In controller mode, scale, arrows, and distance modify only the selected hand's calibration. Point a SteamVR controller laser at the overlay and hold trigger to grab it directly; releasing creates a world-locked anchor at that pose.
 
 Controller-locked placement can be calibrated without the keyboard. From another placement mode, press either controller's application-menu button to select that hand and enter calibration. Press the selected hand's menu button again to leave or re-enter calibration; pressing the other hand's menu button switches hands. While active:
 

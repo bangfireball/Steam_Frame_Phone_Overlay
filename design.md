@@ -931,6 +931,17 @@ Do not guess a universal pose. Validate the options in-headset and choose defaul
 
 # Sprint 6 — Glance Mode
 
+**Status:** `[~] In progress — implementation and automated tests complete; joint physical review with Sprint 5.1 pending`
+
+- `[x]` Portable Hidden, Glance, Expanded, and Pinned state model
+- `[x]` Small initiating-hand controller preview without overwriting persisted placement
+- `[x]` Controller primary-axis/touchpad button fallback
+- `[x]` Keyboard cycle and quick show/hide fallback
+- `[x]` Hidden startup with decoding retained for immediate reveal
+- `[x]` Gesture reliability investigation and documented deferral criteria
+- `[x]` Automated state and presentation tests
+- `[ ]` Physical headset approval of controls, preview size, transitions, and ergonomics
+
 ## Objective
 
 Prevent the phone from constantly cluttering the user's VR view.

@@ -22,6 +22,7 @@ public:
     bool SetVisible(bool visible, std::string& error) override;
     bool PumpEvents() override;
     bool TakeSettingsUpdate(vr::OverlaySettings& settings) override;
+    bool TakeGlanceInput(vr::GlanceInput& input) override;
     void Stop() noexcept override;
 
 private:

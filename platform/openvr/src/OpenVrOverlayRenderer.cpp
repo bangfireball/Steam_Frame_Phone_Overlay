@@ -324,6 +324,14 @@ public:
         previousLeftControllerButtons = haveLeft ? leftState.ulButtonPressed : 0;
         previousRightControllerButtons = haveRight ? rightState.ulButtonPressed : 0;
         const auto menuMask = vr::ButtonMaskFromId(vr::k_EButton_ApplicationMenu);
+        const auto padMask = vr::ButtonMaskFromId(vr::k_EButton_SteamVR_Touchpad);
+        if (!calibrationActive && (leftRising & padMask) != 0) {
+            pendingGlanceInput = phonecast::vr::GlanceInput::LeftController;
+            hasPendingGlanceInput = true;
+        } else if (!calibrationActive && (rightRising & padMask) != 0) {
+            pendingGlanceInput = phonecast::vr::GlanceInput::RightController;
+            hasPendingGlanceInput = true;
+        }
         const bool selectLeft = (leftRising & menuMask) != 0 &&
             currentSettings.placementMode != phonecast::vr::PlacementMode::LeftControllerLocked;
         const bool selectRight = (rightRising & menuMask) != 0 &&
@@ -356,7 +364,6 @@ public:
         const auto rising = leftSelected ? leftRising : rightRising;
         const auto gripMask = vr::ButtonMaskFromId(vr::k_EButton_Grip);
         const auto triggerMask = vr::ButtonMaskFromId(vr::k_EButton_SteamVR_Trigger);
-        const auto padMask = vr::ButtonMaskFromId(vr::k_EButton_SteamVR_Touchpad);
 
         if ((rising & menuMask) != 0) {
             calibrationActive = !calibrationActive;
@@ -510,6 +517,8 @@ public:
     phonecast::vr::OverlaySettings currentSettings{};
     phonecast::vr::OverlaySettings pendingSettings{};
     bool hasPendingSettings{false};
+    phonecast::vr::GlanceInput pendingGlanceInput{phonecast::vr::GlanceInput::LeftController};
+    bool hasPendingGlanceInput{false};
     bool calibrationActive{false};
     bool calibrationDirty{false};
     std::uint64_t previousLeftControllerButtons{0};
@@ -676,6 +685,13 @@ bool OpenVrOverlayRenderer::TakeSettingsUpdate(phonecast::vr::OverlaySettings& s
     return true;
 }
 
+bool OpenVrOverlayRenderer::TakeGlanceInput(phonecast::vr::GlanceInput& input) {
+    if (!impl_->hasPendingGlanceInput) return false;
+    input = impl_->pendingGlanceInput;
+    impl_->hasPendingGlanceInput = false;
+    return true;
+}
+
 void OpenVrOverlayRenderer::Stop() noexcept {
     if (impl_->overlayApi != nullptr && impl_->overlay != vr::k_ulOverlayHandleInvalid) {
         impl_->overlayApi->HideOverlay(impl_->overlay);
@@ -687,6 +703,7 @@ void OpenVrOverlayRenderer::Stop() noexcept {
     impl_->desiredVisible = true;
     impl_->hasFrame = false;
     impl_->hasPendingSettings = false;
+    impl_->hasPendingGlanceInput = false;
     impl_->calibrationActive = false;
     impl_->calibrationDirty = false;
     impl_->previousLeftControllerButtons = 0;

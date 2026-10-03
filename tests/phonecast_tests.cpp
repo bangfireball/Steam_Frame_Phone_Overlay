@@ -2,6 +2,7 @@
 #include "phonecast/core/config/AppConfig.h"
 #include "phonecast/core/protocol/StreamProtocol.h"
 #include "phonecast/core/streaming/GeneratedVideoSource.h"
+#include "phonecast/vr/overlay/GlanceController.h"
 #include "phonecast/vr/overlay/OverlayController.h"
 #include "phonecast/vr/overlay/OverlaySettingsStore.h"
 
@@ -193,6 +194,38 @@ void TestOverlayControls() {
           "active hand calibration resets");
 }
 
+void TestGlanceMode() {
+    phonecast::vr::OverlaySettings base;
+    base.placementMode = phonecast::vr::PlacementMode::HeadLocked;
+    base.widthMeters = 0.8F;
+    phonecast::vr::GlanceController glance;
+    Check(glance.State() == phonecast::vr::GlanceState::Hidden && !glance.Visible(),
+          "glance mode starts hidden");
+    glance.Cycle(phonecast::vr::GlanceHand::Right);
+    auto presented = glance.PresentationSettings(base);
+    Check(glance.State() == phonecast::vr::GlanceState::Glance && glance.Visible() &&
+              presented.placementMode == phonecast::vr::PlacementMode::RightControllerLocked &&
+              presented.widthMeters < base.widthMeters,
+          "glance preview uses the initiating hand and reduced size");
+    glance.Cycle(phonecast::vr::GlanceHand::Right);
+    presented = glance.PresentationSettings(base);
+    Check(glance.State() == phonecast::vr::GlanceState::Expanded &&
+              presented.placementMode == base.placementMode &&
+              presented.widthMeters == base.widthMeters,
+          "expanded view restores normal placement and size");
+    glance.Cycle(phonecast::vr::GlanceHand::Right);
+    Check(glance.State() == phonecast::vr::GlanceState::Pinned && glance.Visible(),
+          "expanded view can be pinned");
+    glance.Cycle(phonecast::vr::GlanceHand::Right);
+    Check(glance.State() == phonecast::vr::GlanceState::Hidden && !glance.Visible(),
+          "pinned view cycles back to hidden");
+    glance.ToggleExpanded();
+    Check(glance.State() == phonecast::vr::GlanceState::Expanded,
+          "quick toggle opens the expanded view");
+    glance.ToggleExpanded();
+    Check(!glance.Visible(), "quick toggle hides a visible view");
+}
+
 void TestOverlaySettingsPersistence() {
     const auto path = std::filesystem::temp_directory_path() / "phonecast-overlay-settings-test.ini";
     std::error_code ignored;
@@ -260,6 +293,7 @@ int main() {
     TestGeneratedFrames();
     TestStreamProtocol();
     TestOverlayControls();
+    TestGlanceMode();
     TestOverlaySettingsPersistence();
     TestReceiverLifecycle();
     if (failures == 0) std::cout << "All PhoneCast tests passed.\n";

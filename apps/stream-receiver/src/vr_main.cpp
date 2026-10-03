@@ -3,6 +3,7 @@
 #include "phonecast/platform/openvr/OpenVrOverlayRenderer.h"
 #include "phonecast/platform/windows/MfH264Decoder.h"
 #include "phonecast/platform/windows/TcpVideoServer.h"
+#include "phonecast/vr/overlay/GlanceController.h"
 #include "phonecast/vr/overlay/OverlayController.h"
 #include "phonecast/vr/overlay/OverlaySettingsStore.h"
 
@@ -28,7 +29,8 @@ using phonecast::vr::OverlayAction;
 void PrintUsage() {
     std::cout << "Usage: phonecast-vr-stream-receiver --pair-code NNNNNN [--port N] [--settings PATH]\n\n"
               << "Global controls (hold Ctrl+Alt):\n"
-              << "  P          Show/hide\n"
+              << "  P          Quick show/hide expanded view\n"
+              << "  G          Cycle Hidden/Glance/Expanded/Pinned\n"
               << "  + / -      Scale up/down\n"
               << "  Arrows     Move overlay\n"
               << "  PageUp/Down  Move nearer/farther\n"
@@ -37,6 +39,7 @@ void PrintUsage() {
               << "  L / R      Left/right-controller-locked\n"
               << "  Home       Reset appearance and position\n"
               << "  End        Quit PhoneCast\n\n"
+              << "Click either controller's primary axis/pad to cycle Hidden, Glance, Expanded, and Pinned.\n"
               << "In VR, point at the overlay and hold trigger to grab it; release to world-lock it.\n"
               << "Press either controller menu button to select that hand and enter/leave calibration:\n"
               << "  Axis             Lateral / height\n"
@@ -93,12 +96,13 @@ phonecast::vr::OverlaySettings SettingsForStream(
     return adjusted;
 }
 
-bool PollControl(OverlayAction& action, bool& quit) {
+bool PollControl(OverlayAction& action, bool& glanceCycle, bool& quickToggle, bool& quit) {
+    glanceCycle = false;
+    quickToggle = false;
     quit = false;
     const bool modified = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 &&
                           (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
     const struct Binding { int key; OverlayAction action; } bindings[] = {
-        {'P', OverlayAction::ToggleVisibility},
         {VK_OEM_PLUS, OverlayAction::ScaleUp}, {VK_ADD, OverlayAction::ScaleUp},
         {VK_OEM_MINUS, OverlayAction::ScaleDown}, {VK_SUBTRACT, OverlayAction::ScaleDown},
         {VK_LEFT, OverlayAction::MoveLeft}, {VK_RIGHT, OverlayAction::MoveRight},
@@ -116,6 +120,8 @@ bool PollControl(OverlayAction& action, bool& quit) {
             found = true;
         }
     }
+    if (Pressed('G') && modified) glanceCycle = true;
+    if (Pressed('P') && modified) quickToggle = true;
     if (Pressed(VK_END) && modified) quit = true;
     return found;
 }
@@ -172,6 +178,7 @@ int main(int argc, char** argv) {
     }
     phonecast::vr::OverlayController controls;
     controls.ReplaceSettings(initialSettings);
+    phonecast::vr::GlanceController glance;
     if (!renderer.Start(controls.Settings(), error)) {
         const auto mode = controls.Settings().placementMode;
         const bool controllerMode =
@@ -187,6 +194,11 @@ int main(int argc, char** argv) {
             std::cerr << error << '\n';
             return EXIT_FAILURE;
         }
+    }
+    if (!renderer.SetVisible(false, error)) {
+        std::cerr << error << '\n';
+        renderer.Stop();
+        return EXIT_FAILURE;
     }
     const auto waitingFrame = MakeWaitingFrame();
     if (!renderer.SubmitFrame(waitingFrame, error)) {
@@ -227,19 +239,32 @@ int main(int argc, char** argv) {
 
     while (running && renderer.PumpEvents()) {
         OverlayAction action{};
+        bool glanceCycle = false;
+        bool quickToggle = false;
         bool quit = false;
-        if (PollControl(action, quit)) {
+        const bool settingsAction = PollControl(action, glanceCycle, quickToggle, quit);
+        phonecast::vr::GlanceInput glanceInput{};
+        const bool controllerCycle = renderer.TakeGlanceInput(glanceInput);
+        if (settingsAction || glanceCycle || quickToggle || controllerCycle) {
             const auto previousSettings = controls.Settings();
-            controls.Apply(action);
+            if (settingsAction) controls.Apply(action);
+            if (glanceCycle) glance.Cycle(glance.Hand());
+            if (quickToggle) glance.ToggleExpanded();
+            if (controllerCycle) {
+                glance.Cycle(glanceInput == phonecast::vr::GlanceInput::LeftController
+                    ? phonecast::vr::GlanceHand::Left : phonecast::vr::GlanceHand::Right);
+            }
             const auto displayedSettings = SettingsForStream(
-                controls.Settings(), streamWidth, streamHeight);
+                glance.PresentationSettings(controls.Settings()), streamWidth, streamHeight);
             if (!renderer.ApplySettings(displayedSettings, error) ||
-                !renderer.SetVisible(controls.Visible(), error)) {
+                !renderer.SetVisible(glance.Visible() && controls.Visible(), error)) {
                 std::cerr << error << '\n';
                 controls.ReplaceSettings(previousSettings);
+                glance.Dismiss();
                 std::string ignored;
                 renderer.ApplySettings(SettingsForStream(previousSettings, streamWidth, streamHeight), ignored);
-            } else if (!settingsStore.Save(controls.Settings(), error)) {
+                renderer.SetVisible(false, ignored);
+            } else if (settingsAction && !settingsStore.Save(controls.Settings(), error)) {
                 std::cerr << "Warning: " << error << '\n';
             }
         }
@@ -281,7 +306,7 @@ int main(int argc, char** argv) {
                 streamWidth = message.width;
                 streamHeight = message.height;
                 const auto displayedSettings = SettingsForStream(
-                    controls.Settings(), streamWidth, streamHeight);
+                    glance.PresentationSettings(controls.Settings()), streamWidth, streamHeight);
                 if (!renderer.ApplySettings(displayedSettings, error)) {
                     std::cerr << error << '\n';
                     running = false;
