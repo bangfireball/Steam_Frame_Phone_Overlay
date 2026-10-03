@@ -62,6 +62,19 @@ phonecast::core::VideoFrame MakeWaitingFrame() {
     return frame;
 }
 
+phonecast::vr::OverlaySettings SettingsForStream(
+        const phonecast::vr::OverlaySettings& settings,
+        std::uint32_t width, std::uint32_t height) {
+    auto adjusted = settings;
+    // Treat the configured width as the portrait short edge. When the same
+    // phone rotates, grow the landscape width so its diagonal/overall scale
+    // stays constant instead of making the landscape panel look much smaller.
+    if (height > 0 && width > height) {
+        adjusted.widthMeters *= static_cast<float>(width) / static_cast<float>(height);
+    }
+    return adjusted;
+}
+
 bool PollControl(OverlayAction& action, bool& quit) {
     quit = false;
     const bool modified = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 &&
@@ -165,13 +178,17 @@ int main(int argc, char** argv) {
     bool configReported = false;
     bool keyFrameReported = false;
     bool firstFrameReported = false;
+    std::uint32_t streamWidth = 0;
+    std::uint32_t streamHeight = 0;
 
     while (running && renderer.PumpEvents()) {
         OverlayAction action{};
         bool quit = false;
         if (PollControl(action, quit)) {
             controls.Apply(action);
-            if (!renderer.ApplySettings(controls.Settings(), error) ||
+            const auto displayedSettings = SettingsForStream(
+                controls.Settings(), streamWidth, streamHeight);
+            if (!renderer.ApplySettings(displayedSettings, error) ||
                 !renderer.SetVisible(controls.Visible(), error)) {
                 std::cerr << error << '\n';
                 running = false;
@@ -199,6 +216,18 @@ int main(int argc, char** argv) {
             ++windowMessages;
             if (message.type == MessageType::VideoConfig) {
                 codecConfig = std::move(message.payload);
+                streamWidth = message.width;
+                streamHeight = message.height;
+                const auto displayedSettings = SettingsForStream(
+                    controls.Settings(), streamWidth, streamHeight);
+                if (!renderer.ApplySettings(displayedSettings, error)) {
+                    std::cerr << error << '\n';
+                    running = false;
+                    break;
+                }
+                std::cout << "[stream] video-config dimensions=" << message.width
+                          << 'x' << message.height
+                          << " overlay-width-m=" << displayedSettings.widthMeters << '\n';
                 if (!configReported) {
                     const double configMillis = std::chrono::duration<double, std::milli>(
                         std::chrono::steady_clock::now() - connectionStarted).count();
