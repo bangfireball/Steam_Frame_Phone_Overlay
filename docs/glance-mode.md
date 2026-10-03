@@ -25,52 +25,46 @@ The button fallback is implemented first because it is deterministic and can be 
 
 Controller input is translated by the OpenVR backend into a portable `GlanceInput`; OpenVR button identifiers do not enter the state model.
 
-## Experimental radial menu
+## Phone-shaped control grid
 
-A thumbstick long press provides a controller-only command surface without delaying the normal short-click action:
+A thumbstick long press or the wrist gesture opens a separate portrait OpenVR overlay without replacing the phone texture. The world-stable 2×5 grid contains Show/Hide, Glance, Pin, Settings, Head, World, Left, Right, and Close. Large cells accept OpenVR overlay laser/mouse clicks. The grid texture remains static while pointing to avoid repeated raw-texture submissions and the flicker observed during physical testing. Gaze selection is intentionally unsupported.
 
-1. hold either thumbstick click for 0.6 seconds;
-2. release after the radial menu appears on that hand;
-3. move the thumbstick to highlight an item;
-4. click to confirm, or press left View/right Menu to cancel.
-
-The eight items are Show/Hide, Glance, Pin, Right, Settings, World, Head, and Left. Placement selections reveal a pinned full-size panel. The menu is a separate OpenVR overlay and does not replace the phone texture. The 0.6-second default threshold, layout, scale, controller pose, and selection behavior are intentionally provisional pending physical review and may change.
+The long-press path retains its configurable 0.6-second default if SteamVR actions become available. The pose-only wrist path is the current fallback. Layout, scale, placement, and gesture threshold remain provisional pending physical review.
 
 ## In-headset settings
 
-Choose **Settings** from the radial menu to open a separate head-relative panel. It is transactional: changes preview live, **Apply** persists them, and **Cancel** or Back from the root restores the values from before the panel opened.
+Choose **Settings** from the control grid to open a separate head-relative panel. It is transactional: changes preview live, **Apply** persists them, and **Cancel** or Back from the root restores the values from before the panel opened.
 
-Controller navigation uses the hand that opened the radial menu:
-
-- thumbstick up/down selects a row;
-- thumbstick left/right changes the selected value;
-- thumbstick click opens a category or activates an action;
-- left View or right Menu goes back; from the root it cancels and closes settings.
+The portrait settings panel supports the same controller laser as the control grid. Click a row to open a category or activate an action. Adjustable rows show `-` and `+` targets at their left and right edges. Apply and Cancel remain explicit root actions. SteamVR Input navigation remains available as an optional fallback if button delivery becomes functional.
 
 The panel contains Appearance, Placement, independent Left/Right Controller calibration, and Glance and Controls categories. Reset Position and Reset Hand are explicit row actions. Reset All requires a second confirmation click. Glance preview scale and radial-menu long-press duration are persisted with the overlay settings. `Ctrl+Alt+S` is a development fallback for opening the panel.
 
-## Wrist-gesture investigation
+## Provisional wrist gesture and phone-shaped control grid
 
-A reliable automatic wrist reveal needs more than a controller's instantaneous orientation. Controller models and grip poses differ, users rotate their forearms during ordinary play, tracking can be temporarily invalid, and a simple palm-up threshold would repeatedly reveal the panel during gameplay. A production gesture should include:
+Because SteamVR/VRLink still did not deliver controller commands during physical testing, a controller-pose gesture opens the menu without button input:
 
-1. per-hand calibrated palm/up axes rather than a fixed controller-space axis;
-2. HMD-relative visibility and distance checks;
-3. angular threshold hysteresis;
-4. a dwell interval before reveal;
-5. a cooldown after dismissal;
-6. suppression while grabbing, calibrating, or interacting with a game.
+1. begin with the controller face turned away from the headset so the gesture arms;
+2. raise either controller within approximately 0.18–0.90 m of the headset;
+3. turn its control face toward the headset and hold for 3 seconds;
+4. a small circular indicator fills during the hold, and the world-stable portrait control panel opens only when it is full;
+5. move the wrist freely and use the controller laser to hover and click a large grid cell.
 
-Automatic gesture detection is therefore deferred until the button flow and Sprint 5.1 hand poses are physically reviewed. The fallback satisfies the same reveal flow and provides a baseline against which gesture false positives can be judged.
+There is deliberately no gaze selection. The panel remains open after the opening pose so the user does not have to maintain a difficult wrist angle while pointing. Its 2×5 grid contains Show/Hide, Glance, Pin, Settings, Head, World, Left, Right, and Close. It uses OpenVR overlay mouse events and normalized panel coordinates, matching the laser/UV interaction model planned for the phone screen.
+
+The opening gesture uses tracked poses, not SteamVR button actions. The three-second dwell and segmented progress indicator respond to feedback that the original 0.45-second gesture activated too easily. Distance, vertical-position, facing-angle, indicator placement, and opening dwell remain provisional and require physical tuning. It must be checked for accidental activation during ordinary gameplay.
 
 ## Physical validation result and remaining work
 
-A Steam Frame/VRLink test found that neither controller thumbstick click advanced the state machine, while the keyboard shortcuts worked. The receiver now uses explicit SteamVR Input actions instead of `IVRSystem::GetControllerState`, identifies its running process with the registered application key, and ships a `frame_controller` binding for both thumbsticks, both calibration buttons, axes, grips, and triggers. SteamVR accepted the action manifest and loaded the Frame binding; physical input delivery still needs retesting.
+A Steam Frame/VRLink test found that neither controller thumbstick click advanced the state machine, while the keyboard shortcuts worked. The receiver now uses explicit SteamVR Input actions instead of `IVRSystem::GetControllerState`, identifies its running process with the registered application key, and ships a `frame_controller` binding for both thumbsticks, both calibration buttons, axes, grips, and triggers. SteamVR accepted the action manifest and loaded the Frame binding, but a physical retest still delivered no controller commands and no radial menu on long press. The phone overlay itself was visible and stable and keyboard controls continued to work.
+
+The retest established that loading bindings is insufficient for an overlay while another application owns controller focus. The receiver now requests OpenVR's overlay-global action-set priority. SteamVR documents this as experimental and requires **Settings > Developer > Experimental overlay input overrides** to be enabled. Physical validation of this priority path is pending; it must also check whether the bindings conflict unacceptably with game controls.
 
 Keyboard-driven transitions and live, quick reveal were physically confirmed. Left/right keyboard placement selection now also selects the hand used by the next keyboard-driven Glance preview. This is not placement-mode cycling: only the Glance state temporarily attaches a 55%-scale copy of the live phone panel to the selected hand. The 55% preview size and offsets remain unapproved.
 
-- Confirm the replacement action path receives thumbstick clicks from both controllers.
-- Confirm short click still cycles and long press reliably opens the radial menu without accidental activation.
-- Review radial-menu readability, pose, selection, cancellation, and the provisional 0.6-second threshold.
+- Confirm whether the replacement action path receives thumbstick clicks from either controller.
+- Physically validate the wrist-flip opening gesture, phone-shaped grid readability, laser hover/click selection, Close action, and false-positive rate.
+- If button input becomes available, confirm short click still cycles and long press reliably opens the control grid without accidental activation.
+- Review control-grid readability, placement, laser selection, cancellation, and the provisional opening dwell.
 - Confirm the button does not conflict unacceptably with active games.
 - Tune the 55% preview scale and controller offsets per hand.
 - Verify all four transitions and immediate reveal with live video.

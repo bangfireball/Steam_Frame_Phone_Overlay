@@ -8,6 +8,7 @@
       "binary_path_windows": "phonecast-receiver.exe",
       "binary_path_linux": "phonecast-receiver",
       "binary_path_linux_arm": "phonecast-receiver",
+      "action_manifest_path": "phonecast-actions.json",
       "is_dashboard_overlay": true,
       "strings": {
         "en_us": {

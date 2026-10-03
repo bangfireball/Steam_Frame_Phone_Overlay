@@ -116,7 +116,7 @@ SettingsMenuView SettingsMenuController::View() const {
         }
         case Page::Glance:
             view.title = "GLANCE AND CONTROLS";
-            view.labels = {"PREVIEW SCALE", "LONG PRESS", "BACK"};
+            view.labels = {"PREVIEW SCALE", "BUTTON HOLD", "BACK"};
             view.values = {Decimal(draft_.glancePreviewScale),
                            std::to_string(draft_.radialLongPressMilliseconds) + " MS", ""};
             break;

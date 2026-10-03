@@ -903,7 +903,7 @@ Settings persist between sessions.
 - `[x]` Tracking-loss behavior retains the last valid overlay transform and resumes on recovery
 - `[x]` Windows clean build and all automated tests
 - `[x]` Legacy `GetControllerState` polling replaced with explicit SteamVR Input actions and a Steam Frame controller binding; runtime accepted the action manifest and binding
-- `[!]` Physical keyboard fallback test: right-controller lock worked, but left-controller lock did not behave as expected; the rebuilt receiver needs physical retesting
+- `[!]` Physical retest: the phone overlay was visible and stable and keyboard controls worked, but no controller commands were delivered and a long press did not show the radial menu; overlay-global SteamVR Input priority is now being tested
 - `[ ]` Physical headset tuning and approval of defaults, stability, and ergonomics
 
 ## Objective
@@ -940,9 +940,13 @@ Do not guess a universal pose. Validate the options in-headset and choose defaul
 - `[x]` Controller primary-axis/touchpad button fallback
 - `[x]` Keyboard cycle and quick show/hide fallback
 - `[x]` Hidden startup with decoding retained for immediate reveal
-- `[x]` Gesture reliability investigation and documented deferral criteria
+- `[x]` Physical test confirmed wrist opening, the phone-shaped control grid, and controller-laser selection work
+- `[x]` Three-second gesture dwell with circular progress feedback to address the physically observed easy activation
+- `[x]` Phone-shaped Settings panel with laser-selectable rows and `-`/`+` adjustment targets
+- `[~]` Menu flicker mitigation removes hover-driven raw-texture redraws; physical confirmation pending
 - `[x]` Automated state and presentation tests
-- `[x]` Failed legacy controller polling replaced with explicit SteamVR Input actions and a Steam Frame controller binding; runtime accepted the action manifest and binding, with physical retesting pending
+- `[x]` Failed legacy controller polling replaced with explicit SteamVR Input actions and a Steam Frame controller binding; runtime accepted the action manifest and binding
+- `[!]` Physical retest still delivered no controller commands and no radial menu on long press; overlay-global SteamVR Input priority remains unconfirmed and the new pose-only gesture path awaits testing
 - `[x]` Keyboard-driven state transitions and live, quick reveal physically confirmed
 - `[x]` Keyboard left/right placement selection now also selects the hand used by the next keyboard-driven Glance preview
 - `[x]` Experimental long-press thumbstick radial menu with show/hide, glance, pin, placement, and reset actions

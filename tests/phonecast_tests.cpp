@@ -6,6 +6,7 @@
 #include "phonecast/vr/overlay/OverlayController.h"
 #include "phonecast/vr/overlay/OverlaySettingsStore.h"
 #include "phonecast/vr/overlay/SettingsMenuController.h"
+#include "phonecast/vr/overlay/WristMenuGesture.h"
 
 #include <filesystem>
 #include <iostream>
@@ -329,6 +330,45 @@ void TestSettingsMenu() {
           "Back from the root cancels the transaction");
 }
 
+void TestWristMenuGesture() {
+    using phonecast::vr::WristMenuGestureAction;
+    phonecast::vr::WristMenuGesture gesture;
+    phonecast::vr::WristMenuGestureObservation observation;
+
+    observation.nowMilliseconds = 100;
+    Check(gesture.Update(observation).action == WristMenuGestureAction::None,
+          "neutral wrists arm the gesture without opening");
+    observation.leftFacing = true;
+    observation.nowMilliseconds = 200;
+    Check(gesture.Update(observation).action == WristMenuGestureAction::None,
+          "wrist gesture waits for its opening dwell");
+    observation.nowMilliseconds = 1700;
+    const auto halfway = gesture.Update(observation);
+    Check(halfway.action == WristMenuGestureAction::None &&
+              halfway.progress > 0.45F && halfway.progress < 0.55F,
+          "wrist gesture reports visible hold progress");
+    observation.nowMilliseconds = 3200;
+    Check(gesture.Update(observation).action == WristMenuGestureAction::OpenLeft,
+          "stable three-second left wrist flip opens the left menu");
+
+    observation.menuVisible = true;
+    observation.leftFacing = false;
+    observation.nowMilliseconds = 1200;
+    Check(gesture.Update(observation).action == WristMenuGestureAction::None,
+          "open menu remains available after the wrist moves away");
+
+    gesture.Reset();
+    observation = {};
+    observation.nowMilliseconds = 100;
+    gesture.Update(observation);
+    observation.rightFacing = true;
+    observation.nowMilliseconds = 200;
+    gesture.Update(observation);
+    observation.nowMilliseconds = 3200;
+    Check(gesture.Update(observation).action == WristMenuGestureAction::OpenRight,
+          "stable three-second right wrist flip opens the right menu");
+}
+
 void TestReceiverLifecycle() {
     phonecast::core::GeneratedVideoSource source(64, 64);
     FakeOverlay overlay;
@@ -361,6 +401,7 @@ int main() {
     TestGlanceMode();
     TestOverlaySettingsPersistence();
     TestSettingsMenu();
+    TestWristMenuGesture();
     TestReceiverLifecycle();
     if (failures == 0) std::cout << "All PhoneCast tests passed.\n";
     return failures == 0 ? 0 : 1;

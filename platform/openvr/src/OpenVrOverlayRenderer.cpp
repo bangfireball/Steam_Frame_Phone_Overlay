@@ -1,4 +1,5 @@
 #include "phonecast/platform/openvr/OpenVrOverlayRenderer.h"
+#include "phonecast/vr/overlay/WristMenuGesture.h"
 
 #include <openvr.h>
 
@@ -29,22 +30,30 @@ constexpr char kOverlayKey[] = "com.phonecastvr.receiver.phone";
 constexpr char kOverlayName[] = "PhoneCast VR Receiver";
 constexpr char kMenuOverlayKey[] = "com.phonecastvr.receiver.radial-menu";
 constexpr char kMenuOverlayName[] = "PhoneCast Controls";
+constexpr char kGestureOverlayKey[] = "com.phonecastvr.receiver.gesture-progress";
+constexpr char kGestureOverlayName[] = "PhoneCast Gesture Progress";
 constexpr char kSettingsOverlayKey[] = "com.phonecastvr.receiver.settings";
 constexpr char kSettingsOverlayName[] = "PhoneCast Settings";
-constexpr std::uint32_t kMenuTextureSize = 512;
-constexpr std::uint32_t kSettingsTextureWidth = 768;
-constexpr std::uint32_t kSettingsTextureHeight = 512;
-constexpr std::array<const char*, 8> kMenuLabels{
-    "SHOW", "GLANCE", "PIN", "RIGHT", "SETTINGS", "WORLD", "HEAD", "LEFT"};
+constexpr std::uint32_t kMenuTextureWidth = 512;
+constexpr std::uint32_t kMenuTextureHeight = 896;
+constexpr int kMenuColumns = 2;
+constexpr int kMenuRows = 5;
+constexpr int kCloseMenuCell = 8;
+constexpr std::uint32_t kGestureTextureSize = 128;
+constexpr int kGestureProgressSteps = 24;
+constexpr std::uint32_t kSettingsTextureWidth = 512;
+constexpr std::uint32_t kSettingsTextureHeight = 896;
+constexpr std::array<const char*, 9> kMenuLabels{
+    "SHOW", "GLANCE", "PIN", "SETTINGS", "HEAD", "WORLD", "LEFT", "RIGHT", "CLOSE"};
 constexpr std::array<phonecast::vr::RadialMenuAction, 8> kMenuActions{
     phonecast::vr::RadialMenuAction::ToggleVisible,
     phonecast::vr::RadialMenuAction::ShowGlance,
     phonecast::vr::RadialMenuAction::ShowPinned,
-    phonecast::vr::RadialMenuAction::RightControllerLocked,
     phonecast::vr::RadialMenuAction::OpenSettings,
-    phonecast::vr::RadialMenuAction::WorldLocked,
     phonecast::vr::RadialMenuAction::HeadLocked,
-    phonecast::vr::RadialMenuAction::LeftControllerLocked};
+    phonecast::vr::RadialMenuAction::WorldLocked,
+    phonecast::vr::RadialMenuAction::LeftControllerLocked,
+    phonecast::vr::RadialMenuAction::RightControllerLocked};
 
 bool IsQuitEvent(std::uint32_t type) {
     // VREvent_ProcessQuit reports that some VR process exited; it is not a request
@@ -179,14 +188,15 @@ const std::unordered_map<char, Glyph> kMenuGlyphs{
     {'9', {"01110", "10001", "10001", "01111", "00001", "00001", "01110"}},
     {'.', {"00000", "00000", "00000", "00000", "00000", "00110", "00110"}},
     {'-', {"00000", "00000", "00000", "11111", "00000", "00000", "00000"}},
+    {'+', {"00000", "00100", "00100", "11111", "00100", "00100", "00000"}},
     {'>', {"10000", "01000", "00100", "00010", "00100", "01000", "10000"}}
 };
 
 void SetMenuPixel(std::vector<std::uint8_t>& image, int x, int y,
                   const std::array<std::uint8_t, 4>& color) {
-    if (x < 0 || y < 0 || x >= static_cast<int>(kMenuTextureSize) ||
-        y >= static_cast<int>(kMenuTextureSize)) return;
-    const auto offset = (static_cast<std::size_t>(y) * kMenuTextureSize +
+    if (x < 0 || y < 0 || x >= static_cast<int>(kMenuTextureWidth) ||
+        y >= static_cast<int>(kMenuTextureHeight)) return;
+    const auto offset = (static_cast<std::size_t>(y) * kMenuTextureWidth +
                          static_cast<std::size_t>(x)) * 4U;
     std::copy(color.begin(), color.end(), image.begin() + static_cast<std::ptrdiff_t>(offset));
 }
@@ -271,57 +281,91 @@ std::vector<std::uint8_t> MakeSettingsTexture(const phonecast::vr::SettingsMenuV
     FillSettingsRect(image, 0, 0, 6, static_cast<int>(kSettingsTextureHeight), border);
     FillSettingsRect(image, static_cast<int>(kSettingsTextureWidth) - 6, 0, 6,
                      static_cast<int>(kSettingsTextureHeight), border);
-    DrawSettingsLabel(image, view.title, static_cast<int>(kSettingsTextureWidth / 2), 38, 3, text);
-    const int rowHeight = 48;
-    const int firstRow = 88;
+    DrawSettingsLabel(image, view.title, static_cast<int>(kSettingsTextureWidth / 2), 52,
+                      view.title.size() > 18 ? 2 : 3, text);
+    const int rowHeight = 82;
+    const int firstRow = 126;
     for (std::size_t index = 0; index < view.labels.size(); ++index) {
         const int centerY = firstRow + static_cast<int>(index) * rowHeight;
         if (index == view.selectedIndex)
-            FillSettingsRect(image, 20, centerY - 20,
-                             static_cast<int>(kSettingsTextureWidth) - 40, 40, selected);
-        DrawSettingsLabel(image, view.labels[index], 215, centerY, 2, text);
+            FillSettingsRect(image, 14, centerY - 34,
+                             static_cast<int>(kSettingsTextureWidth) - 28, 68, selected);
+        DrawSettingsLabel(image, view.labels[index], 190, centerY - 12,
+                          view.labels[index].size() > 15 ? 1 : 2, text);
+        const bool adjustable = index < view.values.size() &&
+                                !view.values[index].empty() && view.values[index] != ">";
         if (index < view.values.size())
-            DrawSettingsLabel(image, view.values[index], 600, centerY, 2, value);
+            DrawSettingsLabel(image, view.values[index], 354, centerY + 14,
+                              view.values[index].size() > 13 ? 1 : 2, value);
+        if (adjustable) {
+            DrawSettingsLabel(image, "-", 42, centerY, 3, text);
+            DrawSettingsLabel(image, "+", 470, centerY, 3, text);
+        }
+    }
+    return image;
+}
+
+void SetGesturePixel(std::vector<std::uint8_t>& image, int x, int y,
+                     const std::array<std::uint8_t, 4>& color) {
+    if (x < 0 || y < 0 || x >= static_cast<int>(kGestureTextureSize) ||
+        y >= static_cast<int>(kGestureTextureSize)) return;
+    const auto offset = (static_cast<std::size_t>(y) * kGestureTextureSize +
+                         static_cast<std::size_t>(x)) * 4U;
+    std::copy(color.begin(), color.end(), image.begin() + static_cast<std::ptrdiff_t>(offset));
+}
+
+std::vector<std::uint8_t> MakeGestureProgressTexture(int completedSteps) {
+    std::vector<std::uint8_t> image(
+        static_cast<std::size_t>(kGestureTextureSize) * kGestureTextureSize * 4U, 0);
+    const float center = static_cast<float>(kGestureTextureSize) * 0.5F;
+    for (std::uint32_t y = 0; y < kGestureTextureSize; ++y) {
+        for (std::uint32_t x = 0; x < kGestureTextureSize; ++x) {
+            const float dx = static_cast<float>(x) - center;
+            const float dy = center - static_cast<float>(y);
+            const float radius = std::sqrt(dx * dx + dy * dy);
+            if (radius < 43.0F || radius > 57.0F) continue;
+            float angle = std::atan2(dx, dy);
+            if (angle < 0.0F) angle += 2.0F * kPi;
+            const int step = static_cast<int>(angle / (2.0F * kPi) * kGestureProgressSteps);
+            const auto color = step < completedSteps
+                ? std::array<std::uint8_t, 4>{35, 175, 245, 255}
+                : std::array<std::uint8_t, 4>{70, 82, 98, 220};
+            SetGesturePixel(image, static_cast<int>(x), static_cast<int>(y), color);
+        }
     }
     return image;
 }
 
 std::vector<std::uint8_t> MakeRadialMenuTexture(int selected, bool currentlyVisible) {
+    constexpr int margin = 12;
+    constexpr int gap = 8;
+    const int cellWidth = (static_cast<int>(kMenuTextureWidth) - margin * 2 - gap) / kMenuColumns;
+    const int cellHeight = (static_cast<int>(kMenuTextureHeight) - margin * 2 - gap * (kMenuRows - 1)) / kMenuRows;
     std::vector<std::uint8_t> image(
-        static_cast<std::size_t>(kMenuTextureSize) * kMenuTextureSize * 4U, 0);
-    const float center = static_cast<float>(kMenuTextureSize) * 0.5F;
-    const float outerRadius = center - 8.0F;
-    const float innerRadius = 72.0F;
-    const float sectorSize = 2.0F * kPi / 8.0F;
-    for (std::uint32_t y = 0; y < kMenuTextureSize; ++y) {
-        for (std::uint32_t x = 0; x < kMenuTextureSize; ++x) {
-            const float dx = static_cast<float>(x) - center;
-            const float dy = center - static_cast<float>(y);
-            const float radius = std::sqrt(dx * dx + dy * dy);
-            if (radius > outerRadius) continue;
-            std::array<std::uint8_t, 4> color{12, 18, 30, 235};
-            if (radius >= innerRadius) {
-                float angle = std::atan2(dx, dy);
-                if (angle < 0.0F) angle += 2.0F * kPi;
-                const int sector = static_cast<int>(std::floor((angle + sectorSize * 0.5F) / sectorSize)) % 8;
-                color = sector == selected
-                    ? std::array<std::uint8_t, 4>{28, 145, 235, 250}
-                    : std::array<std::uint8_t, 4>{25, 42, 64, 240};
-                const float boundary = std::fmod(angle + sectorSize * 0.5F, sectorSize);
-                if (boundary < 0.018F || boundary > sectorSize - 0.018F)
-                    color = {80, 112, 145, 255};
-            }
-            SetMenuPixel(image, static_cast<int>(x), static_cast<int>(y), color);
-        }
-    }
-    for (int index = 0; index < 8; ++index) {
-        const float angle = static_cast<float>(index) * sectorSize;
-        const int x = static_cast<int>(center + std::sin(angle) * 164.0F);
-        const int y = static_cast<int>(center - std::cos(angle) * 164.0F);
+        static_cast<std::size_t>(kMenuTextureWidth) * kMenuTextureHeight * 4U, 0);
+    for (std::uint32_t y = 0; y < kMenuTextureHeight; ++y)
+        for (std::uint32_t x = 0; x < kMenuTextureWidth; ++x)
+            SetMenuPixel(image, static_cast<int>(x), static_cast<int>(y), {8, 14, 24, 250});
+
+    for (int index = 0; index < kMenuColumns * kMenuRows; ++index) {
+        const int column = index % kMenuColumns;
+        const int row = index / kMenuColumns;
+        const int left = margin + column * (cellWidth + gap);
+        const int top = margin + row * (cellHeight + gap);
+        const bool populated = index < static_cast<int>(kMenuLabels.size());
+        const std::array<std::uint8_t, 4> color = !populated
+            ? std::array<std::uint8_t, 4>{12, 20, 32, 245}
+            : index == selected
+                ? std::array<std::uint8_t, 4>{28, 145, 235, 255}
+                : std::array<std::uint8_t, 4>{25, 42, 64, 250};
+        for (int y = top; y < top + cellHeight; ++y)
+            for (int x = left; x < left + cellWidth; ++x)
+                SetMenuPixel(image, x, y, color);
+        if (!populated) continue;
         const std::string label = index == 0 && currentlyVisible ? "HIDE" : kMenuLabels[index];
-        DrawMenuLabel(image, label, x, y, label.size() > 5 ? 2 : 3);
+        DrawMenuLabel(image, label, left + cellWidth / 2, top + cellHeight / 2,
+                      label.size() > 6 ? 2 : 3);
     }
-    DrawMenuLabel(image, "MENU", static_cast<int>(center), static_cast<int>(center), 3);
     return image;
 }
 
@@ -640,6 +684,12 @@ public:
         vr::VRActiveActionSet_t active{};
         active.ulActionSet = actionSet;
         active.ulRestrictedToDevice = vr::k_ulInvalidInputValueHandle;
+        // PhoneCast is an overlay rather than the focused scene application. A
+        // normal-priority action set is therefore suppressed by the active game,
+        // even though its manifest and bindings load successfully. Request the
+        // runtime's overlay-global range so the configured PhoneCast controls can
+        // be observed while a scene application owns input focus.
+        active.nPriority = vr::k_nActionSetOverlayGlobalPriorityMin;
         const auto result = inputApi->UpdateActionState(&active, sizeof(active), 1);
         if (result != vr::VRInputError_None) {
             if (!actionUpdateErrorReported) {
@@ -681,45 +731,185 @@ public:
         right = read(vr::TrackedControllerRole_RightHand, previousRightControllerButtons);
     }
 
-    void UpdateRadialMenuTransform() {
-        if (!radialMenuVisible || menuOverlay == vr::k_ulOverlayHandleInvalid) return;
-        auto settings = currentSettings;
-        settings.placementMode = radialMenuLeft
-            ? phonecast::vr::PlacementMode::LeftControllerLocked
-            : phonecast::vr::PlacementMode::RightControllerLocked;
-        vr::HmdMatrix34_t transform{};
-        if (ControllerTransform(settings, transform))
-            overlayApi->SetOverlayTransformAbsolute(
-                menuOverlay, vr::TrackingUniverseStanding, &transform);
+    bool CaptureMenuTransform() {
+        vr::HmdMatrix34_t hmd{};
+        if (!DevicePose(vr::k_unTrackedDeviceIndex_Hmd, hmd)) return false;
+        const vr::HmdMatrix34_t local{{{1.0F, 0.0F, 0.0F, 0.0F},
+                                       {0.0F, 1.0F, 0.0F, -0.04F},
+                                       {0.0F, 0.0F, 1.0F, -0.85F}}};
+        auto transform = Multiply(hmd, local);
+        return overlayApi->SetOverlayTransformAbsolute(
+            menuOverlay, vr::TrackingUniverseStanding, &transform) ==
+            vr::VROverlayError_None;
+    }
+
+    bool WristFacesHead(bool left) const {
+        vr::HmdMatrix34_t hmd{};
+        vr::HmdMatrix34_t controller{};
+        const auto mode = left ? phonecast::vr::PlacementMode::LeftControllerLocked
+                               : phonecast::vr::PlacementMode::RightControllerLocked;
+        if (!DevicePose(vr::k_unTrackedDeviceIndex_Hmd, hmd) ||
+            !DevicePose(DeviceForMode(mode), controller)) return false;
+
+        float toHead[3]{hmd.m[0][3] - controller.m[0][3],
+                        hmd.m[1][3] - controller.m[1][3],
+                        hmd.m[2][3] - controller.m[2][3]};
+        const float distance = std::sqrt(toHead[0] * toHead[0] + toHead[1] * toHead[1] +
+                                         toHead[2] * toHead[2]);
+        const float vertical = controller.m[1][3] - hmd.m[1][3];
+        if (distance < 0.18F || distance > 0.90F || vertical < -0.75F || vertical > 0.20F)
+            return false;
+        for (float& component : toHead) component /= distance;
+
+        // OpenVR controller poses use local +Y as the top/control-face normal.
+        // A high dot product means the user has turned that face toward the HMD.
+        const float facing = controller.m[0][1] * toHead[0] +
+                             controller.m[1][1] * toHead[1] +
+                             controller.m[2][1] * toHead[2];
+        return facing >= 0.62F;
+    }
+
+    void UpdateGestureProgress(float progress) {
+        if (gestureOverlay == vr::k_ulOverlayHandleInvalid) return;
+        if (progress <= 0.0F) {
+            if (gestureProgressVisible) overlayApi->HideOverlay(gestureOverlay);
+            gestureProgressVisible = false;
+            gestureProgressStep = -1;
+            return;
+        }
+        const int step = std::max(1, std::min(kGestureProgressSteps,
+            static_cast<int>(std::ceil(progress * kGestureProgressSteps))));
+        if (step != gestureProgressStep) {
+            auto image = MakeGestureProgressTexture(step);
+            if (overlayApi->SetOverlayRaw(gestureOverlay, image.data(),
+                                          kGestureTextureSize, kGestureTextureSize, 4) ==
+                vr::VROverlayError_None) {
+                gestureProgressStep = step;
+            }
+        }
+        if (!gestureProgressVisible) {
+            overlayApi->ShowOverlay(gestureOverlay);
+            gestureProgressVisible = true;
+        }
+    }
+
+    bool HandleWristMenuGesture() {
+        phonecast::vr::WristMenuGestureObservation observation;
+        observation.leftFacing = WristFacesHead(true);
+        observation.rightFacing = WristFacesHead(false);
+        observation.menuVisible = radialMenuVisible;
+        observation.nowMilliseconds = static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count());
+
+        const auto result = wristMenuGesture.Update(observation);
+        UpdateGestureProgress(result.progress);
+        if (result.action == phonecast::vr::WristMenuGestureAction::OpenLeft ||
+            result.action == phonecast::vr::WristMenuGestureAction::OpenRight) {
+            UpdateGestureProgress(0.0F);
+            const bool left = result.action == phonecast::vr::WristMenuGestureAction::OpenLeft;
+            OpenRadialMenu(left, false);
+            logger.Log(core::LogLevel::Info, "openvr-menu",
+                       left ? "Wrist gesture opened the control grid for the left hand."
+                            : "Wrist gesture opened the control grid for the right hand.");
+            return true;
+        }
+        return false;
+    }
+
+    int MenuGridCell(float mouseX, float mouseY) const {
+        constexpr int margin = 12;
+        constexpr int gap = 8;
+        const int cellWidth = (static_cast<int>(kMenuTextureWidth) - margin * 2 - gap) / kMenuColumns;
+        const int cellHeight = (static_cast<int>(kMenuTextureHeight) - margin * 2 - gap * (kMenuRows - 1)) / kMenuRows;
+        const int x = static_cast<int>(mouseX);
+        const int y = static_cast<int>(kMenuTextureHeight - mouseY);
+        for (int row = 0; row < kMenuRows; ++row) {
+            for (int column = 0; column < kMenuColumns; ++column) {
+                const int left = margin + column * (cellWidth + gap);
+                const int top = margin + row * (cellHeight + gap);
+                if (x >= left && x < left + cellWidth && y >= top && y < top + cellHeight) {
+                    const int cell = row * kMenuColumns + column;
+                    return cell < static_cast<int>(kMenuLabels.size()) ? cell : -1;
+                }
+            }
+        }
+        return -1;
+    }
+
+    void AcceptMenuCell(int cell) {
+        if (cell == kCloseMenuCell) {
+            CloseRadialMenu();
+            logger.Log(core::LogLevel::Info, "openvr-menu", "Control grid closed.");
+            return;
+        }
+        if (cell < 0 || cell >= static_cast<int>(kMenuActions.size())) return;
+        pendingRadialMenuSelection.action = kMenuActions[static_cast<std::size_t>(cell)];
+        pendingRadialMenuSelection.hand = radialMenuLeft
+            ? phonecast::vr::GlanceInput::LeftController
+            : phonecast::vr::GlanceInput::RightController;
+        hasPendingRadialMenuSelection = true;
+        CloseRadialMenu();
+        logger.Log(core::LogLevel::Info, "openvr-menu",
+                   "Control-grid selection accepted from the controller laser.");
     }
 
     void RenderRadialMenu() {
         if (menuOverlay == vr::k_ulOverlayHandleInvalid) return;
         auto image = MakeRadialMenuTexture(radialMenuSelection, desiredVisible);
         const auto result = overlayApi->SetOverlayRaw(
-            menuOverlay, image.data(), kMenuTextureSize, kMenuTextureSize, 4);
+            menuOverlay, image.data(), kMenuTextureWidth, kMenuTextureHeight, 4);
         if (result != vr::VROverlayError_None)
-            logger.Log(core::LogLevel::Warning, "openvr-menu", "Failed to update the radial menu texture.");
+            logger.Log(core::LogLevel::Warning, "openvr-menu", "Failed to update the control-grid texture.");
     }
 
     void OpenRadialMenu(bool left, bool waitForRelease) {
         if (menuOverlay == vr::k_ulOverlayHandleInvalid) return;
         radialMenuLeft = left;
-        radialMenuSelection = 0;
+        radialMenuSelection = -1;
         radialAwaitRelease = waitForRelease;
+        if (!CaptureMenuTransform()) {
+            logger.Log(core::LogLevel::Warning, "openvr-menu",
+                       "Could not place the control grid in front of the headset.");
+            return;
+        }
         radialMenuVisible = true;
         RenderRadialMenu();
-        UpdateRadialMenuTransform();
         overlayApi->ShowOverlay(menuOverlay);
         logger.Log(core::LogLevel::Info, "openvr-menu",
-                   left ? "Radial menu opened on the left hand."
-                        : "Radial menu opened on the right hand.");
+                   "Phone-shaped control grid opened in front of the headset.");
     }
 
     void CloseRadialMenu() {
         if (menuOverlay != vr::k_ulOverlayHandleInvalid) overlayApi->HideOverlay(menuOverlay);
         radialMenuVisible = false;
         radialAwaitRelease = false;
+    }
+
+    int SettingsRow(float mouseY) const {
+        const int y = static_cast<int>(kSettingsTextureHeight - mouseY);
+        constexpr int rowHeight = 82;
+        constexpr int firstRow = 126;
+        for (std::size_t row = 0; row < settingsMenuView.labels.size(); ++row) {
+            const int center = firstRow + static_cast<int>(row) * rowHeight;
+            if (y >= center - 34 && y < center + 34) return static_cast<int>(row);
+        }
+        return -1;
+    }
+
+    void QueueSettingsLaserClick(float mouseX, float mouseY) {
+        const int row = SettingsRow(mouseY);
+        if (row < 0) return;
+        settingsLaserTargetRow = row;
+        const bool adjustable = static_cast<std::size_t>(row) < settingsMenuView.values.size() &&
+                                !settingsMenuView.values[static_cast<std::size_t>(row)].empty() &&
+                                settingsMenuView.values[static_cast<std::size_t>(row)] != ">";
+        if (adjustable && mouseX < 100.0F)
+            settingsLaserCommand = phonecast::vr::SettingsMenuCommand::Decrease;
+        else if (adjustable && mouseX > static_cast<float>(kSettingsTextureWidth) - 100.0F)
+            settingsLaserCommand = phonecast::vr::SettingsMenuCommand::Increase;
+        else
+            settingsLaserCommand = phonecast::vr::SettingsMenuCommand::Activate;
     }
 
     bool HandleSettingsMenu(const HandInput& left, const HandInput& right) {
@@ -754,31 +944,12 @@ public:
     bool HandleRadialMenu(const HandInput& left, const HandInput& right) {
         if (!radialMenuVisible) return false;
         const auto& active = radialMenuLeft ? left : right;
-        UpdateRadialMenuTransform();
-        const float magnitude = std::sqrt(active.x * active.x + active.y * active.y);
-        if (magnitude > 0.35F) {
-            float angle = std::atan2(active.x, active.y);
-            if (angle < 0.0F) angle += 2.0F * kPi;
-            const float sectorSize = 2.0F * kPi / 8.0F;
-            const int selected = static_cast<int>(
-                std::floor((angle + sectorSize * 0.5F) / sectorSize)) % 8;
-            if (selected != radialMenuSelection) {
-                radialMenuSelection = selected;
-                RenderRadialMenu();
-            }
-        }
         if (active.glanceReleased) radialAwaitRelease = false;
         if (left.calibratePressed || right.calibratePressed) {
             CloseRadialMenu();
-            logger.Log(core::LogLevel::Info, "openvr-menu", "Radial menu cancelled.");
-        } else if (!radialAwaitRelease && active.glancePressed) {
-            pendingRadialMenuSelection.action = kMenuActions[radialMenuSelection];
-            pendingRadialMenuSelection.hand = radialMenuLeft
-                ? phonecast::vr::GlanceInput::LeftController
-                : phonecast::vr::GlanceInput::RightController;
-            hasPendingRadialMenuSelection = true;
-            CloseRadialMenu();
-            logger.Log(core::LogLevel::Info, "openvr-menu", "Radial menu selection accepted.");
+            logger.Log(core::LogLevel::Info, "openvr-menu", "Control grid cancelled.");
+        } else if (!radialAwaitRelease && active.glancePressed && radialMenuSelection >= 0) {
+            AcceptMenuCell(radialMenuSelection);
         }
         return true;
     }
@@ -811,6 +982,7 @@ public:
         if (!explicitInputReady || !PollExplicitInput(left, right)) PollLegacyInput(left, right);
 
         if (HandleSettingsMenu(left, right)) return;
+        if (!settingsMenuVisible && HandleWristMenuGesture()) return;
         if (HandleRadialMenu(left, right)) return;
         if (!calibrationActive) {
             if (HandleGlancePress(true, left, leftHold)) return;
@@ -998,9 +1170,16 @@ public:
     bool actionUpdateErrorReported{false};
     vr::VROverlayHandle_t overlay{vr::k_ulOverlayHandleInvalid};
     vr::VROverlayHandle_t menuOverlay{vr::k_ulOverlayHandleInvalid};
+    vr::VROverlayHandle_t gestureOverlay{vr::k_ulOverlayHandleInvalid};
     vr::VROverlayHandle_t settingsOverlay{vr::k_ulOverlayHandleInvalid};
+    bool gestureProgressVisible{false};
+    int gestureProgressStep{-1};
     bool settingsMenuVisible{false};
     bool settingsMenuLeft{true};
+    phonecast::vr::SettingsMenuView settingsMenuView{};
+    int settingsLaserTargetRow{-1};
+    phonecast::vr::SettingsMenuCommand settingsLaserCommand{
+        phonecast::vr::SettingsMenuCommand::Activate};
     bool settingsAxisLatched{false};
     phonecast::vr::SettingsMenuCommand pendingSettingsMenuCommand{
         phonecast::vr::SettingsMenuCommand::Back};
@@ -1008,11 +1187,12 @@ public:
     bool radialMenuVisible{false};
     bool radialMenuLeft{true};
     bool radialAwaitRelease{false};
-    int radialMenuSelection{0};
+    int radialMenuSelection{-1};
     phonecast::vr::RadialMenuSelection pendingRadialMenuSelection{};
     bool hasPendingRadialMenuSelection{false};
     HoldState leftHold{};
     HoldState rightHold{};
+    phonecast::vr::WristMenuGesture wristMenuGesture{};
     bool shown{false};
     bool desiredVisible{true};
     bool hasFrame{false};
@@ -1069,29 +1249,73 @@ bool OpenVrOverlayRenderer::Start(const phonecast::vr::OverlaySettings& settings
                             "CreateOverlay", error) ||
         !impl_->OverlayCall(impl_->overlayApi->CreateOverlay(
                                 kMenuOverlayKey, kMenuOverlayName, &impl_->menuOverlay),
-                            "Create radial menu overlay", error) ||
+                            "Create control-grid overlay", error) ||
         !impl_->OverlayCall(impl_->overlayApi->SetOverlayWidthInMeters(impl_->menuOverlay, 0.34F),
-                            "Set radial menu width", error) ||
+                            "Set control-grid width", error) ||
         !impl_->OverlayCall(impl_->overlayApi->SetOverlaySortOrder(impl_->menuOverlay, 100U),
-                            "Set radial menu sort order", error) ||
+                            "Set control-grid sort order", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayInputMethod(
+                                impl_->menuOverlay, vr::VROverlayInputMethod_Mouse),
+                            "Set control-grid input method", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayFlag(
+                                impl_->menuOverlay,
+                                vr::VROverlayFlags_MakeOverlaysInteractiveIfVisible, true),
+                            "Set control-grid interactive flag", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->CreateOverlay(
+                                kGestureOverlayKey, kGestureOverlayName, &impl_->gestureOverlay),
+                            "Create gesture-progress overlay", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayWidthInMeters(
+                                impl_->gestureOverlay, 0.08F),
+                            "Set gesture-progress width", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlaySortOrder(
+                                impl_->gestureOverlay, 102U),
+                            "Set gesture-progress sort order", error) ||
         !impl_->OverlayCall(impl_->overlayApi->CreateOverlay(
                                 kSettingsOverlayKey, kSettingsOverlayName, &impl_->settingsOverlay),
                             "Create settings overlay", error) ||
-        !impl_->OverlayCall(impl_->overlayApi->SetOverlayWidthInMeters(impl_->settingsOverlay, 0.72F),
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayWidthInMeters(impl_->settingsOverlay, 0.34F),
                             "Set settings width", error) ||
         !impl_->OverlayCall(impl_->overlayApi->SetOverlaySortOrder(impl_->settingsOverlay, 101U),
-                            "Set settings sort order", error)) {
+                            "Set settings sort order", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayInputMethod(
+                                impl_->settingsOverlay, vr::VROverlayInputMethod_Mouse),
+                            "Set settings input method", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayFlag(
+                                impl_->settingsOverlay,
+                                vr::VROverlayFlags_MakeOverlaysInteractiveIfVisible, true),
+                            "Set settings interactive flag", error)) {
         Stop();
         return false;
     }
 
-    auto settingsTransform = vr::HmdMatrix34_t{{{1.0F, 0.0F, 0.0F, 0.22F},
-                                                 {0.0F, 1.0F, 0.0F, 0.0F},
+    const vr::HmdVector2_t menuMouseScale{{static_cast<float>(kMenuTextureWidth),
+                                           static_cast<float>(kMenuTextureHeight)}};
+    if (!impl_->OverlayCall(impl_->overlayApi->SetOverlayMouseScale(
+                                impl_->menuOverlay, &menuMouseScale),
+                            "Set control-grid mouse scale", error)) {
+        Stop();
+        return false;
+    }
+
+    const vr::HmdVector2_t settingsMouseScale{{static_cast<float>(kSettingsTextureWidth),
+                                               static_cast<float>(kSettingsTextureHeight)}};
+    auto settingsTransform = vr::HmdMatrix34_t{{{1.0F, 0.0F, 0.0F, 0.0F},
+                                                 {0.0F, 1.0F, 0.0F, -0.04F},
                                                  {0.0F, 0.0F, 1.0F, -0.85F}}};
+    auto gestureTransform = vr::HmdMatrix34_t{{{1.0F, 0.0F, 0.0F, 0.0F},
+                                                {0.0F, 1.0F, 0.0F, -0.18F},
+                                                {0.0F, 0.0F, 1.0F, -0.60F}}};
     if (!impl_->OverlayCall(impl_->overlayApi->SetOverlayTransformTrackedDeviceRelative(
                                 impl_->settingsOverlay, vr::k_unTrackedDeviceIndex_Hmd,
                                 &settingsTransform),
                             "Set settings transform", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayMouseScale(
+                                impl_->settingsOverlay, &settingsMouseScale),
+                            "Set settings mouse scale", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayTransformTrackedDeviceRelative(
+                                impl_->gestureOverlay, vr::k_unTrackedDeviceIndex_Hmd,
+                                &gestureTransform),
+                            "Set gesture-progress transform", error) ||
         !impl_->OverlayCall(impl_->overlayApi->SetOverlayInputMethod(
                                 impl_->overlay, vr::VROverlayInputMethod_Mouse),
                             "SetOverlayInputMethod", error) ||
@@ -1179,6 +1403,34 @@ bool OpenVrOverlayRenderer::PumpEvents() {
     impl_->UpdateControllerPlacement();
     impl_->PollControllerCalibration();
     vr::VREvent_t event{};
+    while (impl_->overlayApi->PollNextOverlayEvent(
+               impl_->settingsOverlay, &event, sizeof(event))) {
+        if (event.eventType == vr::VREvent_MouseButtonDown &&
+            (event.data.mouse.button & vr::VRMouseButton_Left) != 0) {
+            impl_->QueueSettingsLaserClick(event.data.mouse.x, event.data.mouse.y);
+        }
+        if (IsQuitEvent(event.eventType)) {
+            impl_->logger.Log(core::LogLevel::Info, "openvr", "Runtime requested overlay shutdown.");
+            return false;
+        }
+    }
+    while (impl_->overlayApi->PollNextOverlayEvent(
+               impl_->menuOverlay, &event, sizeof(event))) {
+        if (event.eventType == vr::VREvent_MouseMove) {
+            // Keep the static grid texture stable; the runtime laser supplies
+            // hover feedback without repeated SetOverlayRaw submissions.
+            impl_->radialMenuSelection = impl_->MenuGridCell(
+                event.data.mouse.x, event.data.mouse.y);
+        } else if (event.eventType == vr::VREvent_MouseButtonDown &&
+                   (event.data.mouse.button & vr::VRMouseButton_Left) != 0) {
+            impl_->AcceptMenuCell(
+                impl_->MenuGridCell(event.data.mouse.x, event.data.mouse.y));
+        }
+        if (IsQuitEvent(event.eventType)) {
+            impl_->logger.Log(core::LogLevel::Info, "openvr", "Runtime requested overlay shutdown.");
+            return false;
+        }
+    }
     while (impl_->overlayApi->PollNextOverlayEvent(impl_->overlay, &event, sizeof(event))) {
         if (!impl_->calibrationActive && event.eventType == vr::VREvent_MouseButtonDown &&
             (event.data.mouse.button & vr::VRMouseButton_Left) != 0) {
@@ -1231,6 +1483,7 @@ bool OpenVrOverlayRenderer::ShowSettingsMenu(
         error = "The OpenVR settings overlay is unavailable.";
         return false;
     }
+    impl_->settingsMenuView = view;
     auto image = MakeSettingsTexture(view);
     if (!impl_->OverlayCall(impl_->overlayApi->SetOverlayRaw(
                                 impl_->settingsOverlay, image.data(),
@@ -1256,6 +1509,7 @@ bool OpenVrOverlayRenderer::HideSettingsMenu(std::string& error) {
     impl_->settingsMenuVisible = false;
     impl_->settingsAxisLatched = false;
     impl_->hasPendingSettingsMenuCommand = false;
+    impl_->settingsLaserTargetRow = -1;
     impl_->logger.Log(core::LogLevel::Info, "openvr-settings", "In-headset settings menu hidden.");
     error.clear();
     return true;
@@ -1263,13 +1517,34 @@ bool OpenVrOverlayRenderer::HideSettingsMenu(std::string& error) {
 
 bool OpenVrOverlayRenderer::TakeSettingsMenuInput(
         phonecast::vr::SettingsMenuCommand& command) {
-    if (!impl_->hasPendingSettingsMenuCommand) return false;
-    command = impl_->pendingSettingsMenuCommand;
-    impl_->hasPendingSettingsMenuCommand = false;
+    if (impl_->hasPendingSettingsMenuCommand) {
+        command = impl_->pendingSettingsMenuCommand;
+        impl_->hasPendingSettingsMenuCommand = false;
+        return true;
+    }
+    if (impl_->settingsLaserTargetRow < 0) return false;
+    if (impl_->settingsMenuView.selectedIndex !=
+        static_cast<std::size_t>(impl_->settingsLaserTargetRow)) {
+        const auto count = impl_->settingsMenuView.labels.size();
+        const auto current = impl_->settingsMenuView.selectedIndex;
+        const auto target = static_cast<std::size_t>(impl_->settingsLaserTargetRow);
+        const auto forward = (target + count - current) % count;
+        const auto backward = (current + count - target) % count;
+        command = forward <= backward
+            ? phonecast::vr::SettingsMenuCommand::NextItem
+            : phonecast::vr::SettingsMenuCommand::PreviousItem;
+        return true;
+    }
+    command = impl_->settingsLaserCommand;
+    impl_->settingsLaserTargetRow = -1;
     return true;
 }
 
 void OpenVrOverlayRenderer::Stop() noexcept {
+    if (impl_->overlayApi != nullptr && impl_->gestureOverlay != vr::k_ulOverlayHandleInvalid) {
+        impl_->overlayApi->HideOverlay(impl_->gestureOverlay);
+        impl_->overlayApi->DestroyOverlay(impl_->gestureOverlay);
+    }
     if (impl_->overlayApi != nullptr && impl_->settingsOverlay != vr::k_ulOverlayHandleInvalid) {
         impl_->overlayApi->HideOverlay(impl_->settingsOverlay);
         impl_->overlayApi->DestroyOverlay(impl_->settingsOverlay);
@@ -1282,6 +1557,7 @@ void OpenVrOverlayRenderer::Stop() noexcept {
         impl_->overlayApi->HideOverlay(impl_->overlay);
         impl_->overlayApi->DestroyOverlay(impl_->overlay);
     }
+    impl_->gestureOverlay = vr::k_ulOverlayHandleInvalid;
     impl_->settingsOverlay = vr::k_ulOverlayHandleInvalid;
     impl_->menuOverlay = vr::k_ulOverlayHandleInvalid;
     impl_->overlay = vr::k_ulOverlayHandleInvalid;
@@ -1293,12 +1569,17 @@ void OpenVrOverlayRenderer::Stop() noexcept {
     impl_->hasPendingGlanceInput = false;
     impl_->hasPendingRadialMenuSelection = false;
     impl_->hasPendingSettingsMenuCommand = false;
+    impl_->gestureProgressVisible = false;
+    impl_->gestureProgressStep = -1;
     impl_->settingsMenuVisible = false;
     impl_->settingsAxisLatched = false;
+    impl_->settingsLaserTargetRow = -1;
     impl_->radialMenuVisible = false;
     impl_->radialAwaitRelease = false;
+    impl_->radialMenuSelection = -1;
     impl_->leftHold = {};
     impl_->rightHold = {};
+    impl_->wristMenuGesture.Reset();
     impl_->explicitInputReady = false;
     impl_->actionUpdateErrorReported = false;
     impl_->inputApi = nullptr;
