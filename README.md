@@ -2,6 +2,8 @@
 
 PhoneCast VR aims to show an Android phone as a persistent VR overlay, first through PC SteamVR and eventually directly on Steam Frame ARM64.
 
+Moving to another development machine or starting a fresh Pi agent? Follow [`docs/new-machine-setup.md`](docs/new-machine-setup.md).
+
 ## Current status
 
 - `[x]` Sprints 0–4 complete: Android capture, paired LAN streaming, low-latency decoding, and a responsive PC-hosted OpenVR overlay are physically approved
