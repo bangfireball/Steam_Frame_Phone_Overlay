@@ -3,7 +3,9 @@
 #include "phonecast/core/protocol/StreamProtocol.h"
 #include "phonecast/core/streaming/GeneratedVideoSource.h"
 #include "phonecast/vr/overlay/OverlayController.h"
+#include "phonecast/vr/overlay/OverlaySettingsStore.h"
 
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -152,6 +154,43 @@ void TestOverlayControls() {
     }
     Check(controls.Settings().alpha == 0.0F && controls.Settings().distanceMeters == 0.2F,
           "overlay controls clamp safe ranges");
+
+    controls.Apply(phonecast::vr::OverlayAction::WorldLocked);
+    Check(controls.Settings().placementMode == phonecast::vr::PlacementMode::WorldLocked &&
+              !controls.Settings().worldTransformValid,
+          "world mode requests a fresh anchor");
+    auto anchored = controls.Settings();
+    anchored.worldTransformValid = true;
+    controls.ReplaceSettings(anchored);
+    const float originalWorldX = controls.Settings().worldTransform[3];
+    controls.Apply(phonecast::vr::OverlayAction::MoveRight);
+    Check(controls.Settings().worldTransform[3] > originalWorldX,
+          "world controls move the absolute anchor");
+    controls.Apply(phonecast::vr::OverlayAction::LeftControllerLocked);
+    Check(controls.Settings().placementMode == phonecast::vr::PlacementMode::LeftControllerLocked,
+          "left controller mode is selectable");
+}
+
+void TestOverlaySettingsPersistence() {
+    const auto path = std::filesystem::temp_directory_path() / "phonecast-overlay-settings-test.ini";
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+    phonecast::vr::OverlaySettingsStore store(path);
+    phonecast::vr::OverlaySettings saved;
+    saved.placementMode = phonecast::vr::PlacementMode::WorldLocked;
+    saved.worldTransformValid = true;
+    saved.worldTransform[3] = 2.25F;
+    saved.widthMeters = 0.9F;
+    std::string error;
+    Check(store.Save(saved, error), "overlay settings save");
+    phonecast::vr::OverlaySettings loaded;
+    bool found = false;
+    Check(store.Load(loaded, found, error) && found, "overlay settings load");
+    Check(loaded.placementMode == phonecast::vr::PlacementMode::WorldLocked &&
+              loaded.worldTransformValid && loaded.worldTransform[3] == 2.25F &&
+              loaded.widthMeters == 0.9F,
+          "overlay settings round trip");
+    std::filesystem::remove(path, ignored);
 }
 
 void TestReceiverLifecycle() {
@@ -183,6 +222,7 @@ int main() {
     TestGeneratedFrames();
     TestStreamProtocol();
     TestOverlayControls();
+    TestOverlaySettingsPersistence();
     TestReceiverLifecycle();
     if (failures == 0) std::cout << "All PhoneCast tests passed.\n";
     return failures == 0 ? 0 : 1;

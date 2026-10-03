@@ -4,6 +4,7 @@
 #include "phonecast/platform/windows/MfH264Decoder.h"
 #include "phonecast/platform/windows/TcpVideoServer.h"
 #include "phonecast/vr/overlay/OverlayController.h"
+#include "phonecast/vr/overlay/OverlaySettingsStore.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -12,6 +13,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -24,15 +26,25 @@ using phonecast::core::protocol::MessageType;
 using phonecast::vr::OverlayAction;
 
 void PrintUsage() {
-    std::cout << "Usage: phonecast-vr-stream-receiver --pair-code NNNNNN [--port N]\n\n"
+    std::cout << "Usage: phonecast-vr-stream-receiver --pair-code NNNNNN [--port N] [--settings PATH]\n\n"
               << "Global controls (hold Ctrl+Alt):\n"
               << "  P          Show/hide\n"
               << "  + / -      Scale up/down\n"
               << "  Arrows     Move overlay\n"
               << "  PageUp/Down  Move nearer/farther\n"
               << "  ] / [      Increase/decrease opacity\n"
+              << "  H / W      Head-locked / world-locked\n"
+              << "  L / R      Left/right-controller-locked\n"
               << "  Home       Reset appearance and position\n"
-              << "  End        Quit PhoneCast\n";
+              << "  End        Quit PhoneCast\n\n"
+              << "In VR, point at the overlay and hold trigger to grab it; release to world-lock it.\n";
+}
+
+std::filesystem::path DefaultSettingsPath() {
+    const char* localAppData = std::getenv("LOCALAPPDATA");
+    if (localAppData != nullptr && *localAppData != '\0')
+        return std::filesystem::path(localAppData) / "PhoneCastVR" / "overlay-settings.ini";
+    return "phonecast-overlay-settings.ini";
 }
 
 bool Pressed(int key) {
@@ -87,6 +99,8 @@ bool PollControl(OverlayAction& action, bool& quit) {
         {VK_UP, OverlayAction::MoveUp}, {VK_DOWN, OverlayAction::MoveDown},
         {VK_PRIOR, OverlayAction::DistanceNearer}, {VK_NEXT, OverlayAction::DistanceFarther},
         {VK_OEM_6, OverlayAction::OpacityUp}, {VK_OEM_4, OverlayAction::OpacityDown},
+        {'H', OverlayAction::HeadLocked}, {'W', OverlayAction::WorldLocked},
+        {'L', OverlayAction::LeftControllerLocked}, {'R', OverlayAction::RightControllerLocked},
         {VK_HOME, OverlayAction::Reset},
     };
     bool found = false;
@@ -104,6 +118,7 @@ bool PollControl(OverlayAction& action, bool& quit) {
 int main(int argc, char** argv) {
     std::string pairCode;
     std::uint16_t port = 49321;
+    std::filesystem::path settingsPath = DefaultSettingsPath();
     for (int index = 1; index < argc; ++index) {
         const std::string option = argv[index];
         if (option == "--help" || option == "-h") {
@@ -116,6 +131,7 @@ int main(int argc, char** argv) {
         }
         const std::string value = argv[++index];
         if (option == "--pair-code") pairCode = value;
+        else if (option == "--settings") settingsPath = value;
         else if (option == "--port") {
             try {
                 const unsigned long parsed = std::stoul(value);
@@ -138,11 +154,33 @@ int main(int argc, char** argv) {
 
     phonecast::core::ConsoleLogger logger;
     phonecast::platform::openvr::OpenVrOverlayRenderer renderer(logger, argv[0]);
-    phonecast::vr::OverlayController controls;
+    phonecast::vr::OverlaySettings initialSettings;
+    phonecast::vr::OverlaySettingsStore settingsStore(settingsPath);
+    bool settingsFound = false;
     std::string error;
+    if (!settingsStore.Load(initialSettings, settingsFound, error)) {
+        std::cerr << "Warning: " << error << " Defaults will be used.\n";
+        initialSettings = {};
+    } else if (settingsFound) {
+        std::cout << "Loaded overlay placement from " << settingsPath.string() << ".\n";
+    }
+    phonecast::vr::OverlayController controls;
+    controls.ReplaceSettings(initialSettings);
     if (!renderer.Start(controls.Settings(), error)) {
-        std::cerr << error << '\n';
-        return EXIT_FAILURE;
+        const auto mode = controls.Settings().placementMode;
+        const bool controllerMode =
+            mode == phonecast::vr::PlacementMode::LeftControllerLocked ||
+            mode == phonecast::vr::PlacementMode::RightControllerLocked;
+        if (!controllerMode) {
+            std::cerr << error << '\n';
+            return EXIT_FAILURE;
+        }
+        std::cerr << "Warning: " << error << " Falling back to head-locked placement.\n";
+        controls.Apply(OverlayAction::HeadLocked);
+        if (!renderer.Start(controls.Settings(), error)) {
+            std::cerr << error << '\n';
+            return EXIT_FAILURE;
+        }
     }
     const auto waitingFrame = MakeWaitingFrame();
     if (!renderer.SubmitFrame(waitingFrame, error)) {
@@ -185,16 +223,32 @@ int main(int argc, char** argv) {
         OverlayAction action{};
         bool quit = false;
         if (PollControl(action, quit)) {
+            const auto previousSettings = controls.Settings();
             controls.Apply(action);
             const auto displayedSettings = SettingsForStream(
                 controls.Settings(), streamWidth, streamHeight);
             if (!renderer.ApplySettings(displayedSettings, error) ||
                 !renderer.SetVisible(controls.Visible(), error)) {
                 std::cerr << error << '\n';
-                running = false;
+                controls.ReplaceSettings(previousSettings);
+                std::string ignored;
+                renderer.ApplySettings(SettingsForStream(previousSettings, streamWidth, streamHeight), ignored);
+            } else if (!settingsStore.Save(controls.Settings(), error)) {
+                std::cerr << "Warning: " << error << '\n';
             }
         }
         if (quit) break;
+
+        phonecast::vr::OverlaySettings vrUpdate;
+        if (renderer.TakeSettingsUpdate(vrUpdate)) {
+            auto merged = controls.Settings();
+            merged.placementMode = vrUpdate.placementMode;
+            merged.worldTransform = vrUpdate.worldTransform;
+            merged.worldTransformValid = vrUpdate.worldTransformValid;
+            controls.ReplaceSettings(merged);
+            if (!settingsStore.Save(controls.Settings(), error))
+                std::cerr << "Warning: " << error << '\n';
+        }
 
         const bool connected = server.Connected();
         if (connected && !wasConnected) {

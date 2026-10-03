@@ -803,6 +803,20 @@ At this point the project has reached its **first true MVP**.
 
 # Sprint 5 — VR Placement System
 
+**Status:** `[x] Complete for the PC-hosted path — physically approved over a PC SteamVR game`
+
+- `[x]` Portable head/world/left-controller/right-controller placement model
+- `[x]` OpenVR tracked-device-relative and standing-space transforms
+- `[x]` World anchor creation at the current head-relative location
+- `[x]` Keyboard placement-mode switching and mode-aware adjustment
+- `[x]` Trigger-and-point direct VR grab/release placement path
+- `[x]` Versioned settings persistence with safe defaults and validation
+- `[x]` Windows clean build and all automated tests
+- `[x]` Physical validation that placement controls and controller-facing behavior function
+- `[!]` Controller-locked placement is functional but does not yet match the desired ergonomic pose; calibration is deferred to Sprint 5.1
+- `[x]` In-VR placement behavior validated while a PC SteamVR game runs
+- `[!]` The Windows-hosted overlay disappears in a headset-native standalone game; this is expected for the current PC compositor path and remains Sprint 11/native-backend work
+
 ## Objective
 
 Make the overlay feel native to VR.
@@ -859,6 +873,10 @@ Example:
 
 Allow left/right controller selection.
 
+### Physical Validation Result — 2026-10-02
+
+The user confirmed the Sprint 5 placement system works while playing a PC SteamVR game. When switching to a headset-native standalone game, the Windows-hosted overlay disappears. This does not block Sprint 5 because its implemented receiver targets the PC SteamVR compositor. It does not validate native-overlay coexistence with a standalone VR scene; that remains an explicit Steam Frame risk and Sprint 11 responsibility.
+
 ### Acceptance Criteria
 
 User can switch between:
@@ -871,6 +889,35 @@ User can switch between:
 Allow direct VR placement adjustment (for example, grab/move or equivalent controller controls) so repositioning does not require the PC keyboard.
 
 Settings persist between sessions.
+
+---
+
+# Sprint 5.1 — Controller Placement Calibration
+
+**Status:** `[ ] Not started — deferred placement polish`
+
+## Objective
+
+Make controller-locked placement configurable and comfortable rather than enforcing one orientation policy.
+
+Implement and physically tune:
+
+- independent left- and right-controller offsets;
+- configurable distance, height, lateral position, tilt, yaw, and scale;
+- selectable orientation behavior, including controller-relative, face-the-user, world-upright billboard, and a practical wrist-style pose;
+- an in-headset calibration flow with live adjustment and reset;
+- per-hand persisted calibration profiles;
+- stable behavior while the controller rotates, moves, or temporarily loses tracking.
+
+Do not guess a universal pose. Validate the options in-headset and choose defaults from physical testing. The current world-upright face-the-user implementation remains the temporary functional behavior until this sprint.
+
+### Acceptance Criteria
+
+- User can configure a comfortable pose for either hand without editing files or using a PC keyboard.
+- Left and right controller settings persist independently.
+- At least controller-relative and face-the-user orientation modes are available.
+- The overlay does not visibly flip, roll, or jitter during ordinary controller movement.
+- Defaults are physically approved in-headset.
 
 ---
 

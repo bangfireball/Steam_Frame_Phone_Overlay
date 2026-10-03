@@ -1,4 +1,7 @@
-add_library(phonecast-vr src/OverlayController.cpp)
+add_library(phonecast-vr
+    src/OverlayController.cpp
+    src/OverlaySettingsStore.cpp
+)
 target_include_directories(phonecast-vr PUBLIC include)
 target_link_libraries(phonecast-vr PUBLIC phonecast-core)
 target_compile_features(phonecast-vr PUBLIC cxx_std_17)

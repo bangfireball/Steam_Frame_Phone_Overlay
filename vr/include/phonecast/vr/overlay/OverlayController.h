@@ -16,6 +16,10 @@ enum class OverlayAction {
     DistanceFarther,
     OpacityUp,
     OpacityDown,
+    HeadLocked,
+    WorldLocked,
+    LeftControllerLocked,
+    RightControllerLocked,
     Reset
 };
 
@@ -24,6 +28,7 @@ public:
     explicit OverlayController(OverlaySettings initial = {});
 
     void Apply(OverlayAction action) noexcept;
+    void ReplaceSettings(const OverlaySettings& settings) noexcept { settings_ = settings; }
     [[nodiscard]] const OverlaySettings& Settings() const noexcept { return settings_; }
     [[nodiscard]] bool Visible() const noexcept { return visible_; }
 

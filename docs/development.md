@@ -38,7 +38,11 @@ Sprint 4 OpenVR streaming receiver (start SteamVR first):
 .\out\build\windows-x64\bin\phonecast-vr-stream-receiver.exe --pair-code 123456
 ```
 
-The VR receiver uses global controls while **Ctrl+Alt** is held: `P` toggles visibility, `+/-` changes scale, arrows move, `Page Up/Down` changes distance, `]/[` changes opacity, `Home` resets, and `End` quits.
+The VR receiver uses global controls while **Ctrl+Alt** is held: `P` toggles visibility, `+/-` changes scale, arrows move, `Page Up/Down` changes distance, `]/[` changes opacity, `H/W` selects head/world lock, `L/R` selects left/right-controller lock, `Home` resets, and `End` quits. Point a SteamVR controller laser at the overlay and hold trigger to grab it directly; releasing creates a world-locked anchor at that pose.
+
+Overlay appearance and placement are saved by default to `%LOCALAPPDATA%\PhoneCastVR\overlay-settings.ini`. Use `--settings PATH` to select a different file. Selecting world lock snapshots the panel's current position into standing space. Selecting a controller requires that role to be available; an unavailable controller leaves the previous placement active. Sprint 5's placement behavior was physically approved over a PC SteamVR game on 2026-10-02. Controller ergonomics remain Sprint 5.1 polish.
+
+The Windows receiver's overlay disappears when the user switches to a headset-native standalone game. That game is rendered by the headset's native compositor rather than the PC SteamVR compositor hosting this process, so this is expected for the current backend and does not block the PC-hosted Sprint 5 milestone. Native coexistence with a standalone VR scene still requires the Steam Frame ARM64 backend and validation tracked for Sprint 11.
 
 The Android sender connects to the PC's LAN IPv4 address on TCP port `49321`. Windows Firewall must permit inbound private-network TCP traffic for the receiver. The pairing code must contain exactly six digits. The current protocol is not encrypted; use only a trusted development LAN.
 

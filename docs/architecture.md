@@ -91,7 +91,11 @@ The desktop and VR streaming executables share `TcpVideoServer` and `MfH264Decod
 
 The D3D11 device must be created on the DXGI adapter returned by OpenVR's `GetDXGIOutputInfo`. Using Windows' default adapter caused successful API calls but an invisible overlay on the multi-GPU validation PC. Each `UpdateSubresource` is followed by `ID3D11DeviceContext::Flush`; without that flush, the generated animation advanced only about once every five seconds through VRLink. With both corrections, the generated animation was visibly smooth and the physical Android screen appeared in-headset.
 
-`OverlayController` contains platform-independent, bounded changes for visibility, width, HMD-relative X/Y offset, distance, opacity, and reset. The Windows executable maps global Ctrl+Alt key combinations to those actions. World-locked and controller-locked modes remain Sprint 5 work.
+`OverlayController` contains platform-independent, bounded changes for visibility, width, X/Y offset, distance, opacity, placement mode, and reset. Placement supports head-, standing-world-, left-controller-, and right-controller-locked transforms. The Windows executable maps global Ctrl+Alt key combinations to those actions.
+
+For world placement, the OpenVR backend snapshots the current HMD-relative panel into SteamVR standing space, so switching modes does not move the panel to the room origin. Controller modes currently use role-based tracked-device positions with a short controller-local distance. Their panel orientation is recomputed against the HMD pose so the screen stays upright and faces the user instead of inheriting the controller's pitch/roll. Physical testing over a PC SteamVR game confirmed this functions, but it is not the desired final ergonomic pose. Sprint 5.1 therefore defers configurable per-hand offsets, tilt/yaw, scale, and selectable controller-relative/billboard/wrist-style orientation behavior. The Windows-hosted overlay disappears when a headset-native standalone game takes over; this is a compositor/backend boundary rather than a placement-model failure and remains native Sprint 11 work. OpenVR mouse input also permits a controller laser trigger to grab the visible panel; release converts its current pose to a world anchor. Renderer-originated placement updates flow back through `IOverlayRenderer::TakeSettingsUpdate` without exposing OpenVR types.
+
+`OverlaySettingsStore` persists the portable placement and appearance model in a versioned text file. The stream receiver stores it under `%LOCALAPPDATA%\PhoneCastVR` by default and accepts `--settings` for an explicit path. Stream aspect-ratio adjustment remains presentation-only and is not written over the user's base width.
 
 Media Foundation may report an aligned coded width that exceeds the phone's visible width. The decoder now allocates using coded dimensions while converting and exposing only the original visible dimensions. This is intended to remove the previously observed right-edge green padding and requires physical revalidation.
 
@@ -99,4 +103,4 @@ The current path still performs decoder NV12 → CPU RGBA → D3D11 upload. Dire
 
 ## Deferred work
 
-Encrypted pairing, automatic discovery, remote control, placement modes, and native decoder-to-GPU surface sharing remain deferred. The custom TCP transport is subject to head-of-line blocking and must be measured on real Wi-Fi before it is treated as a long-term choice.
+Encrypted pairing, automatic discovery, remote control, Sprint 5.1 controller-placement calibration, standalone native-overlay validation, and native decoder-to-GPU surface sharing remain deferred. The custom TCP transport is subject to head-of-line blocking and must be measured on real Wi-Fi before it is treated as a long-term choice.

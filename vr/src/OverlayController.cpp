@@ -20,21 +20,57 @@ void OverlayController::Apply(OverlayAction action) noexcept {
         case OverlayAction::ScaleDown:
             settings_.widthMeters = Clamp(settings_.widthMeters - 0.05F, 0.1F, 5.0F); break;
         case OverlayAction::MoveLeft:
-            settings_.offsetXMeters = Clamp(settings_.offsetXMeters - 0.05F, -3.0F, 3.0F); break;
+            if (settings_.placementMode == PlacementMode::WorldLocked && settings_.worldTransformValid)
+                settings_.worldTransform[3] -= 0.05F;
+            else settings_.offsetXMeters = Clamp(settings_.offsetXMeters - 0.05F, -3.0F, 3.0F);
+            break;
         case OverlayAction::MoveRight:
-            settings_.offsetXMeters = Clamp(settings_.offsetXMeters + 0.05F, -3.0F, 3.0F); break;
+            if (settings_.placementMode == PlacementMode::WorldLocked && settings_.worldTransformValid)
+                settings_.worldTransform[3] += 0.05F;
+            else settings_.offsetXMeters = Clamp(settings_.offsetXMeters + 0.05F, -3.0F, 3.0F);
+            break;
         case OverlayAction::MoveUp:
-            settings_.offsetYMeters = Clamp(settings_.offsetYMeters + 0.05F, -3.0F, 3.0F); break;
+            if (settings_.placementMode == PlacementMode::WorldLocked && settings_.worldTransformValid)
+                settings_.worldTransform[7] += 0.05F;
+            else settings_.offsetYMeters = Clamp(settings_.offsetYMeters + 0.05F, -3.0F, 3.0F);
+            break;
         case OverlayAction::MoveDown:
-            settings_.offsetYMeters = Clamp(settings_.offsetYMeters - 0.05F, -3.0F, 3.0F); break;
+            if (settings_.placementMode == PlacementMode::WorldLocked && settings_.worldTransformValid)
+                settings_.worldTransform[7] -= 0.05F;
+            else settings_.offsetYMeters = Clamp(settings_.offsetYMeters - 0.05F, -3.0F, 3.0F);
+            break;
         case OverlayAction::DistanceNearer:
-            settings_.distanceMeters = Clamp(settings_.distanceMeters - 0.05F, 0.2F, 10.0F); break;
+            if (settings_.placementMode == PlacementMode::WorldLocked && settings_.worldTransformValid)
+                settings_.worldTransform[11] += 0.05F;
+            else if (settings_.placementMode == PlacementMode::LeftControllerLocked ||
+                     settings_.placementMode == PlacementMode::RightControllerLocked)
+                settings_.controllerDistanceMeters = Clamp(
+                    settings_.controllerDistanceMeters - 0.02F, 0.05F, 2.0F);
+            else settings_.distanceMeters = Clamp(settings_.distanceMeters - 0.05F, 0.2F, 10.0F);
+            break;
         case OverlayAction::DistanceFarther:
-            settings_.distanceMeters = Clamp(settings_.distanceMeters + 0.05F, 0.2F, 10.0F); break;
+            if (settings_.placementMode == PlacementMode::WorldLocked && settings_.worldTransformValid)
+                settings_.worldTransform[11] -= 0.05F;
+            else if (settings_.placementMode == PlacementMode::LeftControllerLocked ||
+                     settings_.placementMode == PlacementMode::RightControllerLocked)
+                settings_.controllerDistanceMeters = Clamp(
+                    settings_.controllerDistanceMeters + 0.02F, 0.05F, 2.0F);
+            else settings_.distanceMeters = Clamp(settings_.distanceMeters + 0.05F, 0.2F, 10.0F);
+            break;
         case OverlayAction::OpacityUp:
             settings_.alpha = Clamp(settings_.alpha + 0.05F, 0.0F, 1.0F); break;
         case OverlayAction::OpacityDown:
             settings_.alpha = Clamp(settings_.alpha - 0.05F, 0.0F, 1.0F); break;
+        case OverlayAction::HeadLocked:
+            settings_.placementMode = PlacementMode::HeadLocked; break;
+        case OverlayAction::WorldLocked:
+            settings_.placementMode = PlacementMode::WorldLocked;
+            settings_.worldTransformValid = false;
+            break;
+        case OverlayAction::LeftControllerLocked:
+            settings_.placementMode = PlacementMode::LeftControllerLocked; break;
+        case OverlayAction::RightControllerLocked:
+            settings_.placementMode = PlacementMode::RightControllerLocked; break;
         case OverlayAction::Reset:
             settings_ = initial_;
             visible_ = true;

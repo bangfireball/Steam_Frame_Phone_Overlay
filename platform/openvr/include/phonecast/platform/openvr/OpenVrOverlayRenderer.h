@@ -21,6 +21,7 @@ public:
     bool ApplySettings(const vr::OverlaySettings& settings, std::string& error) override;
     bool SetVisible(bool visible, std::string& error) override;
     bool PumpEvents() override;
+    bool TakeSettingsUpdate(vr::OverlaySettings& settings) override;
     void Stop() noexcept override;
 
 private:
