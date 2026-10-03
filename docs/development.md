@@ -18,6 +18,23 @@ cmake --build --preset windows-x64
 ctest --test-dir out/build/windows-x64 --output-on-failure
 ```
 
+### Coding-harness Windows CMake note
+
+The coding harness launches `bash`, where `cmake` is not on `PATH`, even though Windows CMake is installed at `C:\Program Files\CMake\bin`. Do not treat `bash: cmake: command not found` as a missing project prerequisite and do not guess another generator. Invoke the Windows tools through PowerShell:
+
+```bash
+powershell.exe -NoProfile -Command '& "C:\Program Files\CMake\bin\cmake.exe" --preset windows-x64'
+powershell.exe -NoProfile -Command '& "C:\Program Files\CMake\bin\cmake.exe" --build --preset windows-x64'
+```
+
+The preset uses the WinLibs MinGW compiler. When `ctest` is launched from the harness, another MinGW runtime earlier on `PATH` can make `phonecast-tests.exe` exit with Windows status `0xc0000139` (`STATUS_ENTRYPOINT_NOT_FOUND`). This is a runtime-DLL path problem, not a test failure. Prepend the exact compiler runtime directory recorded in `out/build/windows-x64/CMakeCache.txt` before running tests. On the current development machine:
+
+```bash
+powershell.exe -NoProfile -Command '$mingw="C:\Users\bangf\AppData\Local\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin"; $env:PATH="$mingw;$env:PATH"; Set-Location "C:\Projects\vr_mobile_overlay"; & "C:\Program Files\CMake\bin\ctest.exe" --test-dir out/build/windows-x64 --output-on-failure; exit $LASTEXITCODE'
+```
+
+Keep the outer Bash argument single-quoted so Bash does not expand PowerShell variables such as `$LASTEXITCODE`. If the compiler package changes, read `CMAKE_CXX_COMPILER` from `CMakeCache.txt` and use that compiler's adjacent `bin` directory rather than copying a stale path.
+
 Run SteamVR, then:
 
 ```powershell
