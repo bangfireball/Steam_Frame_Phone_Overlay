@@ -569,7 +569,7 @@ Prioritize latency and reliability.
 
 # Sprint 3 — Phone → PC Streaming
 
-**Status:** `[~] In progress — end-to-end picture and responsive streaming validated; landscape remains unresolved`
+**Status:** `[x] Complete — responsive Android-to-PC streaming, reconnection, and rotation physically validated`
 
 - `[x]` Transport alternatives researched and decision documented
 - `[x]` Versioned, bounded binary framing protocol
@@ -583,7 +583,7 @@ Prioritize latency and reliability.
 - `[x]` Physical Android-to-PC picture validation
 - `[x]` Smooth LAN streaming physically validated with dynamic content, including YouTube playback in VR
 - `[x]` Receiver restart/reconnection validation
-- `[~]` Orientation validation — portrait works end to end; landscape currently fails
+- `[x]` Orientation validation — portrait-to-landscape and landscape-to-portrait transitions work end to end
 - `[x]` Perceived latency physically accepted after enabling Media Foundation low-latency mode; touch-to-display was reported as near-instant and under one second, including isolated updates on static content (quantitative glass-to-glass measurement remains pending)
 - `[x]` Right-edge green bar fixed by separating coded and visible decoder dimensions; physically confirmed in Sprint 4
 - `[!]` Security limitation: pairing gates the stream, but Sprint 3 transport is not encrypted
@@ -653,12 +653,12 @@ docs/protocol.md
 
 # Sprint 4 — Phone Screen in VR
 
-**Status:** `[~] In progress — responsive visual MVP path approved over a VR game; landscape blocks completion`
+**Status:** `[x] Complete — responsive visual MVP approved over a VR game in portrait and landscape`
 
 - `[x]` Shared paired TCP video server used by desktop and VR receivers
 - `[x]` Windows Media Foundation decoder connected to the OpenVR overlay
 - `[x]` Reusable D3D11 texture submission through `SetOverlayTexture` on Windows
-- `[~]` Aspect-preserving dimension updates implemented; portrait works but landscape fails physically
+- `[x]` Aspect-preserving dimension updates physically validated in portrait and landscape; overall perceived scale remains consistent across rotation
 - `[x]` Global show/hide, scale, distance, opacity, move, and reset controls
 - `[x]` Decoder visible-versus-coded dimension handling removes the green edge
 - `[x]` Windows clean build, automated tests, and generated-texture OpenVR runtime test
@@ -666,7 +666,7 @@ docs/protocol.md
 - `[x]` D3D11 overlay uses SteamVR's DXGI adapter and explicitly flushes updates; generated animation is visually smooth
 - `[x]` Phone overlay remains visible over a running VR game
 - `[x]` Physical validation of PC keyboard overlay controls
-- `[~]` Orientation validation: portrait works; landscape currently fails
+- `[x]` Orientation validation: repeated portrait/landscape transitions work and retain comparable physical scale
 - `[x]` Physical validation confirms the right-edge green bar is fixed
 - `[x]` Dynamic and static content are responsive after the decoder low-latency fix; YouTube playback is watchable and no multi-second stalls were reported in the latest physical approval test
 - `[x]` Initial overlay appearance physically reported as near-instant after the decoder low-latency fix
@@ -692,13 +692,13 @@ Physically confirmed on Windows PC → VRLink → Steam Frame:
 - dynamic phone content can sustain approximately 30 received/decoded FPS with no receiver drops;
 - the latest 590 × 1280 stream reduced decode time from roughly 5–6 ms to roughly 2.5–3 ms and reduced typical bitrate to roughly 1–2.6 Mbps.
 
-Current blockers, in priority order:
+Historical blockers at this handoff (subsequently resolved unless noted):
 
-1. Eliminate the remaining approximately 2–5+ second action-to-visible latency.
-2. Eliminate multi-second sender stalls where the TCP connection remains healthy but the receiver gets zero video frames.
-3. Make first phone-frame startup consistently sub-second; recent runs ranged from approximately 3.7 to 17.6 seconds.
-4. Fix landscape reconfiguration.
-5. Record quantitative glass-to-glass latency after sender cadence is reliable.
+1. The approximately 2–5+ second action-to-visible latency was resolved by enabling Media Foundation low-latency mode.
+2. The apparent multi-second sender stalls were sparse static-screen updates held by decoder look-ahead, not a demonstrated sender failure.
+3. First-frame startup is now physically reported as near-instant; quantitative measurement remains deferred to Sprint 10.
+4. Landscape reconfiguration and consistent rotation scale are physically validated.
+5. Quantitative glass-to-glass latency remains deferred to Sprint 10.
 
 Most important evidence:
 
@@ -720,16 +720,26 @@ Most important evidence:
 - `[x]` Full Windows build and all nine CTest tests pass in `out/build/windows-x64-latency`. The original build's VR executable was locked by the running receiver, which was left undisturbed.
 - `[x]` Restarted the fixed VR receiver in the physical console session; the user retested and reported “this is perfect. very snappy.” This confirms a substantial perceived responsiveness improvement in the phone-to-VR path.
 - `[x]` Follow-up VR validation covered startup, isolated/static updates, and sustained dynamic content. The user reported near-instant startup, touch-to-display latency under one second and near-instant even for static content, and watchable YouTube playback, then explicitly approved the result.
-- `[ ]` Quantitatively measure startup and glass-to-glass latency during the performance pass; current timing is a user estimate rather than an instrumented measurement. Landscape remains unverified.
+- `[ ]` Quantitatively measure startup and glass-to-glass latency during the performance pass; current timing is a user estimate rather than an instrumented measurement.
+- `[x]` Repeated portrait/landscape transitions physically validated; landscape is responsive and its overall scale matches portrait.
 
 The prior inference that decoder buffering was ruled out was incorrect. Milliseconds spent inside `Submit` measure work, not how long a picture waits for future input. Sparse screen updates can turn a small decoder look-ahead into seconds of visible delay. The reproduced fix is now user-approved across static and dynamic content; replacing or further instrumenting Android's capture path is not justified without new evidence of stalls.
 
+### Sprint 4 completion validation — 2026-10-02
+
+- The user physically approved responsive static and dynamic content, including watchable YouTube playback.
+- Startup was reported as near-instant and touch-to-display response as under one second; instrumented measurement remains Sprint 10 work.
+- Portrait-to-landscape and landscape-to-portrait transitions work repeatedly.
+- Landscape width is adjusted so the phone retains approximately the same overall/diagonal scale as portrait.
+- Locking the Android device may show black briefly and ends or invalidates screen projection. On Android 15 QPR1 and newer, Android explicitly stops MediaProjection when the screen locks as a privacy measure. A stopped projection cannot be resumed; after unlocking, the user must start a new capture session and grant consent as required. PhoneCast must not attempt to bypass lock-screen capture restrictions.
+- Primary Android references: [Media projection — status bar chip and auto stop](https://developer.android.com/media/grow/media-projection#status_bar_chip_auto_stop), [Android 15 behavior changes](https://developer.android.com/about/versions/15/behavior-changes-all#media-projection-status-bar-chip), and [`MediaProjection.Callback`](https://developer.android.com/reference/android/media/projection/MediaProjection.Callback).
+
 Recommended next work:
 
-1. Fix landscape reconfiguration and physically verify portrait-to-landscape and landscape-to-portrait transitions.
-2. Record instrumented startup, sustained FPS, and glass-to-glass latency during the performance pass; the current under-one-second result is qualitative.
-3. Retest the desktop preview separately only if needed to isolate a future regression.
-4. Add sender telemetry or investigate a controlled Android capture path only if multi-second stalls recur.
+1. Begin Sprint 5 with a small placement-model design covering world-, head-, left-controller-, and right-controller-locked modes.
+2. Implement and test world/head placement switching before controller attachment or grab interaction.
+3. Preserve the existing head-relative behavior as the default and add settings persistence.
+4. Leave instrumented startup, sustained FPS, and glass-to-glass latency for Sprint 10 unless performance regresses.
 
 ## Objective
 
