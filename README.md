@@ -15,7 +15,7 @@ Moving to another development machine or starting a fresh Pi agent? Follow [`doc
 
 ## Sprint 4 VR streaming validation
 
-For normal Windows use, double-click **`Start PhoneCast VR.cmd`** from the repository root. It refuses to run through Remote Desktop, starts SteamVR when necessary, launches the receiver with pairing code `123456` on port `49321`, and writes logs under `out/logs`. Double-click **`Stop PhoneCast VR.cmd`** to stop it.
+For normal Windows use, double-click **`Start PhoneCast VR.cmd`** from the repository root. From the physical console it starts SteamVR when necessary and launches the receiver with pairing code `123456` on port `49321`. When run through Remote Desktop, it stops the RDP-bound Steam and VR processes, disconnects RDP, transfers that Windows session back to the physical console, waits for the physical display stack to settle, and restarts Steam, SteamVR, and PhoneCast there. Recovery and receiver logs are written under `out/logs`. Reconnecting through RDP can disturb VRLink again, so run the launcher before each new VR test. Double-click **`Stop PhoneCast VR.cmd`** to stop the receiver.
 
 The equivalent manual command is:
 

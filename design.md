@@ -672,7 +672,7 @@ docs/protocol.md
 - `[x]` Initial overlay appearance physically reported as near-instant after the decoder low-latency fix
 - `[~]` Latency physically accepted as near-instant and under one second from touch to display; record quantitative sustained FPS and glass-to-glass measurements during the later performance pass
 - `[x]` Overlay lifecycle ignores unrelated `VREvent_ProcessQuit` events during VR scene transitions
-- `[!]` Test-environment hazard: starting SteamVR under Windows RDP can break VRLink D3D11 texture creation and produce a gray stream; test only from the physical console session (documented in `docs/development.md`)
+- `[!]` Test-environment hazard: starting SteamVR under Windows RDP can break VRLink D3D11 texture creation and produce a gray stream. Automated console transfer and startup are physically observed, but VRLink still freezes before a later logged RDP reconnection; sustained recovery is not validated. SteamVR-only and visible/head-locked PhoneCast diagnostic launchers with session monitoring are ready for A/B testing (see `docs/development.md` and `docs/rdp-vrlink-recovery.md`).
 
 ## Session Handoff Snapshot — 2026-10-02
 

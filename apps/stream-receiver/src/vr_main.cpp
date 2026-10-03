@@ -28,7 +28,7 @@ using phonecast::core::protocol::MessageType;
 using phonecast::vr::OverlayAction;
 
 void PrintUsage() {
-    std::cout << "Usage: phonecast-vr-stream-receiver --pair-code NNNNNN [--port N] [--settings PATH]\n\n"
+    std::cout << "Usage: phonecast-vr-stream-receiver --pair-code NNNNNN [--port N] [--settings PATH] [--diagnostic-visible]\n\n"
               << "Global controls (hold Ctrl+Alt):\n"
               << "  P          Quick show/hide expanded view\n"
               << "  G          Cycle Hidden/Glance/Expanded/Pinned\n"
@@ -136,12 +136,17 @@ bool PollControl(OverlayAction& action, bool& glanceCycle, bool& quickToggle,
 int main(int argc, char** argv) {
     std::string pairCode;
     std::uint16_t port = 49321;
+    bool diagnosticVisible = false;
     std::filesystem::path settingsPath = DefaultSettingsPath();
     for (int index = 1; index < argc; ++index) {
         const std::string option = argv[index];
         if (option == "--help" || option == "-h") {
             PrintUsage();
             return EXIT_SUCCESS;
+        }
+        if (option == "--diagnostic-visible") {
+            diagnosticVisible = true;
+            continue;
         }
         if (index + 1 >= argc) {
             PrintUsage();
@@ -176,7 +181,9 @@ int main(int argc, char** argv) {
     phonecast::vr::OverlaySettingsStore settingsStore(settingsPath);
     bool settingsFound = false;
     std::string error;
-    if (!settingsStore.Load(initialSettings, settingsFound, error)) {
+    if (diagnosticVisible) {
+        std::cout << "[diagnostic] Visible head-locked startup with default appearance; saved settings are not read or written.\n";
+    } else if (!settingsStore.Load(initialSettings, settingsFound, error)) {
         std::cerr << "Warning: " << error << " Defaults will be used.\n";
         initialSettings = {};
     } else if (settingsFound) {
@@ -185,6 +192,7 @@ int main(int argc, char** argv) {
     phonecast::vr::OverlayController controls;
     controls.ReplaceSettings(initialSettings);
     phonecast::vr::GlanceController glance(initialSettings.glancePreviewScale);
+    if (diagnosticVisible) glance.ShowPinned();
     phonecast::vr::SettingsMenuController settingsMenu;
     if (!renderer.Start(controls.Settings(), error)) {
         const auto mode = controls.Settings().placementMode;
@@ -202,7 +210,7 @@ int main(int argc, char** argv) {
             return EXIT_FAILURE;
         }
     }
-    if (!renderer.SetVisible(false, error)) {
+    if (!renderer.SetVisible(glance.Visible(), error)) {
         std::cerr << error << '\n';
         renderer.Stop();
         return EXIT_FAILURE;
@@ -273,6 +281,7 @@ int main(int argc, char** argv) {
             if (glanceCycle) glance.Cycle(glance.Hand());
             if (quickToggle) glance.ToggleExpanded();
             if (controllerCycle) {
+                logger.Log(phonecast::core::LogLevel::Info, "input", "Controller glance click received.");
                 glance.Cycle(glanceInput == phonecast::vr::GlanceInput::LeftController
                     ? phonecast::vr::GlanceHand::Left : phonecast::vr::GlanceHand::Right);
             }
@@ -329,7 +338,7 @@ int main(int argc, char** argv) {
                 renderer.ApplySettings(SettingsForStream(previousSettings, streamWidth, streamHeight), ignored);
                 renderer.SetVisible(false, ignored);
             } else {
-                if (saveSettings && !settingsStore.Save(controls.Settings(), error))
+                if (saveSettings && !diagnosticVisible && !settingsStore.Save(controls.Settings(), error))
                     std::cerr << "Warning: " << error << '\n';
                 if (openSettingsRequested &&
                     !renderer.ShowSettingsMenu(settingsMenu.View(), error)) {
@@ -361,7 +370,7 @@ int main(int argc, char** argv) {
             }
 
             if (result == phonecast::vr::SettingsMenuResult::Applied) {
-                if (!settingsStore.Save(controls.Settings(), error))
+                if (!diagnosticVisible && !settingsStore.Save(controls.Settings(), error))
                     std::cerr << "Warning: " << error << '\n';
                 if (!renderer.HideSettingsMenu(error)) std::cerr << error << '\n';
             } else if (result == phonecast::vr::SettingsMenuResult::Cancelled) {
@@ -385,7 +394,7 @@ int main(int argc, char** argv) {
                 merged.worldTransform = vrUpdate.worldTransform;
                 merged.worldTransformValid = vrUpdate.worldTransformValid;
                 controls.ReplaceSettings(merged);
-                if (!settingsStore.Save(controls.Settings(), error))
+                if (!diagnosticVisible && !settingsStore.Save(controls.Settings(), error))
                     std::cerr << "Warning: " << error << '\n';
             }
         }

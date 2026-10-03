@@ -55,7 +55,7 @@ Sprint 4 OpenVR streaming receiver (start SteamVR first):
 .\out\build\windows-x64\bin\phonecast-vr-stream-receiver.exe --pair-code 123456
 ```
 
-For routine physical-console use, double-click `Start PhoneCast VR.cmd` in the repository root. It checks for an existing receiver, starts SteamVR if needed, launches the canonical `out/build/windows-x64` receiver on port `49321` with pairing code `123456`, and redirects logs to `out/logs`. It intentionally refuses to run in an RDP session because of the documented VRLink/D3D11 failure mode. Use `Stop PhoneCast VR.cmd` to stop the receiver.
+For routine use, double-click `Start PhoneCast VR.cmd` in the repository root. At the physical console it checks process session ownership, starts SteamVR if needed, launches the canonical `out/build/windows-x64` receiver on port `49321` with pairing code `123456`, and redirects logs to `out/logs`. If launched through RDP, it stops PhoneCast, SteamVR, and the Steam client; starts a detached recovery helper; requests an elevated `tscon` transfer of the current Windows session to the physical console; waits ten seconds for the physical display stack to settle; and restarts Steam, SteamVR, and PhoneCast only after the helper confirms the console attachment. The RDP connection closes intentionally. Recovery logs are written as `out/logs/console-recovery-*.log`. Use `Stop PhoneCast VR.cmd` to stop the receiver.
 
 The VR receiver starts in Sprint 6's **Hidden** state while continuing to decode video for immediate reveal. Short-click either thumbstick to cycle `Hidden -> Glance -> Expanded -> Pinned -> Hidden`; Glance uses a small preview on the initiating hand, while Expanded and Pinned restore normal placement. Hold either thumbstick click for the configurable 0.6-second default to open the radial menu on that hand, release, point the stick toward an item, and click to select; left View/right Menu cancels it. The Settings wedge opens the transactional in-headset settings panel: up/down selects, left/right adjusts, stick click activates, and View/Menu goes back or cancels. `Ctrl+Alt+G` performs the state cycle, `Ctrl+Alt+P` quickly toggles Hidden/Expanded, and `Ctrl+Alt+S` opens settings as a development fallback. See `docs/glance-mode.md` for the complete behavior and physical-test checklist.
 
@@ -83,12 +83,12 @@ A physical Steam Frame/VRLink test on 2026-10-02 showed that starting or restart
 
 Closing the RDP window is insufficient if Steam or SteamVR remains in the disconnected RDP session. Before testing:
 
-1. run Steam and SteamVR in the physical Windows console session;
-2. verify `query session` reports the development user on `console` rather than `rdp-tcp`;
+1. run `Start PhoneCast VR.cmd`; when invoked through RDP, approve its Windows elevation prompt and expect RDP to disconnect;
+2. wait for the detached helper to transfer the session and restart SteamVR and PhoneCast at the physical console;
 3. reconnect or sleep/wake the Frame after correcting the Windows session;
 4. confirm an ordinary PC game streams before diagnosing PhoneCast.
 
-If the failure recurs, stop SteamVR, transfer/log into the physical console session, relaunch SteamVR there, reconnect or sleep/wake the Frame, and confirm ordinary game streaming first. Do not interpret overlay results obtained during the broken RDP/VRLink state as application results.
+You may reconnect through RDP between tests, but doing so can move the desktop away from the console and invalidate VRLink again. Run `Start PhoneCast VR.cmd` before each subsequent VR test; it repeats the stop, transfer, and clean restart. Do not interpret overlay results obtained during the broken RDP/VRLink state as application results. If recovery fails, inspect the newest `out/logs/console-recovery-*.stderr.log` and use `query session` to verify that the user session actually became `console`.
 
 The 2026-10-02 physical Sprint 4 test subsequently confirmed a visible Android screen in the headset. On the multi-GPU host, OpenVR D3D11 overlays were invisible until the renderer used the adapter returned by `GetDXGIOutputInfo`; updates advanced only about once per five seconds until the D3D11 context was explicitly flushed. The corrected generated animation was visually smooth before the phone stream was retested successfully.
 
@@ -109,6 +109,56 @@ Useful overlay receiver options:
 ```
 
 Use `--help` for ranges and defaults.
+
+### RDP / VRLink diagnostic comparison (2026-10-03)
+
+The paused investigation, evidence chronology, and future test matrix are recorded in [`docs/rdp-vrlink-recovery.md`](rdp-vrlink-recovery.md).
+
+Recovery has physically transferred the user to the console and started Steam,
+SteamVR, and PhoneCast, but sustained VRLink stability is **not validated**.
+The latest run began streaming around 14:15:35, requested video resets at
+14:15:49, and lost its connection before the logged RDP reconnect at 14:19:19.
+That reconnect therefore does not explain the initial freeze. Windows events do
+not establish whether a reconnect was manual or automatic. PhoneCast authenticated
+and submitted phone frames (first frames at 549 ms and 192 ms on two connections),
+but remained visually unconfirmed; its default Hidden startup and unconfirmed
+controller input must be isolated from the headset-stream fault.
+
+Two root-level diagnostic launchers use the same RDP recovery:
+
+1. `Test VR - No PhoneCast.cmd`: stops any existing PhoneCast receiver and starts
+   SteamVR only. Keep Android casting off and test ordinary PC streaming for at
+   least five minutes.
+2. `Test VR - Visible PhoneCast.cmd`: starts the diagnostic receiver with
+   `--diagnostic-visible`. It ignores saved appearance/placement, uses default
+   centered head-locked placement, and starts Pinned/visible with the waiting
+   texture before Android connects. No controller action is needed. Settings are
+   not read or written in this mode; controls can still change the live session.
+   First check the waiting panel, then cast from Android and check live video.
+
+Both tests record Windows session rows and process/session IDs every second for
+10 minutes in `out/logs/session-<mode>-<timestamp>.jsonl`. This is observational:
+no reconnect-blocking policy or automatic repair loop is installed. An RDP
+reconnect during startup aborts subsequent launches when detected; reconnecting
+later can still disturb a running VR session. Visible-mode receiver logs are
+separate timestamped `out/logs/visible-*.log` files. Note the approximate time of
+any freeze so it can be correlated with these records and SteamVR logs.
+
+The visible launcher uses `out/build/windows-x64-diagnostic` to avoid replacing
+the currently running canonical executable. Build with `cmake --preset
+windows-x64 -B out/build/windows-x64-diagnostic`, then `cmake --build
+out/build/windows-x64-diagnostic` (use the compiler/Ninja PATH guidance above).
+Normal `Start PhoneCast VR.cmd` behavior remains unchanged. A full diagnostic
+build and all 11 CTest tests passed; PowerShell syntax and the read-only session
+monitor smoke test passed. These do not validate headset visibility or stability.
+
+On the **RDP client computer**, disable automatic reconnect for the test. In
+classic `mstsc`, uncheck **Experience → Reconnect if the connection is dropped**,
+or set `autoreconnection enabled:i:0` in the saved `.rdp` connection. Close any
+retry dialog after recovery disconnects. No client settings have been changed by
+PhoneCast. See [Microsoft RDP properties](https://learn.microsoft.com/en-us/azure/virtual-desktop/rdp-properties).
+Save game progress before either test: recovery restarts Steam/SteamVR and may
+force their shutdown; console transfer can leave the physical desktop unlocked.
 
 ### Sparse-update latency regression (2026-10-02)
 

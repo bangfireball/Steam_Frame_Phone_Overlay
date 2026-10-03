@@ -71,4 +71,11 @@ if(BUILD_TESTING)
     add_test(NAME vr-stream-receiver-cli-help COMMAND phonecast-vr-stream-receiver --help)
     add_test(NAME stream-receiver-requires-pair-code COMMAND phonecast-stream-receiver)
     set_tests_properties(stream-receiver-requires-pair-code PROPERTIES WILL_FAIL TRUE)
+    add_test(NAME vr-diagnostic-cli-help
+        COMMAND phonecast-vr-stream-receiver --diagnostic-visible --help)
+    set_tests_properties(vr-diagnostic-cli-help PROPERTIES
+        PASS_REGULAR_EXPRESSION "diagnostic-visible")
+    add_test(NAME vr-diagnostic-requires-pair-code
+        COMMAND phonecast-vr-stream-receiver --diagnostic-visible)
+    set_tests_properties(vr-diagnostic-requires-pair-code PROPERTIES WILL_FAIL TRUE)
 endif()
