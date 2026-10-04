@@ -50,9 +50,12 @@ constexpr std::uint32_t kDashboardTextureHeight = 512;
 constexpr std::uint32_t kDashboardThumbnailSize = 256;
 constexpr int kDashboardColumns = 4;
 constexpr int kDashboardRows = 2;
-// The dashboard is the approved in-headset entry point. Keep the earlier pose
-// and thumbstick menu experiments dormant until product direction changes.
+// The dashboard is the approved in-headset entry point. Keep the earlier pose,
+// thumbstick-menu, and overlay-global input experiments dormant until product
+// direction changes. An active overlay-global set can suppress game bindings
+// even when PhoneCast ignores the resulting actions.
 constexpr bool kEnableExperimentalGestureControls = false;
+constexpr bool kEnableExperimentalOverlayGlobalInput = false;
 constexpr std::array<const char*, 9> kMenuLabels{
     "SHOW", "GLANCE", "PIN", "SETTINGS", "HEAD", "WORLD", "LEFT", "RIGHT", "CLOSE"};
 constexpr std::array<phonecast::vr::RadialMenuAction, 8> kMenuActions{
@@ -1450,7 +1453,13 @@ bool OpenVrOverlayRenderer::Start(const phonecast::vr::OverlaySettings& settings
     }
 
     impl_->RegisterManifest();
-    impl_->explicitInputReady = impl_->InitializeControllerInput();
+    if constexpr (kEnableExperimentalOverlayGlobalInput) {
+        impl_->explicitInputReady = impl_->InitializeControllerInput();
+    } else {
+        impl_->explicitInputReady = false;
+        impl_->logger.Log(core::LogLevel::Info, "openvr-input",
+                          "Overlay-global controller actions are disabled; use the PhoneCast dashboard.");
+    }
     impl_->overlayApi = vr::VROverlay();
     if (impl_->overlayApi == nullptr) {
         error = "OpenVR did not provide IVROverlay.";

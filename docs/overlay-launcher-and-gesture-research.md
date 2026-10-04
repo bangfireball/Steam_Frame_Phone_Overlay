@@ -11,7 +11,7 @@ PhoneCast should use a layered control strategy rather than treating the wrist g
 1. **Primary reliable entry point:** add a supported OpenVR **dashboard overlay tab** with a PhoneCast icon and large Show/Hide, Glance, Pin, Settings, and placement buttons.
 2. **Reliable in-scene interaction:** retain controller-laser/mouse interaction on visible PhoneCast overlays. Consider a small contextual toolbar/handle, but do not leave a permanent scene overlay enabled by default.
 3. **Convenience path:** improve the wrist gesture into a filtered, hysteretic, multi-stage recognizer. It should never be the sole recovery path.
-4. **Optional expert path:** keep SteamVR action bindings as opt-in shortcuts only. Overlay-global action priority is experimental, can consume a game's bound controls, and has not yet delivered commands in the physical PhoneCast test.
+4. **Optional expert path:** keep SteamVR action bindings dormant unless a future narrow, opt-in shortcut set is designed. Overlay-global action priority is experimental, can consume a game's bound controls, and is disabled in the supported PhoneCast configuration.
 5. **Do not target Steam Frame Quick Access injection:** no documented public API was found for placing a third-party button inside Valve's native Quick Access/Quick Settings area. The supported neighboring extension point is a dashboard overlay tab.
 
 The dashboard-tab prototype is implemented, and its icon, panel, and laser controls are physically approved on Windows/VRLink. It is now the supported in-headset entry point. Extended lifecycle testing will accumulate during normal use; native ARM64 behavior remains a separate validation item. Wrist-pose and thumbstick long-press menu gestures are disabled for now.
@@ -28,9 +28,9 @@ PhoneCast currently:
 - creates a best-effort dashboard main/thumbnail pair with `CreateDashboardOverlay` and a static PhoneCast launcher icon;
 - routes dashboard Show/Hide, Glance, Pin, Settings, and placement clicks through the same portable actions as the scene control grid;
 - enables mouse-style input and `VROverlayFlags_MakeOverlaysInteractiveIfVisible` for scene-overlay laser interaction;
-- ships explicit Frame Controller action bindings;
-- requests the experimental overlay-global action-set priority;
-- has physically loaded those bindings, but has not received controller button commands in the tested Steam Frame/VRLink setup;
+- retains explicit Frame Controller action bindings as dormant research assets;
+- does not initialize or submit the broad experimental overlay-global action set in the supported dashboard-only configuration;
+- previously loaded those bindings physically but did not receive controller button commands in the tested Steam Frame/VRLink setup;
 - retains the pose-only wrist recognizer as dormant experimental code, disabled at runtime.
 
 The current wrist detector is intentionally small, but primitive:

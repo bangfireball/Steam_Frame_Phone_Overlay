@@ -902,7 +902,7 @@ Settings persist between sessions.
 - `[x]` In-headset controller calibration controls with live adjustment and per-hand reset
 - `[x]` Tracking-loss behavior retains the last valid overlay transform and resumes on recovery
 - `[x]` Windows clean build and all automated tests
-- `[x]` Legacy `GetControllerState` polling replaced with explicit SteamVR Input actions and a Steam Frame controller binding; runtime accepted the action manifest and binding
+- `[x]` Explicit SteamVR Input and Steam Frame binding experiment completed; runtime accepted the assets, but the broad action set is now dormant and ordinary operation retains non-global compatibility polling
 - `[!]` Physical retest: the phone overlay was visible and stable and keyboard controls worked, but global SteamVR Input commands were not delivered reliably while another application owned focus
 - `[~]` Extended headset tuning of defaults, stability, and ergonomics is deferred to ongoing interaction time rather than blocking later functional sprints
 
@@ -953,6 +953,7 @@ The project owner closed Sprint 5.1 so functional work can continue. This record
 - `[x]` OpenVR dashboard adopted as the primary in-headset launcher and recovery path
 - `[!]` SteamVR Input actions did not reliably deliver controller commands while another application owned focus; overlay-global overrides are not required by the chosen dashboard path
 - `[x]` Wrist-pose gesture, progress indicator, and thumbstick long-press control grid disabled at runtime; dormant experimental code is retained only for possible future reconsideration
+- `[x]` Input-safety follow-up complete: ordinary dashboard-only operation no longer initializes or submits the broad overlay-global action set, so disabled gesture handlers cannot claim bound game-controller sources
 - `[x]` Controller-only settings navigation, live editing, explicit apply/cancel, and intentional reset without requiring the PC keyboard
 - `[x]` Settings changed in-headset persist through the portable settings model only when applied
 - `[ ]` Native ARM64 dashboard lifecycle and operation over a standalone VR scene remain to be physically validated
@@ -978,6 +979,8 @@ For the current product direction, the **OpenVR dashboard tab is the sole primar
 
 The wrist-pose gesture is disabled for now. Do not require experimental overlay-global SteamVR Input overrides, thumbstick shortcuts, or gesture calibration for ordinary use. The dormant gesture work may be revisited only if a future headset test establishes a clear need beyond the dashboard path.
 
+Disabling gesture handlers alone is not sufficient input isolation because OpenVR states that higher-priority bindings can disable lower-priority bindings using the same source. The OpenVR backend therefore no longer initializes or submits its broad overlay-global action set during ordinary dashboard-only use. The dormant action manifest and implementation may remain for controlled future research, but PhoneCast does not call `UpdateActionState` for that set in the supported configuration.
+
 Sprint 6 no longer blocks Sprint 7. Because this sprint is primarily UI and interaction work, its remaining manual validation will be accumulated during normal use while later functional interaction is implemented. Defects found during that use should be fixed as focused follow-up work; untested lifecycle or ergonomic behavior must remain recorded as unvalidated.
 
 ## In-Headset Settings
@@ -989,7 +992,7 @@ The first settings surface should cover functionality that already exists:
 - overlay visibility, scale, opacity, distance, and reset;
 - head-, world-, left-controller-, and right-controller placement;
 - independent left/right controller calibration and orientation behavior from Sprint 5.1;
-- Glance preview scale and the provisional radial-menu long-press threshold;
+- Glance preview scale; keep the dormant radial-menu long-press setting out of the active UI unless experimental shortcuts are intentionally restored;
 - concise connection and active-backend status where useful.
 
 Use a separate in-headset panel or menu layer rather than drawing settings into the streamed phone image. Keep its settings/state model platform-independent so the same UI behavior can be reused by the Steam Frame native backend. Platform renderers may implement the actual compositor surface.
@@ -1008,7 +1011,20 @@ Do not pull future performance presets, Android remote-control permissions, noti
 - Cancel restores the pre-edit values; reset requires an intentional action.
 - The panel is readable and does not unnecessarily obstruct central gameplay view.
 - The wrist-pose gesture and its progress indicator do not activate during ordinary use.
+- No overlay-global action set claims controller buttons, axes, grips, or triggers during ordinary dashboard-only use.
 - Native ARM64 dashboard lifecycle and standalone-VR-scene coexistence are recorded separately until physically tested.
+
+## Overlay shortcut research decision — 2026-10-03
+
+Research into [`KominoVR/frame-passthrough-shortcuts`](docs/frame-passthrough-shortcuts-research.md) establishes a useful but optional future path:
+
+- a native ARM64 `VRApplication_Overlay` can receive SteamVR Input shortcuts without rendering an overlay surface;
+- the demonstrated implementation uses `k_nActionSetOverlayGlobalPriorityMax` and narrow, user-remappable thumbstick-button bindings;
+- SteamVR's binding layer can recognize double-press and long-press gestures without application-side timing code;
+- even maximum public overlay-global priority does not override SteamVR dashboard input focus, so those shortcuts work only while the dashboard is closed;
+- action activity must be diagnosed with per-action `bActive`, binding-load failures, dashboard visibility, and backend/runtime information rather than manifest-load success alone.
+
+This does not change the current dashboard-first direction. If optional hotkeys are revisited, place them in a separate narrow action set, keep them opt-in, deactivate them while the dashboard is visible, avoid binding axes/grips/triggers unnecessarily, and test native Steam Frame separately from Windows/VRLink. Do not reactivate the existing broad action set as a shortcut.
 
 ---
 
@@ -1331,7 +1347,11 @@ Play normally
 
        ↓
 
-Raise wrist / press shortcut
+Open SteamVR dashboard
+
+       ↓
+
+Select PhoneCast Show / Glance / Pin
 
        ↓
 
@@ -1359,7 +1379,11 @@ Investigate:
 - reconnect;
 - startup behavior;
 - background operation;
-- Steam Frame application lifecycle.
+- Steam Frame application lifecycle;
+- OpenVR overlay autostart using `SetApplicationAutoLaunch`, verifying `GetApplicationAutoLaunch`, and starting a registered process with `LaunchDashboardOverlay` where appropriate;
+- executable-bit and manifest-path validation in native packaging.
+
+A third-party native Steam Frame utility demonstrates this autostart pattern, but PhoneCast must validate it with its own dashboard, networking, sleep/wake, and application transitions. Optional dashboard-closed hotkeys are not required for standalone UX.
 
 ---
 
