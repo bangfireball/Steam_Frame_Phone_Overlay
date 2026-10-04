@@ -253,6 +253,8 @@ int main(int argc, char** argv) {
     std::uint32_t streamHeight = 0;
     bool notificationShowing = false;
     std::chrono::steady_clock::time_point notificationDeadline{};
+    bool previousRemoteStatusKnown = false;
+    phonecast::core::protocol::RemoteControlStatus previousRemoteStatus{};
 
     while (running && renderer.PumpEvents()) {
         OverlayAction action{};
@@ -351,9 +353,9 @@ int main(int argc, char** argv) {
         }
         if (quit) break;
 
-        phonecast::vr::SettingsMenuCommand settingsCommand{};
-        if (settingsMenu.IsOpen() && renderer.TakeSettingsMenuInput(settingsCommand)) {
-            const auto result = settingsMenu.Handle(settingsCommand);
+        phonecast::vr::SettingsMenuInput settingsInput{};
+        if (settingsMenu.IsOpen() && renderer.TakeSettingsMenuInput(settingsInput)) {
+            const auto result = settingsMenu.Handle(settingsInput);
             if (result == phonecast::vr::SettingsMenuResult::Updated ||
                 result == phonecast::vr::SettingsMenuResult::Applied) {
                 controls.ReplaceSettings(settingsMenu.Draft());
@@ -383,7 +385,8 @@ int main(int argc, char** argv) {
             }
         }
 
-        if (renderer.TakeNotificationOpenRequest()) {
+        std::uint64_t notificationActionToken = 0;
+        if (renderer.TakeNotificationOpenRequest(notificationActionToken)) {
             glance.ShowExpanded();
             const auto displayed = SettingsForStream(
                 glance.PresentationSettings(controls.Settings()), streamWidth, streamHeight);
@@ -391,7 +394,20 @@ int main(int argc, char** argv) {
                 !renderer.SetVisible(controls.Visible(), error)) {
                 std::cerr << error << '\n';
             }
+            if (notificationActionToken == 0) {
+                std::cerr << "[notification] The source notification supplied no Android open action; "
+                             "showing the phone only.\n";
+            } else if (!server.SendNotificationOpen(notificationActionToken, error)) {
+                std::cerr << "[notification] " << error << '\n';
+            } else {
+                std::cout << "[notification] Sent the Android notification open action.\n";
+            }
             notificationShowing = false;
+        }
+
+        if (renderer.TakeHideRequest()) {
+            glance.Dismiss();
+            if (!renderer.SetVisible(false, error)) std::cerr << error << '\n';
         }
 
         phonecast::core::PointerEvent pointerEvent;
@@ -419,6 +435,27 @@ int main(int argc, char** argv) {
         }
 
         const bool connected = server.Connected();
+        const bool remoteStatusKnown = connected && server.RemoteControlStatusKnown();
+        const auto remoteStatus = server.RemoteControlStatus();
+        if (remoteStatusKnown != previousRemoteStatusKnown ||
+            remoteStatus.appEnabled != previousRemoteStatus.appEnabled ||
+            remoteStatus.accessibilityEnabled != previousRemoteStatus.accessibilityEnabled) {
+            renderer.SetRemoteControlStatus(remoteStatusKnown, remoteStatus.appEnabled,
+                                            remoteStatus.accessibilityEnabled);
+            if (remoteStatusKnown && !remoteStatus.Ready()) {
+                std::cerr << "[input] Warning: remote control is unavailable; "
+                          << (!remoteStatus.appEnabled && !remoteStatus.accessibilityEnabled
+                                  ? "enable both the Android app consent and Accessibility service."
+                              : !remoteStatus.appEnabled
+                                  ? "enable Allow remote control while casting in the Android app."
+                                  : "enable the PhoneCast Accessibility service on Android.")
+                          << '\n';
+            } else if (remoteStatusKnown) {
+                std::cout << "[input] Both Android remote-control gates are enabled.\n";
+            }
+            previousRemoteStatusKnown = remoteStatusKnown;
+            previousRemoteStatus = remoteStatus;
+        }
         if (connected && !wasConnected) {
             connectionStarted = std::chrono::steady_clock::now();
             configReported = false;

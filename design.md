@@ -1263,6 +1263,23 @@ Do not expose sensitive notification content unless explicitly enabled.
 
 ---
 
+## Post-Sprint UI and control feedback pass — complete and project-owner approved
+
+- `[x]` Headset settings terminology now matches Left Dock and Right Dock controls.
+- `[x]` Numeric headset settings provide interactive sliders while retaining precise `-` / `+` controls.
+- `[x]` The settings panel opens world-locked and has an independent controller-drag move handle.
+- `[x]` Settings and notification compositor surfaces use styled cards, visual hierarchy, and distinct actions rather than plain text blocks.
+- `[x]` Entering headset Notification settings shows a live representative card for placement and appearance preview; leaving the category removes it.
+- `[x]` Selecting a notification reveals the phone and invokes the original Android notification launch action when available.
+- `[x]` The phone footer includes a small lower-right close control alongside Android Back.
+- `[x]` Android launch UI is reduced to saved receiver details, live state, and one Start/Stop action; optional controls are behind a menu.
+- `[x]` Android refreshes stale casting controls after MediaProjection ends externally, including screen-lock revocation.
+- `[x]` Android reports both remote-control gates independently; the receiver console and dashboard warn when either is closed.
+- `[x]` Windows clean build/tests and Android JVM tests/APK/lint pass.
+- `[x]` Project owner physically approved the revised Android/headset experience, notification preview and placement, notification-to-app navigation, local close control, and feedback-round behavior on 2026-10-04.
+
+---
+
 # Sprint 10 — Performance Pass
 
 ## Objective

@@ -37,6 +37,7 @@ The Sprint 2 sender:
 8. Drains H.264 output, counts frames and bytes, and discards payloads.
 9. On resize, detaches the old surface, replaces the encoder, resizes the same virtual display, and attaches the replacement surface.
 10. Releases all resources on stop or projection revocation.
+11. Persists the authoritative running flag and refreshes the launch-screen action when the activity resumes, so a screen-lock or other external projection revocation returns the UI to **Start casting** without a manual Stop cycle.
 
 The app logs no screen content, encoded payloads, or sensitive text.
 

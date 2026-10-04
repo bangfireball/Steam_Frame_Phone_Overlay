@@ -40,7 +40,7 @@ std::uint64_t Read64(const std::uint8_t* data) {
 }
 bool IsKnownType(std::uint8_t type) {
     return type >= static_cast<std::uint8_t>(MessageType::Hello) &&
-           type <= static_cast<std::uint8_t>(MessageType::Notification);
+           type <= static_cast<std::uint8_t>(MessageType::NotificationOpen);
 }
 
 void WriteFloat(std::vector<std::uint8_t>& bytes, std::size_t offset, float value) {
@@ -62,7 +62,8 @@ bool IsKnownPointerType(std::uint8_t type) {
            type <= static_cast<std::uint8_t>(phonecast::core::PointerEvent::Type::Back);
 }
 
-constexpr std::size_t kNotificationHeaderSize = 18;
+constexpr std::size_t kNotificationV1HeaderSize = 18;
+constexpr std::size_t kNotificationV2HeaderSize = 26;
 constexpr std::size_t kMaximumNotificationFieldSize = 1024;
 
 bool NotificationFieldValid(const std::string& field) {
@@ -166,19 +167,20 @@ std::vector<std::uint8_t> SerializeNotification(const NotificationEvent& notific
         !NotificationFieldValid(notification.title) ||
         !NotificationFieldValid(notification.body) ||
         !NotificationFieldValid(notification.packageName)) return {};
-    const std::size_t payloadSize = kNotificationHeaderSize +
+    const std::size_t payloadSize = kNotificationV2HeaderSize +
         notification.applicationName.size() + notification.title.size() +
         notification.body.size() + notification.packageName.size();
     if (payloadSize > kMaximumPayloadSize) return {};
     std::vector<std::uint8_t> bytes(payloadSize, 0);
-    bytes[0] = 1;
+    bytes[0] = 2;
     bytes[1] = notification.contentRedacted ? 1U : 0U;
     Write16(bytes, 2, static_cast<std::uint16_t>(notification.applicationName.size()));
     Write16(bytes, 4, static_cast<std::uint16_t>(notification.title.size()));
     Write16(bytes, 6, static_cast<std::uint16_t>(notification.body.size()));
     Write16(bytes, 8, static_cast<std::uint16_t>(notification.packageName.size()));
     Write64(bytes, 10, notification.postedAtMillis);
-    auto output = bytes.begin() + static_cast<std::ptrdiff_t>(kNotificationHeaderSize);
+    Write64(bytes, 18, notification.actionToken);
+    auto output = bytes.begin() + static_cast<std::ptrdiff_t>(kNotificationV2HeaderSize);
     for (const auto* field : {&notification.applicationName, &notification.title,
                               &notification.body, &notification.packageName}) {
         output = std::copy(field->begin(), field->end(), output);
@@ -186,19 +188,46 @@ std::vector<std::uint8_t> SerializeNotification(const NotificationEvent& notific
     return bytes;
 }
 
+std::vector<std::uint8_t> SerializeRemoteControlStatus(const RemoteControlStatus& status) {
+    return {1U, static_cast<std::uint8_t>((status.appEnabled ? 1U : 0U) |
+                                         (status.accessibilityEnabled ? 2U : 0U))};
+}
+
+bool ParseRemoteControlStatus(const std::uint8_t* data, std::size_t size,
+                              RemoteControlStatus& status, std::string& error) {
+    if (data == nullptr || size != 2U) {
+        error = "Remote-control status payload must be exactly 2 bytes.";
+        return false;
+    }
+    if (data[0] != 1U || (data[1] & 0xfcU) != 0U) {
+        error = "Unsupported remote-control status version or flags.";
+        return false;
+    }
+    status.appEnabled = (data[1] & 1U) != 0U;
+    status.accessibilityEnabled = (data[1] & 2U) != 0U;
+    error.clear();
+    return true;
+}
+
 bool ParseNotification(const std::uint8_t* data, std::size_t size,
                        NotificationEvent& notification, std::string& error) {
-    if (data == nullptr || size < kNotificationHeaderSize) {
+    if (data == nullptr || size < kNotificationV1HeaderSize) {
         error = "Notification payload is incomplete.";
         return false;
     }
-    if (data[0] != 1 || (data[1] & 0xfeU) != 0U) {
+    if ((data[0] != 1U && data[0] != 2U) || (data[1] & 0xfeU) != 0U) {
         error = "Unsupported notification payload version or flags.";
+        return false;
+    }
+    const std::size_t headerSize = data[0] == 2U
+        ? kNotificationV2HeaderSize : kNotificationV1HeaderSize;
+    if (size < headerSize) {
+        error = "Notification payload is incomplete.";
         return false;
     }
     const std::array<std::size_t, 4> lengths{
         Read16(data + 2), Read16(data + 4), Read16(data + 6), Read16(data + 8)};
-    std::size_t expected = kNotificationHeaderSize;
+    std::size_t expected = headerSize;
     for (const auto length : lengths) {
         if (length > kMaximumNotificationFieldSize || expected > size || length > size - expected) {
             error = "Notification field length is invalid.";
@@ -210,7 +239,7 @@ bool ParseNotification(const std::uint8_t* data, std::size_t size,
         error = "Notification payload has trailing or missing data.";
         return false;
     }
-    std::size_t offset = kNotificationHeaderSize;
+    std::size_t offset = headerSize;
     auto readString = [&](std::size_t length) {
         std::string value(reinterpret_cast<const char*>(data + offset), length);
         offset += length;
@@ -221,6 +250,7 @@ bool ParseNotification(const std::uint8_t* data, std::size_t size,
     notification.body = readString(lengths[2]);
     notification.packageName = readString(lengths[3]);
     notification.postedAtMillis = Read64(data + 10);
+    notification.actionToken = data[0] == 2U ? Read64(data + 18) : 0U;
     notification.contentRedacted = (data[1] & 1U) != 0U;
     if (notification.applicationName.empty() || notification.packageName.empty()) {
         error = "Notification source is missing.";

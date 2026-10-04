@@ -158,6 +158,7 @@ void TestStreamProtocol() {
     notification.body = "Dinner is ready";
     notification.packageName = "com.example.messages";
     notification.postedAtMillis = 123456789;
+    notification.actionToken = 987654321;
     notification.contentRedacted = false;
     const auto notificationBytes = SerializeNotification(notification);
     NotificationEvent parsedNotification;
@@ -168,13 +169,44 @@ void TestStreamProtocol() {
               parsedNotification.body == notification.body &&
               parsedNotification.packageName == notification.packageName &&
               parsedNotification.postedAtMillis == notification.postedAtMillis &&
+              parsedNotification.actionToken == notification.actionToken &&
               !parsedNotification.contentRedacted,
           "privacy-filtered notification payload round trips");
+    std::vector<std::uint8_t> legacyNotification(
+        notificationBytes.begin(), notificationBytes.begin() + 18);
+    legacyNotification[0] = 1;
+    legacyNotification.insert(legacyNotification.end(),
+                              notificationBytes.begin() + 26, notificationBytes.end());
+    Check(ParseNotification(legacyNotification.data(), legacyNotification.size(),
+                            parsedNotification, error) &&
+              parsedNotification.actionToken == 0,
+          "legacy notification payloads remain readable without an action");
+    Message notificationOpen;
+    notificationOpen.type = MessageType::NotificationOpen;
+    notificationOpen.sequence = notification.actionToken;
+    const auto notificationOpenBytes = Serialize(notificationOpen);
+    Check(ParseHeader(notificationOpenBytes.data(), kHeaderSize, parsed, payloadSize, error) &&
+              parsed.type == MessageType::NotificationOpen &&
+              parsed.sequence == notification.actionToken && payloadSize == 0,
+          "notification open action token round trips in the common header");
+
     auto malformedNotification = notificationBytes;
     malformedNotification[2] = 0x7f;
     Check(!ParseNotification(malformedNotification.data(), malformedNotification.size(),
                              parsedNotification, error),
           "malformed notification lengths are rejected");
+
+    RemoteControlStatus remoteStatus{true, false};
+    const auto remoteStatusBytes = SerializeRemoteControlStatus(remoteStatus);
+    RemoteControlStatus parsedRemoteStatus;
+    Check(ParseRemoteControlStatus(remoteStatusBytes.data(), remoteStatusBytes.size(),
+                                   parsedRemoteStatus, error) &&
+              parsedRemoteStatus.appEnabled &&
+              !parsedRemoteStatus.accessibilityEnabled &&
+              !parsedRemoteStatus.Ready(),
+          "remote-control consent gates round trip independently");
+    Check(!ParseRemoteControlStatus(remoteStatusBytes.data(), 1, parsedRemoteStatus, error),
+          "malformed remote-control gate status is rejected");
 }
 
 void TestOverlayInteraction() {
@@ -202,6 +234,10 @@ void TestOverlayInteraction() {
               !interaction.IsBackButton(100.0F, 50.0F) &&
               !interaction.IsBackButton(50.0F, 100.0F),
           "the lower-left handle corner is reserved for Android Back");
+    Check(interaction.IsCloseButton(950.0F, 50.0F) &&
+              !interaction.IsCloseButton(899.0F, 50.0F) &&
+              !interaction.IsCloseButton(950.0F, 100.0F),
+          "the lower-right handle corner is reserved for hiding the phone");
     Check(top.normalizedY == 0.0F && bottom.normalizedY == 1.0F,
           "the grab handle inset does not offset phone touch coordinates");
 }
@@ -383,6 +419,11 @@ void TestSettingsMenu() {
               phonecast::vr::SettingsMenuResult::Updated &&
               menu.Draft().widthMeters > initial.widthMeters,
           "settings changes update the transactional draft");
+    Check(menu.View().normalizedValues[0] >= 0.0F &&
+              menu.Handle({phonecast::vr::SettingsMenuCommand::SetNormalized, 1.0F}) ==
+                  phonecast::vr::SettingsMenuResult::Updated &&
+              menu.Draft().widthMeters == 2.0F,
+          "settings sliders expose and apply normalized values");
     menu.Handle(phonecast::vr::SettingsMenuCommand::Back);
     for (int index = 0; index < 6; ++index)
         menu.Handle(phonecast::vr::SettingsMenuCommand::NextItem);
@@ -409,7 +450,9 @@ void TestSettingsMenu() {
     for (int index = 0; index < 5; ++index)
         menu.Handle(phonecast::vr::SettingsMenuCommand::NextItem);
     menu.Handle(phonecast::vr::SettingsMenuCommand::Activate);
-    Check(menu.View().title == "NOTIFICATIONS", "Notification placement settings are reachable");
+    Check(menu.View().title == "NOTIFICATIONS" &&
+              menu.View().showNotificationPreview,
+          "Notification placement settings request a live card preview");
     menu.Handle(phonecast::vr::SettingsMenuCommand::Increase);
     menu.Handle(phonecast::vr::SettingsMenuCommand::NextItem);
     menu.Handle(phonecast::vr::SettingsMenuCommand::Decrease);

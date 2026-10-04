@@ -31,10 +31,13 @@ public:
     bool Pop(core::protocol::Message& message,
              std::chrono::microseconds* queueAge = nullptr);
     bool Send(const core::PointerEvent& event, std::string& error) override;
+    bool SendNotificationOpen(std::uint64_t actionToken, std::string& error);
     void Stop() noexcept;
 
     [[nodiscard]] bool Connected() const noexcept;
     [[nodiscard]] std::string Status() const;
+    [[nodiscard]] bool RemoteControlStatusKnown() const noexcept;
+    [[nodiscard]] core::protocol::RemoteControlStatus RemoteControlStatus() const noexcept;
     [[nodiscard]] VideoServerStats Stats() const noexcept;
     [[nodiscard]] std::uint64_t DroppedMessages() const noexcept;
 

@@ -31,19 +31,23 @@ public final class StreamProtocolTest {
         assertEquals(7, StreamProtocol.TYPE_REQUEST_KEY_FRAME);
         assertEquals(8, StreamProtocol.TYPE_REMOTE_INPUT);
         assertEquals(9, StreamProtocol.TYPE_NOTIFICATION);
+        assertEquals(10, StreamProtocol.TYPE_REMOTE_CONTROL_STATUS);
+        assertEquals(11, StreamProtocol.TYPE_NOTIFICATION_OPEN);
     }
 
     @Test public void writesBoundedNotificationPayload() throws Exception {
         byte[] payload = StreamProtocol.notificationPayload(
-                "Messages", "Hello", "Are you coming?", "com.example.messages", 1234L, false);
+                "Messages", "Hello", "Are you coming?", "com.example.messages",
+                1234L, 99L, false);
         DataInputStream input = new DataInputStream(new ByteArrayInputStream(payload));
-        assertEquals(1, input.readUnsignedByte());
+        assertEquals(2, input.readUnsignedByte());
         assertEquals(0, input.readUnsignedByte());
         assertEquals(8, input.readUnsignedShort());
         assertEquals(5, input.readUnsignedShort());
         assertEquals(15, input.readUnsignedShort());
         assertEquals(20, input.readUnsignedShort());
         assertEquals(1234L, input.readLong());
+        assertEquals(99L, input.readLong());
     }
 
     @Test public void notificationPolicyUsesAllowAndBlockLists() {
@@ -71,6 +75,15 @@ public final class StreamProtocolTest {
         assertEquals(0.75f, event.normalizedY, 0.0001f);
         assertEquals(-0.5f, event.scrollDelta, 0.0001f);
         assertEquals(91, event.sequence);
+    }
+
+    @Test public void writesIndependentRemoteControlGateStatus() {
+        byte[] both = StreamProtocol.remoteControlStatusPayload(true, true);
+        assertEquals(2, both.length);
+        assertEquals(1, both[0]);
+        assertEquals(3, both[1]);
+        byte[] appOnly = StreamProtocol.remoteControlStatusPayload(true, false);
+        assertEquals(1, appOnly[1]);
     }
 
     @Test public void validatesPairCodes() {

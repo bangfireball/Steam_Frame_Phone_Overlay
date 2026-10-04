@@ -51,14 +51,24 @@ enum class SettingsMenuCommand {
     NextItem,
     Decrease,
     Increase,
+    SetNormalized,
     Activate,
     Back
+};
+
+struct SettingsMenuInput {
+    SettingsMenuCommand command{SettingsMenuCommand::Activate};
+    float normalizedValue{0.0F};
 };
 
 struct SettingsMenuView {
     std::string title;
     std::vector<std::string> labels;
     std::vector<std::string> values;
+    // A value in [0, 1] draws an interactive slider. Negative values indicate
+    // an action, category, or discrete value controlled only by -/+.
+    std::vector<float> normalizedValues;
+    bool showNotificationPreview{false};
     std::size_t selectedIndex{0};
 };
 
@@ -120,9 +130,17 @@ public:
         return false;
     }
     virtual bool HideSettingsMenu(std::string& error) { error.clear(); return true; }
-    virtual bool TakeSettingsMenuInput(SettingsMenuCommand& command) {
-        (void)command;
+    virtual bool TakeSettingsMenuInput(SettingsMenuInput& input) {
+        (void)input;
         return false;
+    }
+    // Reports whether both Android remote-control consent gates are open. The
+    // renderer may surface this in its dashboard without owning protocol state.
+    virtual void SetRemoteControlStatus(bool known, bool appEnabled,
+                                        bool accessibilityEnabled) {
+        (void)known;
+        (void)appEnabled;
+        (void)accessibilityEnabled;
     }
     // Reports normalized phone interaction without exposing renderer-specific coordinates.
     virtual bool TakePointerEvent(core::PointerEvent& event) {
@@ -138,8 +156,14 @@ public:
         return false;
     }
     virtual bool HideNotification(std::string& error) { error.clear(); return true; }
-    // A card can request the full phone view while the dashboard laser is active.
-    virtual bool TakeNotificationOpenRequest() { return false; }
+    // A card can request the full phone view and its Android launch action while
+    // the dashboard laser is active.
+    virtual bool TakeNotificationOpenRequest(std::uint64_t& actionToken) {
+        (void)actionToken;
+        return false;
+    }
+    // Reports the phone footer's local close action without sending it to Android.
+    virtual bool TakeHideRequest() { return false; }
     virtual void Stop() noexcept = 0;
 };
 

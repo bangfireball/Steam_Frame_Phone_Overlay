@@ -15,6 +15,8 @@ It is deliberately optional and has two independent gates:
 
 The service declares `canPerformGestures`, does not retrieve window content, and does not inspect accessibility nodes, app text, or typed text. It handles only commands received over the same phone-initiated, paired streaming connection. The app shows a prominent disclosure before directing the user to Accessibility settings.
 
+Android reports the two gate states independently to the authenticated receiver when a connection starts and whenever consent or Accessibility connectivity changes. The receiver logs a specific warning and shows **Enable app control**, **Enable Accessibility**, or **Enable both control gates** in the PhoneCast dashboard until both are open. This status is advisory; Android still enforces both gates for every command.
+
 Android's accessibility API is intended for accessibility use. A future Play-distributed release that is not an accessibility tool must satisfy the then-current Google Play declaration, prominent-disclosure, consent, and permitted-use policy. This implementation is technically suitable for development and informed side-loaded use; successful store review is not implied.
 
 Primary references:

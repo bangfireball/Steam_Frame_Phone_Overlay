@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">PhoneCast Sender</string>
+    <string name="app_name">PhoneCast</string>
     <string name="capture_channel_name">Screen casting</string>
     <string name="capture_channel_description">Shows when PhoneCast is capturing the screen</string>
     <string name="capture_notification_title">PhoneCast is capturing your screen</string>
@@ -18,5 +18,5 @@
     <string name="open_accessibility_settings">Enable PhoneCast in Accessibility settings</string>
     <string name="remote_control_service_enabled">PhoneCast Accessibility service enabled</string>
     <string name="start_capture">Start casting</string>
-    <string name="stop_capture">Stop capture</string>
+    <string name="stop_capture">Stop casting</string>
 </resources>

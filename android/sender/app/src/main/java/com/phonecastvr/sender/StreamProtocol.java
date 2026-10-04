@@ -18,6 +18,8 @@ final class StreamProtocol {
     static final int TYPE_REQUEST_KEY_FRAME = 7;
     static final int TYPE_REMOTE_INPUT = 8;
     static final int TYPE_NOTIFICATION = 9;
+    static final int TYPE_REMOTE_CONTROL_STATUS = 10;
+    static final int TYPE_NOTIFICATION_OPEN = 11;
     static final int FLAG_KEY_FRAME = 1;
     static final int MAX_PAYLOAD_SIZE = 4 * 1024 * 1024;
 
@@ -67,21 +69,22 @@ final class StreamProtocol {
 
     static byte[] notificationPayload(String applicationName, String title, String body,
                                       String packageName, long postedAtMillis,
-                                      boolean contentRedacted) throws IOException {
+                                      long actionToken, boolean contentRedacted) throws IOException {
         byte[] application = utf8Field(applicationName);
         byte[] heading = utf8Field(title);
         byte[] text = utf8Field(body);
         byte[] source = utf8Field(packageName);
         ByteArrayOutputStream bytes = new ByteArrayOutputStream(
-                18 + application.length + heading.length + text.length + source.length);
+                26 + application.length + heading.length + text.length + source.length);
         DataOutputStream output = new DataOutputStream(bytes);
-        output.writeByte(1);
+        output.writeByte(2);
         output.writeByte(contentRedacted ? 1 : 0);
         output.writeShort(application.length);
         output.writeShort(heading.length);
         output.writeShort(text.length);
         output.writeShort(source.length);
         output.writeLong(postedAtMillis);
+        output.writeLong(actionToken);
         output.write(application);
         output.write(heading);
         output.write(text);
@@ -93,6 +96,12 @@ final class StreamProtocol {
         byte[] bytes = (value == null ? "" : value).getBytes(java.nio.charset.StandardCharsets.UTF_8);
         if (bytes.length > 1024) throw new IOException("Notification field exceeds 1024 bytes");
         return bytes;
+    }
+
+    static byte[] remoteControlStatusPayload(boolean appEnabled,
+                                             boolean accessibilityEnabled) {
+        int flags = (appEnabled ? 1 : 0) | (accessibilityEnabled ? 2 : 0);
+        return new byte[]{1, (byte) flags};
     }
 
     static RemoteInputEvent parseRemoteInput(byte[] payload, long sequence) throws IOException {

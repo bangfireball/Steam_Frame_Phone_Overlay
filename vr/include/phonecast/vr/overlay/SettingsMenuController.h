@@ -20,6 +20,7 @@ public:
     [[nodiscard]] SettingsMenuView View() const;
     void MergeRendererUpdate(const OverlaySettings& settings) noexcept;
     SettingsMenuResult Handle(SettingsMenuCommand command);
+    SettingsMenuResult Handle(const SettingsMenuInput& input);
     void Close() noexcept { open_ = false; }
 
 private:
@@ -36,6 +37,7 @@ private:
     [[nodiscard]] std::size_t ItemCount() const noexcept;
     SettingsMenuResult Activate();
     SettingsMenuResult Adjust(int direction);
+    SettingsMenuResult SetNormalized(float value);
 
     bool open_{false};
     bool resetConfirmation_{false};

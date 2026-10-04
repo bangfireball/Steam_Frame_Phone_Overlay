@@ -177,6 +177,26 @@ struct TcpVideoServer::Implementation {
                 continue;
             }
             if (message.type == MessageType::EndStream) return;
+            if (message.type == MessageType::RemoteControlStatus) {
+                core::protocol::RemoteControlStatus remoteStatus;
+                if (!core::protocol::ParseRemoteControlStatus(
+                        message.payload.data(), message.payload.size(), remoteStatus, error)) {
+                    SetStatus("Rejected malformed remote-control gate status");
+                    continue;
+                }
+                remoteControlAppEnabled.store(remoteStatus.appEnabled);
+                remoteControlAccessibilityEnabled.store(remoteStatus.accessibilityEnabled);
+                remoteControlStatusKnown.store(true);
+                if (remoteStatus.Ready())
+                    SetStatus("Phone connected; remote control ready");
+                else if (!remoteStatus.appEnabled && !remoteStatus.accessibilityEnabled)
+                    SetStatus("Warning: both Android remote-control gates are disabled");
+                else if (!remoteStatus.appEnabled)
+                    SetStatus("Warning: Android app remote-control consent is disabled");
+                else
+                    SetStatus("Warning: PhoneCast Accessibility service is disabled");
+                continue;
+            }
             if (message.type == MessageType::Ping) {
                 Message pong;
                 pong.type = MessageType::Pong;
@@ -220,6 +240,9 @@ struct TcpVideoServer::Implementation {
             BOOL noDelay = TRUE;
             setsockopt(accepted, IPPROTO_TCP, TCP_NODELAY,
                        reinterpret_cast<const char*>(&noDelay), sizeof(noDelay));
+            remoteControlStatusKnown.store(false);
+            remoteControlAppEnabled.store(false);
+            remoteControlAccessibilityEnabled.store(false);
             {
                 std::lock_guard<std::mutex> lock(queueMutex);
                 messages.clear();
@@ -229,6 +252,9 @@ struct TcpVideoServer::Implementation {
             }
             HandleClient(accepted);
             connected.store(false);
+            remoteControlStatusKnown.store(false);
+            remoteControlAppEnabled.store(false);
+            remoteControlAccessibilityEnabled.store(false);
             closesocket(accepted);
             clientSocket.store(INVALID_SOCKET);
             if (running.load()) SetStatus("Phone disconnected; waiting for reconnection");
@@ -239,6 +265,9 @@ struct TcpVideoServer::Implementation {
     std::uint16_t port;
     std::atomic_bool running{};
     std::atomic_bool connected{};
+    std::atomic_bool remoteControlStatusKnown{};
+    std::atomic_bool remoteControlAppEnabled{};
+    std::atomic_bool remoteControlAccessibilityEnabled{};
     std::atomic<SOCKET> listeningSocket{INVALID_SOCKET};
     std::atomic<SOCKET> clientSocket{INVALID_SOCKET};
     std::thread thread;
@@ -337,10 +366,43 @@ bool TcpVideoServer::Send(const core::PointerEvent& event, std::string& error) {
     return true;
 }
 
+bool TcpVideoServer::SendNotificationOpen(std::uint64_t actionToken, std::string& error) {
+    auto& state = *implementation_;
+    if (actionToken == 0U) {
+        error.clear();
+        return true;
+    }
+    if (!state.connected.load()) {
+        error = "The phone is not connected; the notification could not be opened.";
+        return false;
+    }
+    const SOCKET socket = state.clientSocket.load();
+    if (socket == INVALID_SOCKET) {
+        error = "The phone connection closed before the notification could be opened.";
+        return false;
+    }
+    Message message;
+    message.type = MessageType::NotificationOpen;
+    message.sequence = actionToken;
+    if (!state.SendMessage(socket, message)) {
+        error = "Sending the notification open action to the phone failed.";
+        return false;
+    }
+    error.clear();
+    return true;
+}
+
 bool TcpVideoServer::Connected() const noexcept { return implementation_->connected.load(); }
 std::string TcpVideoServer::Status() const {
     std::lock_guard<std::mutex> lock(implementation_->statusMutex);
     return implementation_->status;
+}
+bool TcpVideoServer::RemoteControlStatusKnown() const noexcept {
+    return implementation_->remoteControlStatusKnown.load();
+}
+core::protocol::RemoteControlStatus TcpVideoServer::RemoteControlStatus() const noexcept {
+    return {implementation_->remoteControlAppEnabled.load(),
+            implementation_->remoteControlAccessibilityEnabled.load()};
 }
 VideoServerStats TcpVideoServer::Stats() const noexcept {
     std::lock_guard<std::mutex> lock(implementation_->queueMutex);

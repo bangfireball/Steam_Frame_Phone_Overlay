@@ -27,6 +27,12 @@ bool OverlayInteractionController::IsBackButton(float overlayX, float overlayY) 
            overlayX < static_cast<float>(bottomInset_);
 }
 
+bool OverlayInteractionController::IsCloseButton(float overlayX, float overlayY) const noexcept {
+    return IsGrabHandle(overlayY) && overlayX >=
+        static_cast<float>(width_ > bottomInset_ ? width_ - bottomInset_ : 0U) &&
+        overlayX < static_cast<float>(width_);
+}
+
 core::PointerEvent OverlayInteractionController::Make(core::PointerEvent::Type type,
                                                        float overlayX, float overlayY,
                                                        float scrollDelta) noexcept {

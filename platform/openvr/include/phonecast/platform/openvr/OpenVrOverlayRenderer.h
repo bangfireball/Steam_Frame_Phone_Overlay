@@ -26,12 +26,15 @@ public:
     bool TakeRadialMenuSelection(vr::RadialMenuSelection& selection) override;
     bool ShowSettingsMenu(const vr::SettingsMenuView& view, std::string& error) override;
     bool HideSettingsMenu(std::string& error) override;
-    bool TakeSettingsMenuInput(vr::SettingsMenuCommand& command) override;
+    bool TakeSettingsMenuInput(vr::SettingsMenuInput& input) override;
+    void SetRemoteControlStatus(bool known, bool appEnabled,
+                                bool accessibilityEnabled) override;
     bool TakePointerEvent(core::PointerEvent& event) override;
     bool ShowNotification(const core::protocol::NotificationEvent& notification,
                           std::string& error) override;
     bool HideNotification(std::string& error) override;
-    bool TakeNotificationOpenRequest() override;
+    bool TakeNotificationOpenRequest(std::uint64_t& actionToken) override;
+    bool TakeHideRequest() override;
     void Stop() noexcept override;
 
 private:

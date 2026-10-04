@@ -7,14 +7,18 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.media.projection.MediaProjectionManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.text.InputType;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -28,13 +32,24 @@ import java.util.Locale;
 public final class MainActivity extends Activity {
     private static final int REQUEST_CAPTURE = 1001;
     private static final int REQUEST_NOTIFICATIONS = 1002;
+    private static final int COLOR_BACKGROUND = Color.rgb(7, 13, 23);
+    private static final int COLOR_SURFACE = Color.rgb(17, 28, 43);
+    private static final int COLOR_SURFACE_HIGH = Color.rgb(24, 40, 59);
+    private static final int COLOR_PRIMARY = Color.rgb(42, 188, 251);
+    private static final int COLOR_TEXT = Color.rgb(245, 249, 255);
+    private static final int COLOR_SECONDARY = Color.rgb(167, 187, 205);
+    private static final int COLOR_SUCCESS = Color.rgb(76, 210, 145);
 
+    private TextView screenTitleView;
     private TextView statusView;
     private TextView metricsView;
+    private TextView connectionHintView;
+    private LinearLayout mainContent;
+    private LinearLayout settingsContent;
     private EditText receiverHostView;
     private EditText pairCodeView;
-    private Button startButton;
-    private Button stopButton;
+    private Button primaryButton;
+    private Button menuButton;
     private CheckBox remoteControlView;
     private Button accessibilityButton;
     private CheckBox notificationForwardingView;
@@ -43,133 +58,230 @@ public final class MainActivity extends Activity {
     private EditText notificationBlockListView;
     private Button notificationAccessButton;
     private boolean captureAfterPermission;
+    private boolean receiverRegistered;
+    private boolean running;
 
     private final BroadcastReceiver statusReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
-            boolean running = intent.getBooleanExtra(ScreenCaptureService.EXTRA_RUNNING, false);
-            String message = intent.getStringExtra(ScreenCaptureService.EXTRA_MESSAGE);
-            long frames = intent.getLongExtra(ScreenCaptureService.EXTRA_FRAMES, 0L);
-            long bytes = intent.getLongExtra(ScreenCaptureService.EXTRA_BYTES, 0L);
-            int width = intent.getIntExtra(ScreenCaptureService.EXTRA_WIDTH, 0);
-            int height = intent.getIntExtra(ScreenCaptureService.EXTRA_HEIGHT, 0);
-            long dropped = intent.getLongExtra(ScreenCaptureService.EXTRA_DROPPED_FRAMES, 0L);
-            long rttMicros = intent.getLongExtra(ScreenCaptureService.EXTRA_NETWORK_RTT_MICROS, -1L);
-            updateState(running, message, frames, bytes, width, height, dropped, rttMicros);
+            updateState(intent.getBooleanExtra(ScreenCaptureService.EXTRA_RUNNING, false),
+                    intent.getStringExtra(ScreenCaptureService.EXTRA_MESSAGE),
+                    intent.getLongExtra(ScreenCaptureService.EXTRA_FRAMES, 0L),
+                    intent.getLongExtra(ScreenCaptureService.EXTRA_BYTES, 0L),
+                    intent.getIntExtra(ScreenCaptureService.EXTRA_WIDTH, 0),
+                    intent.getIntExtra(ScreenCaptureService.EXTRA_HEIGHT, 0),
+                    intent.getLongExtra(ScreenCaptureService.EXTRA_DROPPED_FRAMES, 0L),
+                    intent.getLongExtra(ScreenCaptureService.EXTRA_NETWORK_RTT_MICROS, -1L));
         }
     };
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         buildUi();
-        boolean running = getSharedPreferences(ScreenCaptureService.PREFERENCES, MODE_PRIVATE)
-                .getBoolean("capture_running", false);
-        updateState(running, running ? "Capture service active" : "Ready to stream", 0, 0, 0, 0, 0, -1);
+        refreshServiceState();
     }
 
     @Override protected void onStart() {
         super.onStart();
         registerStatusReceiver();
+        refreshServiceState();
         updateAccessibilityButton();
         updateNotificationAccessButton();
     }
 
+    @Override protected void onResume() {
+        super.onResume();
+        refreshServiceState();
+        updateAccessibilityButton();
+        updateNotificationAccessButton();
+        ScreenCaptureService.remoteControlStatusChanged(this);
+    }
+
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     private void registerStatusReceiver() {
+        if (receiverRegistered) return;
         IntentFilter filter = new IntentFilter(ScreenCaptureService.ACTION_STATUS);
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(statusReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         } else {
-            // The flags overload was introduced in API 33; the broadcast is package-scoped.
             registerReceiver(statusReceiver, filter);
         }
+        receiverRegistered = true;
     }
 
     @Override protected void onStop() {
-        unregisterReceiver(statusReceiver);
+        saveNotificationPreferences();
+        if (receiverRegistered) {
+            unregisterReceiver(statusReceiver);
+            receiverRegistered = false;
+        }
         super.onStop();
     }
 
     private void buildUi() {
-        int padding = dp(24);
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.setPadding(padding, padding * 2, padding, padding);
-        root.setBackgroundColor(Color.rgb(10, 16, 28));
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setBackgroundColor(COLOR_BACKGROUND);
 
-        TextView title = new TextView(this);
-        title.setText(R.string.app_name);
-        title.setTextColor(Color.WHITE);
-        title.setTextSize(28);
-        title.setGravity(Gravity.CENTER);
-        root.addView(title, matchWrap());
+        LinearLayout toolbar = new LinearLayout(this);
+        toolbar.setGravity(Gravity.CENTER_VERTICAL);
+        toolbar.setPadding(dp(20), dp(10), dp(12), dp(10));
+        toolbar.setBackgroundColor(Color.rgb(11, 21, 34));
+        screenTitleView = text("PhoneCast", 22, COLOR_TEXT, Gravity.START);
+        toolbar.addView(screenTitleView, new LinearLayout.LayoutParams(0, dp(52), 1));
+        menuButton = new Button(this);
+        menuButton.setText("☰");
+        menuButton.setTextSize(24);
+        menuButton.setTextColor(COLOR_TEXT);
+        menuButton.setBackgroundTintList(ColorStateList.valueOf(COLOR_SURFACE_HIGH));
+        menuButton.setContentDescription("Open settings");
+        menuButton.setOnClickListener(view -> showSettings(settingsContent.getVisibility() != View.VISIBLE));
+        toolbar.addView(menuButton, new LinearLayout.LayoutParams(dp(56), dp(48)));
+        page.addView(toolbar, matchWrap());
 
-        TextView explanation = new TextView(this);
-        explanation.setText(R.string.sprint_two_explanation);
-        explanation.setTextColor(Color.rgb(190, 205, 220));
-        explanation.setTextSize(16);
-        explanation.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams explanationParams = matchWrap();
-        explanationParams.setMargins(0, dp(16), 0, dp(24));
-        root.addView(explanation, explanationParams);
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(20), dp(20), dp(20), dp(32));
+        mainContent = new LinearLayout(this);
+        mainContent.setOrientation(LinearLayout.VERTICAL);
+        settingsContent = new LinearLayout(this);
+        settingsContent.setOrientation(LinearLayout.VERTICAL);
+        settingsContent.setVisibility(View.GONE);
+        body.addView(mainContent, matchWrap());
+        body.addView(settingsContent, matchWrap());
+        buildMainContent();
+        buildSettingsContent();
 
-        receiverHostView = new EditText(this);
-        receiverHostView.setHint("Receiver IP address");
-        receiverHostView.setSingleLine(true);
-        receiverHostView.setInputType(InputType.TYPE_CLASS_PHONE);
-        receiverHostView.setText(getPreferences(MODE_PRIVATE)
-                .getString("receiver_host", "192.168.1.100"));
-        receiverHostView.setTextColor(Color.WHITE);
-        receiverHostView.setHintTextColor(Color.rgb(130, 145, 160));
-        root.addView(receiverHostView, matchWrap());
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.addView(body);
+        page.addView(scroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+        setContentView(page);
+    }
 
-        pairCodeView = new EditText(this);
-        pairCodeView.setHint("6-digit pairing code");
-        pairCodeView.setSingleLine(true);
-        pairCodeView.setInputType(InputType.TYPE_CLASS_NUMBER);
-        pairCodeView.setTextColor(Color.WHITE);
-        pairCodeView.setHintTextColor(Color.rgb(130, 145, 160));
-        root.addView(pairCodeView, matchWrap());
+    private void buildMainContent() {
+        TextView eyebrow = text("YOUR PHONE IN VR", 13, COLOR_PRIMARY, Gravity.CENTER);
+        eyebrow.setLetterSpacing(0.16f);
+        mainContent.addView(eyebrow, matchWrap());
+        TextView heading = text("Ready when you are", 30, COLOR_TEXT, Gravity.CENTER);
+        LinearLayout.LayoutParams headingParams = matchWrap();
+        headingParams.setMargins(0, dp(8), 0, dp(8));
+        mainContent.addView(heading, headingParams);
+        TextView intro = text("Connect to your trusted receiver, approve screen sharing, and keep playing.",
+                16, COLOR_SECONDARY, Gravity.CENTER);
+        LinearLayout.LayoutParams introParams = matchWrap();
+        introParams.setMargins(dp(8), 0, dp(8), dp(24));
+        mainContent.addView(intro, introParams);
 
-        android.content.SharedPreferences senderPreferences = getSharedPreferences(
-                ScreenCaptureService.PREFERENCES, MODE_PRIVATE);
-        TextView notificationDisclosure = new TextView(this);
-        notificationDisclosure.setText(R.string.notification_forwarding_disclosure);
-        notificationDisclosure.setTextColor(Color.rgb(190, 205, 220));
-        notificationDisclosure.setTextSize(14);
-        LinearLayout.LayoutParams notificationDisclosureParams = matchWrap();
-        notificationDisclosureParams.setMargins(0, dp(16), 0, dp(4));
-        root.addView(notificationDisclosure, notificationDisclosureParams);
+        LinearLayout statusCard = card();
+        statusView = text("Ready to cast", 20, COLOR_PRIMARY, Gravity.START);
+        statusCard.addView(statusView, matchWrap());
+        metricsView = text("No active capture", 14, COLOR_SECONDARY, Gravity.START);
+        LinearLayout.LayoutParams metricsParams = matchWrap();
+        metricsParams.setMargins(0, dp(8), 0, 0);
+        statusCard.addView(metricsView, metricsParams);
+        mainContent.addView(statusCard, cardParams());
 
-        notificationForwardingView = new CheckBox(this);
-        notificationForwardingView.setText(R.string.enable_notification_forwarding);
-        notificationForwardingView.setTextColor(Color.WHITE);
-        notificationForwardingView.setChecked(senderPreferences.getBoolean(
-                NotificationForwardingService.PREFERENCE_ENABLED, false));
-        root.addView(notificationForwardingView, matchWrap());
+        LinearLayout connectionCard = card();
+        connectionCard.addView(sectionTitle("Receiver"), matchWrap());
+        connectionHintView = text("Saved details make the next cast a two-step start.",
+                14, COLOR_SECONDARY, Gravity.START);
+        LinearLayout.LayoutParams hintParams = matchWrap();
+        hintParams.setMargins(0, dp(4), 0, dp(14));
+        connectionCard.addView(connectionHintView, hintParams);
 
-        notificationContentView = new CheckBox(this);
-        notificationContentView.setText(R.string.include_notification_content);
-        notificationContentView.setTextColor(Color.WHITE);
-        notificationContentView.setChecked(senderPreferences.getBoolean(
-                NotificationForwardingService.PREFERENCE_INCLUDE_CONTENT, false));
-        root.addView(notificationContentView, matchWrap());
+        SharedPreferences preferences = senderPreferences();
+        String legacyHost = getPreferences(MODE_PRIVATE)
+                .getString("receiver_host", "192.168.1.100");
+        receiverHostView = input("Receiver IP address",
+                preferences.getString("receiver_host", legacyHost),
+                InputType.TYPE_CLASS_PHONE);
+        connectionCard.addView(receiverHostView, fieldParams());
+        pairCodeView = input("6-digit pairing code",
+                preferences.getString("pair_code", ""),
+                InputType.TYPE_CLASS_NUMBER);
+        connectionCard.addView(pairCodeView, fieldParams());
+        mainContent.addView(connectionCard, cardParams());
 
-        notificationAllowListView = notificationListField(
-                "Allowed package names (blank = all)",
-                senderPreferences.getString(NotificationForwardingService.PREFERENCE_ALLOW_LIST, ""));
-        root.addView(notificationAllowListView, matchWrap());
-        notificationBlockListView = notificationListField(
-                "Blocked package names",
-                senderPreferences.getString(NotificationForwardingService.PREFERENCE_BLOCK_LIST, ""));
-        root.addView(notificationBlockListView, matchWrap());
+        primaryButton = new Button(this);
+        primaryButton.setText(R.string.start_capture);
+        primaryButton.setTextSize(18);
+        primaryButton.setTextColor(Color.rgb(3, 18, 28));
+        primaryButton.setAllCaps(false);
+        primaryButton.setBackgroundTintList(ColorStateList.valueOf(COLOR_PRIMARY));
+        primaryButton.setOnClickListener(view -> {
+            if (running) stopCapture(); else requestCapture();
+        });
+        LinearLayout.LayoutParams actionParams = matchWrap();
+        actionParams.height = dp(58);
+        actionParams.setMargins(0, dp(8), 0, 0);
+        mainContent.addView(primaryButton, actionParams);
 
-        notificationAccessButton = new Button(this);
+        TextView privacy = text("Screen and control data stay on your local network. The current development transport is not encrypted.",
+                12, COLOR_SECONDARY, Gravity.CENTER);
+        LinearLayout.LayoutParams privacyParams = matchWrap();
+        privacyParams.setMargins(dp(12), dp(14), dp(12), 0);
+        mainContent.addView(privacy, privacyParams);
+    }
+
+    private void buildSettingsContent() {
+        TextView heading = text("Settings", 30, COLOR_TEXT, Gravity.START);
+        settingsContent.addView(heading, matchWrap());
+        TextView intro = text("Optional features and privacy controls", 15,
+                COLOR_SECONDARY, Gravity.START);
+        LinearLayout.LayoutParams introParams = matchWrap();
+        introParams.setMargins(0, dp(4), 0, dp(16));
+        settingsContent.addView(intro, introParams);
+
+        SharedPreferences preferences = senderPreferences();
+        LinearLayout remoteCard = card();
+        remoteCard.addView(sectionTitle("VR remote control"), matchWrap());
+        remoteCard.addView(text(getString(R.string.remote_control_disclosure), 13,
+                COLOR_SECONDARY, Gravity.START), spaced(0, dp(6), 0, dp(10)));
+        remoteControlView = new CheckBox(this);
+        remoteControlView.setText(R.string.enable_remote_control);
+        remoteControlView.setTextColor(COLOR_TEXT);
+        remoteControlView.setButtonTintList(new ColorStateList(
+                new int[][]{new int[]{android.R.attr.state_checked}, new int[]{}},
+                new int[]{COLOR_PRIMARY, COLOR_SECONDARY}));
+        remoteControlView.setChecked(preferences.getBoolean(
+                RemoteControlAccessibilityService.PREFERENCE_REMOTE_CONTROL, false));
+        remoteControlView.setOnCheckedChangeListener((button, checked) -> {
+            preferences.edit().putBoolean(
+                    RemoteControlAccessibilityService.PREFERENCE_REMOTE_CONTROL, checked).apply();
+            ScreenCaptureService.remoteControlStatusChanged(this);
+        });
+        remoteCard.addView(remoteControlView, matchWrap());
+        accessibilityButton = secondaryButton();
+        accessibilityButton.setOnClickListener(view ->
+                startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        remoteCard.addView(accessibilityButton, buttonParams());
+        settingsContent.addView(remoteCard, cardParams());
+
+        LinearLayout notificationCard = card();
+        notificationCard.addView(sectionTitle("Notification cards"), matchWrap());
+        notificationCard.addView(text(getString(R.string.notification_forwarding_disclosure), 13,
+                COLOR_SECONDARY, Gravity.START), spaced(0, dp(6), 0, dp(10)));
+        notificationForwardingView = checkBox(R.string.enable_notification_forwarding,
+                preferences.getBoolean(NotificationForwardingService.PREFERENCE_ENABLED, false));
+        notificationContentView = checkBox(R.string.include_notification_content,
+                preferences.getBoolean(NotificationForwardingService.PREFERENCE_INCLUDE_CONTENT, false));
+        notificationCard.addView(notificationForwardingView, matchWrap());
+        notificationCard.addView(notificationContentView, matchWrap());
+        notificationAllowListView = input("Allowed package names (blank = all)",
+                preferences.getString(NotificationForwardingService.PREFERENCE_ALLOW_LIST, ""),
+                InputType.TYPE_CLASS_TEXT);
+        notificationBlockListView = input("Blocked package names",
+                preferences.getString(NotificationForwardingService.PREFERENCE_BLOCK_LIST, ""),
+                InputType.TYPE_CLASS_TEXT);
+        notificationCard.addView(notificationAllowListView, fieldParams());
+        notificationCard.addView(notificationBlockListView, fieldParams());
+        notificationAccessButton = secondaryButton();
         notificationAccessButton.setOnClickListener(view -> {
             saveNotificationPreferences();
             startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
         });
-        root.addView(notificationAccessButton, matchWrap());
+        notificationCard.addView(notificationAccessButton, buttonParams());
         notificationForwardingView.setOnCheckedChangeListener((button, checked) -> {
             saveNotificationPreferences();
             ScreenCaptureService.notificationPreferencesChanged();
@@ -178,61 +290,35 @@ public final class MainActivity extends Activity {
             saveNotificationPreferences();
             ScreenCaptureService.notificationPreferencesChanged();
         });
+        settingsContent.addView(notificationCard, cardParams());
 
-        TextView remoteDisclosure = new TextView(this);
-        remoteDisclosure.setText(R.string.remote_control_disclosure);
-        remoteDisclosure.setTextColor(Color.rgb(190, 205, 220));
-        remoteDisclosure.setTextSize(14);
-        LinearLayout.LayoutParams disclosureParams = matchWrap();
-        disclosureParams.setMargins(0, dp(16), 0, dp(4));
-        root.addView(remoteDisclosure, disclosureParams);
+        Button done = secondaryButton();
+        done.setText("Done");
+        done.setOnClickListener(view -> showSettings(false));
+        settingsContent.addView(done, buttonParams());
+    }
 
-        remoteControlView = new CheckBox(this);
-        remoteControlView.setText(R.string.enable_remote_control);
-        remoteControlView.setTextColor(Color.WHITE);
-        remoteControlView.setChecked(getSharedPreferences(
-                ScreenCaptureService.PREFERENCES, MODE_PRIVATE)
-                .getBoolean(RemoteControlAccessibilityService.PREFERENCE_REMOTE_CONTROL, false));
-        remoteControlView.setOnCheckedChangeListener((button, checked) ->
-                getSharedPreferences(ScreenCaptureService.PREFERENCES, MODE_PRIVATE).edit()
-                        .putBoolean(RemoteControlAccessibilityService.PREFERENCE_REMOTE_CONTROL,
-                                checked).apply());
-        root.addView(remoteControlView, matchWrap());
+    private void showSettings(boolean show) {
+        saveNotificationPreferences();
+        mainContent.setVisibility(show ? View.GONE : View.VISIBLE);
+        settingsContent.setVisibility(show ? View.VISIBLE : View.GONE);
+        screenTitleView.setText(show ? "PhoneCast settings" : "PhoneCast");
+        menuButton.setText(show ? "×" : "☰");
+        menuButton.setContentDescription(show ? "Close settings" : "Open settings");
+        if (show) {
+            updateAccessibilityButton();
+            updateNotificationAccessButton();
+        }
+    }
 
-        accessibilityButton = new Button(this);
-        accessibilityButton.setOnClickListener(view ->
-                startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
-        root.addView(accessibilityButton, matchWrap());
-
-        statusView = new TextView(this);
-        statusView.setTextColor(Color.rgb(42, 188, 251));
-        statusView.setTextSize(18);
-        statusView.setGravity(Gravity.CENTER);
-        root.addView(statusView, matchWrap());
-
-        metricsView = new TextView(this);
-        metricsView.setTextColor(Color.WHITE);
-        metricsView.setTextSize(15);
-        metricsView.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams metricsParams = matchWrap();
-        metricsParams.setMargins(0, dp(12), 0, dp(24));
-        root.addView(metricsView, metricsParams);
-
-        startButton = new Button(this);
-        startButton.setText(R.string.start_capture);
-        startButton.setOnClickListener(view -> requestCapture());
-        root.addView(startButton, matchWrap());
-
-        stopButton = new Button(this);
-        stopButton.setText(R.string.stop_capture);
-        stopButton.setOnClickListener(view -> stopCapture());
-        LinearLayout.LayoutParams stopParams = matchWrap();
-        stopParams.setMargins(0, dp(12), 0, 0);
-        root.addView(stopButton, stopParams);
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.addView(root);
-        setContentView(scroll);
+    private void refreshServiceState() {
+        boolean active = senderPreferences().getBoolean("capture_running", false);
+        if (active != running) {
+            updateState(active, active ? "Casting is active" : "Ready to cast",
+                    0, 0, 0, 0, 0, -1);
+        } else if (!active) {
+            updateState(false, "Ready to cast", 0, 0, 0, 0, 0, -1);
+        }
     }
 
     private void requestCapture() {
@@ -240,13 +326,19 @@ public final class MainActivity extends Activity {
         String receiverHost = receiverHostView.getText().toString().trim();
         String pairCode = pairCodeView.getText().toString().trim();
         if (receiverHost.isEmpty() || !StreamProtocol.validPairCode(pairCode)) {
-            updateState(false, "Enter a receiver IP and 6-digit pairing code", 0, 0, 0, 0, 0, -1);
+            updateState(false, "Check the receiver IP and 6-digit code", 0, 0, 0, 0, 0, -1);
             return;
         }
+        senderPreferences().edit()
+                .putString("receiver_host", receiverHost)
+                .putString("pair_code", pairCode)
+                .apply();
         if (Build.VERSION.SDK_INT >= 33 &&
-                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                        PackageManager.PERMISSION_GRANTED) {
             captureAfterPermission = true;
-            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQUEST_NOTIFICATIONS);
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                    REQUEST_NOTIFICATIONS);
             return;
         }
         launchCaptureConsent();
@@ -271,16 +363,15 @@ public final class MainActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode != REQUEST_CAPTURE) return;
         if (resultCode != RESULT_OK || data == null) {
-            updateState(false, "Screen-capture permission was not granted", 0, 0, 0, 0, 0, -1);
+            updateState(false, "Screen sharing was not approved", 0, 0, 0, 0, 0, -1);
             return;
         }
         String receiverHost = receiverHostView.getText().toString().trim();
         String pairCode = pairCodeView.getText().toString().trim();
         if (receiverHost.isEmpty() || !StreamProtocol.validPairCode(pairCode)) {
-            updateState(false, "Enter a receiver IP and 6-digit pairing code", 0, 0, 0, 0, 0, -1);
+            updateState(false, "Check the receiver IP and 6-digit code", 0, 0, 0, 0, 0, -1);
             return;
         }
-        getPreferences(MODE_PRIVATE).edit().putString("receiver_host", receiverHost).apply();
         Intent service = new Intent(this, ScreenCaptureService.class)
                 .setAction(ScreenCaptureService.ACTION_START)
                 .putExtra(ScreenCaptureService.EXTRA_RESULT_CODE, resultCode)
@@ -288,33 +379,38 @@ public final class MainActivity extends Activity {
                 .putExtra(ScreenCaptureService.EXTRA_RECEIVER_HOST, receiverHost)
                 .putExtra(ScreenCaptureService.EXTRA_PAIR_CODE, pairCode);
         startForegroundService(service);
-        updateState(true, "Starting capture and connection…", 0, 0, 0, 0, 0, -1);
+        updateState(true, "Starting secure screen permission session…",
+                0, 0, 0, 0, 0, -1);
     }
 
     private void stopCapture() {
-        Intent service = new Intent(this, ScreenCaptureService.class)
-                .setAction(ScreenCaptureService.ACTION_STOP);
-        startService(service);
+        startService(new Intent(this, ScreenCaptureService.class)
+                .setAction(ScreenCaptureService.ACTION_STOP));
     }
 
-    private void updateState(boolean running, String message, long frames, long bytes,
+    private void updateState(boolean isRunning, String message, long frames, long bytes,
                              int width, int height, long droppedFrames, long rttMicros) {
-        getSharedPreferences(ScreenCaptureService.PREFERENCES, MODE_PRIVATE).edit()
-                .putBoolean("capture_running", running).apply();
-        statusView.setText(message == null ? (running ? "Capturing" : "Stopped") : message);
-        if (running && width > 0) {
+        running = isRunning;
+        senderPreferences().edit().putBoolean("capture_running", isRunning).apply();
+        statusView.setText(message == null ? (isRunning ? "Casting" : "Ready to cast") : message);
+        statusView.setTextColor(isRunning ? COLOR_SUCCESS : COLOR_PRIMARY);
+        if (isRunning && width > 0) {
             metricsView.setText(String.format(Locale.US,
-                    "%d × %d · %,d frames · %.1f MB · %,d dropped · %s",
+                    "%d × %d  ·  %,d frames\n%.1f MB  ·  %,d dropped  ·  %s",
                     width, height, frames, bytes / 1_000_000.0, droppedFrames,
                     rttMicros >= 0 ? String.format(Locale.US, "%.1f ms RTT", rttMicros / 1000.0)
                             : "RTT pending"));
         } else {
-            metricsView.setText(running ? "Initializing H.264 encoder…" : "No active capture");
+            metricsView.setText(isRunning ? "Preparing video and receiver connection…"
+                    : "No active capture");
         }
-        startButton.setEnabled(!running);
-        stopButton.setEnabled(running);
-        receiverHostView.setEnabled(!running);
-        pairCodeView.setEnabled(!running);
+        primaryButton.setText(isRunning ? "Stop casting" : "Start casting");
+        primaryButton.setBackgroundTintList(ColorStateList.valueOf(
+                isRunning ? Color.rgb(242, 103, 112) : COLOR_PRIMARY));
+        receiverHostView.setEnabled(!isRunning);
+        pairCodeView.setEnabled(!isRunning);
+        connectionHintView.setText(isRunning ? "Connection details are locked while casting."
+                : "Saved details make the next cast a two-step start.");
     }
 
     private void updateAccessibilityButton() {
@@ -325,26 +421,9 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private EditText notificationListField(String hint, String value) {
-        EditText field = new EditText(this);
-        field.setHint(hint);
-        field.setSingleLine(true);
-        field.setInputType(InputType.TYPE_CLASS_TEXT);
-        field.setText(value);
-        field.setTextColor(Color.WHITE);
-        field.setHintTextColor(Color.rgb(130, 145, 160));
-        field.setOnFocusChangeListener((view, focused) -> {
-            if (!focused) {
-                saveNotificationPreferences();
-                ScreenCaptureService.notificationPreferencesChanged();
-            }
-        });
-        return field;
-    }
-
     private void saveNotificationPreferences() {
         if (notificationForwardingView == null) return;
-        getSharedPreferences(ScreenCaptureService.PREFERENCES, MODE_PRIVATE).edit()
+        senderPreferences().edit()
                 .putBoolean(NotificationForwardingService.PREFERENCE_ENABLED,
                         notificationForwardingView.isChecked())
                 .putBoolean(NotificationForwardingService.PREFERENCE_INCLUDE_CONTENT,
@@ -366,9 +445,104 @@ public final class MainActivity extends Activity {
                 : R.string.open_notification_access_settings);
     }
 
+    private SharedPreferences senderPreferences() {
+        return getSharedPreferences(ScreenCaptureService.PREFERENCES, MODE_PRIVATE);
+    }
+
+    private LinearLayout card() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(18), dp(18), dp(18), dp(18));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(COLOR_SURFACE);
+        background.setCornerRadius(dp(18));
+        background.setStroke(dp(1), Color.rgb(37, 58, 78));
+        card.setBackground(background);
+        return card;
+    }
+
+    private TextView sectionTitle(String value) {
+        TextView title = text(value, 19, COLOR_TEXT, Gravity.START);
+        title.setTypeface(title.getTypeface(), android.graphics.Typeface.BOLD);
+        return title;
+    }
+
+    private TextView text(String value, int size, int color, int gravity) {
+        TextView view = new TextView(this);
+        view.setText(value);
+        view.setTextSize(size);
+        view.setTextColor(color);
+        view.setGravity(gravity | Gravity.CENTER_VERTICAL);
+        view.setLineSpacing(0, 1.12f);
+        return view;
+    }
+
+    private EditText input(String hint, String value, int inputType) {
+        EditText field = new EditText(this);
+        field.setHint(hint);
+        field.setSingleLine(true);
+        field.setInputType(inputType);
+        field.setText(value);
+        field.setTextColor(COLOR_TEXT);
+        field.setHintTextColor(Color.rgb(119, 143, 163));
+        field.setPadding(dp(14), 0, dp(14), 0);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(COLOR_SURFACE_HIGH);
+        background.setCornerRadius(dp(12));
+        background.setStroke(dp(1), Color.rgb(48, 72, 94));
+        field.setBackground(background);
+        return field;
+    }
+
+    private CheckBox checkBox(int textResource, boolean checked) {
+        CheckBox checkBox = new CheckBox(this);
+        checkBox.setText(textResource);
+        checkBox.setTextColor(COLOR_TEXT);
+        checkBox.setChecked(checked);
+        checkBox.setButtonTintList(new ColorStateList(
+                new int[][]{new int[]{android.R.attr.state_checked}, new int[]{}},
+                new int[]{COLOR_PRIMARY, COLOR_SECONDARY}));
+        return checkBox;
+    }
+
+    private Button secondaryButton() {
+        Button button = new Button(this);
+        button.setTextColor(COLOR_TEXT);
+        button.setTextSize(14);
+        button.setAllCaps(false);
+        button.setBackgroundTintList(ColorStateList.valueOf(COLOR_SURFACE_HIGH));
+        return button;
+    }
+
     private LinearLayout.LayoutParams matchWrap() {
         return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT);
+    }
+
+    private LinearLayout.LayoutParams cardParams() {
+        LinearLayout.LayoutParams params = matchWrap();
+        params.setMargins(0, 0, 0, dp(14));
+        return params;
+    }
+
+    private LinearLayout.LayoutParams fieldParams() {
+        LinearLayout.LayoutParams params = matchWrap();
+        params.height = dp(54);
+        params.setMargins(0, 0, 0, dp(10));
+        return params;
+    }
+
+    private LinearLayout.LayoutParams buttonParams() {
+        LinearLayout.LayoutParams params = matchWrap();
+        params.height = dp(52);
+        params.setMargins(0, dp(10), 0, 0);
+        return params;
+    }
+
+    private LinearLayout.LayoutParams spaced(int left, int top, int right, int bottom) {
+        LinearLayout.LayoutParams params = matchWrap();
+        params.setMargins(left, top, right, bottom);
+        return params;
     }
 
     private int dp(int value) {

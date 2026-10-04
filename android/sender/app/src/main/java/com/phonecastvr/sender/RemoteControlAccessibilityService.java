@@ -53,11 +53,13 @@ public final class RemoteControlAccessibilityService extends AccessibilityServic
 
     @Override protected void onServiceConnected() {
         instance = this;
+        ScreenCaptureService.remoteControlStatusChanged(this);
         Log.i(TAG, "Remote-control accessibility service connected");
     }
 
     @Override public void onDestroy() {
         if (instance == this) instance = null;
+        ScreenCaptureService.remoteControlStatusChanged(this);
         super.onDestroy();
     }
 

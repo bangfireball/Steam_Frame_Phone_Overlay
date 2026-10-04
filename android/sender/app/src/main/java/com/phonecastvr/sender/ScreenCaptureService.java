@@ -67,6 +67,15 @@ public final class ScreenCaptureService extends Service {
         if (streamer != null) streamer.clearNotifications();
     }
 
+    static void remoteControlStatusChanged(Context context) {
+        NetworkStreamer streamer = activeNetworkStreamer;
+        if (streamer == null) return;
+        boolean appEnabled = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+                .getBoolean(RemoteControlAccessibilityService.PREFERENCE_REMOTE_CONTROL, false);
+        streamer.offerRemoteControlStatus(appEnabled,
+                RemoteControlAccessibilityService.isConnected());
+    }
+
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Object encoderLock = new Object();
     private final AtomicLong encodedFrames = new AtomicLong();
@@ -194,8 +203,15 @@ public final class ScreenCaptureService extends Service {
                         Log.w(TAG, "Remote input ignored: enable PhoneCast remote control and its accessibility service");
                     }
                 }
+
+                @Override public void onNotificationOpen(long actionToken) {
+                    if (!NotificationForwardingService.openNotification(actionToken)) {
+                        Log.w(TAG, "Notification open ignored: action is unavailable");
+                    }
+                }
             });
             activeNetworkStreamer = networkStreamer;
+            remoteControlStatusChanged(this);
             networkStreamer.start();
 
             DisplayMetrics metrics = currentDisplayMetrics();

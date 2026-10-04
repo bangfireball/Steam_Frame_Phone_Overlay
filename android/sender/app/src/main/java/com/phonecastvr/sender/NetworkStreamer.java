@@ -20,6 +20,7 @@ final class NetworkStreamer {
         void onConnectionChanged(boolean connected, String message);
         void onKeyFrameNeeded();
         void onRemoteInput(RemoteInputEvent event);
+        void onNotificationOpen(long actionToken);
     }
 
     private static final String TAG = "PhoneCastNetwork";
@@ -39,6 +40,7 @@ final class NetworkStreamer {
     private final AtomicLong notificationSequence = new AtomicLong();
     private volatile Packet latestConfig;
     private volatile Packet latestKeyFrame;
+    private volatile Packet latestRemoteControlStatus;
     private volatile Socket socket;
     private Thread thread;
 
@@ -103,6 +105,12 @@ final class NetworkStreamer {
         notifications.clear();
     }
 
+    void offerRemoteControlStatus(boolean appEnabled, boolean accessibilityEnabled) {
+        latestRemoteControlStatus = new Packet(StreamProtocol.TYPE_REMOTE_CONTROL_STATUS,
+                0, 0, 0, 0, 0,
+                StreamProtocol.remoteControlStatusPayload(appEnabled, accessibilityEnabled));
+    }
+
     long droppedFrames() {
         return droppedFrames.get();
     }
@@ -135,6 +143,8 @@ final class NetworkStreamer {
                 StreamProtocol.write(output, StreamProtocol.TYPE_HELLO, 0, 0,
                         System.nanoTime() / 1000L, 0, 0,
                         pairCode.getBytes(StandardCharsets.US_ASCII));
+                Packet sentRemoteControlStatus = latestRemoteControlStatus;
+                if (sentRemoteControlStatus != null) sentRemoteControlStatus.write(output);
                 Packet sentConfig = latestConfig;
                 if (sentConfig != null) sentConfig.write(output);
                 Packet cachedKeyFrame = latestKeyFrame;
@@ -154,6 +164,13 @@ final class NetworkStreamer {
                 long nextPingNanos = 0;
 
                 while (running.get()) {
+                    Packet currentRemoteControlStatus = latestRemoteControlStatus;
+                    if (currentRemoteControlStatus != null &&
+                            currentRemoteControlStatus != sentRemoteControlStatus) {
+                        currentRemoteControlStatus.write(output);
+                        sentRemoteControlStatus = currentRemoteControlStatus;
+                        output.flush();
+                    }
                     Packet currentConfig = latestConfig;
                     if (currentConfig != null && currentConfig != sentConfig) {
                         currentConfig.write(output);
@@ -213,6 +230,9 @@ final class NetworkStreamer {
                     listener.onKeyFrameNeeded();
                 } else if (header.type == StreamProtocol.TYPE_REMOTE_INPUT) {
                     listener.onRemoteInput(StreamProtocol.parseRemoteInput(payload, header.sequence));
+                } else if (header.type == StreamProtocol.TYPE_NOTIFICATION_OPEN &&
+                        header.payloadSize == 0) {
+                    listener.onNotificationOpen(header.sequence);
                 }
             }
         } catch (IOException ignored) {

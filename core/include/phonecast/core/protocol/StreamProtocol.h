@@ -23,6 +23,8 @@ enum class MessageType : std::uint8_t {
     RequestKeyFrame = 7,
     RemoteInput = 8,
     Notification = 9,
+    RemoteControlStatus = 10,
+    NotificationOpen = 11,
 };
 
 enum MessageFlags : std::uint16_t {
@@ -46,7 +48,19 @@ struct NotificationEvent {
     std::string body;
     std::string packageName;
     std::uint64_t postedAtMillis{};
+    // Opaque, session-scoped Android token. Zero means the source notification
+    // has no launch action.
+    std::uint64_t actionToken{};
     bool contentRedacted{true};
+};
+
+struct RemoteControlStatus {
+    bool appEnabled{false};
+    bool accessibilityEnabled{false};
+
+    [[nodiscard]] bool Ready() const noexcept {
+        return appEnabled && accessibilityEnabled;
+    }
 };
 
 std::vector<std::uint8_t> Serialize(const Message& message);
@@ -59,5 +73,8 @@ bool ParsePointerEvent(const std::uint8_t* data, std::size_t size,
 std::vector<std::uint8_t> SerializeNotification(const NotificationEvent& notification);
 bool ParseNotification(const std::uint8_t* data, std::size_t size,
                        NotificationEvent& notification, std::string& error);
+std::vector<std::uint8_t> SerializeRemoteControlStatus(const RemoteControlStatus& status);
+bool ParseRemoteControlStatus(const std::uint8_t* data, std::size_t size,
+                              RemoteControlStatus& status, std::string& error);
 
 }  // namespace phonecast::core::protocol

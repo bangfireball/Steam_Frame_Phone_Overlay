@@ -75,7 +75,7 @@ constexpr std::array<phonecast::vr::RadialMenuAction, 8> kMenuActions{
     phonecast::vr::RadialMenuAction::LeftControllerLocked,
     phonecast::vr::RadialMenuAction::RightControllerLocked};
 constexpr std::array<const char*, 9> kDashboardLabels{
-    "SHOW", "GLANCE", "PIN", "SETTINGS", "HEAD", "WORLD", "LEFT", "RIGHT", "BACK"};
+    "SHOW", "GLANCE", "PIN", "SETTINGS", "HEAD", "WORLD", "LEFT DOCK", "RIGHT DOCK", "BACK"};
 
 bool IsQuitEvent(std::uint32_t type) {
     // VREvent_ProcessQuit reports that some VR process exited; it is not a request
@@ -268,6 +268,21 @@ void FillSettingsRect(std::vector<std::uint8_t>& image, int x, int y, int width,
             SetSettingsPixel(image, column, row, color);
 }
 
+void FillSettingsRoundedRect(std::vector<std::uint8_t>& image, int x, int y,
+                             int width, int height, int radius,
+                             const std::array<std::uint8_t, 4>& color) {
+    for (int row = 0; row < height; ++row) {
+        for (int column = 0; column < width; ++column) {
+            const int dx = column < radius ? radius - column - 1
+                : column >= width - radius ? column - (width - radius) : 0;
+            const int dy = row < radius ? radius - row - 1
+                : row >= height - radius ? row - (height - radius) : 0;
+            if (dx * dx + dy * dy <= radius * radius)
+                SetSettingsPixel(image, x + column, y + row, color);
+        }
+    }
+}
+
 void DrawSettingsLabel(std::vector<std::uint8_t>& image, const std::string& label,
                        int centerX, int centerY, int scale,
                        const std::array<std::uint8_t, 4>& color) {
@@ -293,42 +308,58 @@ void DrawSettingsLabel(std::vector<std::uint8_t>& image, const std::string& labe
 }
 
 std::vector<std::uint8_t> MakeSettingsTexture(const phonecast::vr::SettingsMenuView& view) {
-    constexpr std::array<std::uint8_t, 4> background{8, 14, 24, 250};
-    constexpr std::array<std::uint8_t, 4> border{42, 160, 235, 255};
-    constexpr std::array<std::uint8_t, 4> selected{24, 92, 145, 255};
+    constexpr std::array<std::uint8_t, 4> panel{8, 14, 24, 248};
+    constexpr std::array<std::uint8_t, 4> header{13, 34, 54, 255};
+    constexpr std::array<std::uint8_t, 4> row{18, 31, 48, 250};
+    constexpr std::array<std::uint8_t, 4> selected{24, 83, 126, 255};
+    constexpr std::array<std::uint8_t, 4> accent{42, 177, 240, 255};
     constexpr std::array<std::uint8_t, 4> text{245, 249, 255, 255};
     constexpr std::array<std::uint8_t, 4> value{125, 218, 255, 255};
+    constexpr std::array<std::uint8_t, 4> track{58, 77, 96, 255};
     std::vector<std::uint8_t> image(
         static_cast<std::size_t>(kSettingsTextureWidth) * kSettingsTextureHeight * 4U, 0);
-    FillSettingsRect(image, 0, 0, static_cast<int>(kSettingsTextureWidth),
-                     static_cast<int>(kSettingsTextureHeight), background);
-    FillSettingsRect(image, 0, 0, static_cast<int>(kSettingsTextureWidth), 6, border);
-    FillSettingsRect(image, 0, static_cast<int>(kSettingsTextureHeight) - 6,
-                     static_cast<int>(kSettingsTextureWidth), 6, border);
-    FillSettingsRect(image, 0, 0, 6, static_cast<int>(kSettingsTextureHeight), border);
-    FillSettingsRect(image, static_cast<int>(kSettingsTextureWidth) - 6, 0, 6,
-                     static_cast<int>(kSettingsTextureHeight), border);
-    DrawSettingsLabel(image, view.title, static_cast<int>(kSettingsTextureWidth / 2), 52,
+    FillSettingsRoundedRect(image, 6, 6, static_cast<int>(kSettingsTextureWidth) - 12,
+                            static_cast<int>(kSettingsTextureHeight) - 12, 22, panel);
+    FillSettingsRoundedRect(image, 12, 12, static_cast<int>(kSettingsTextureWidth) - 24,
+                            82, 17, header);
+    FillSettingsRect(image, 12, 86, static_cast<int>(kSettingsTextureWidth) - 24, 5, accent);
+    DrawSettingsLabel(image, "PC", 48, 50, 3, accent);
+    DrawSettingsLabel(image, view.title, 286, 50,
                       view.title.size() > 18 ? 2 : 3, text);
     const int rowHeight = 82;
     const int firstRow = 126;
     for (std::size_t index = 0; index < view.labels.size(); ++index) {
         const int centerY = firstRow + static_cast<int>(index) * rowHeight;
-        if (index == view.selectedIndex)
-            FillSettingsRect(image, 14, centerY - 34,
-                             static_cast<int>(kSettingsTextureWidth) - 28, 68, selected);
-        DrawSettingsLabel(image, view.labels[index], 190, centerY - 12,
+        FillSettingsRoundedRect(image, 16, centerY - 34,
+                                static_cast<int>(kSettingsTextureWidth) - 32, 68, 12,
+                                index == view.selectedIndex ? selected : row);
+        DrawSettingsLabel(image, view.labels[index], 170, centerY - 12,
                           view.labels[index].size() > 15 ? 1 : 2, text);
         const bool adjustable = index < view.values.size() &&
                                 !view.values[index].empty() && view.values[index] != ">";
         if (index < view.values.size())
-            DrawSettingsLabel(image, view.values[index], 354, centerY + 14,
+            DrawSettingsLabel(image, view.values[index], 350, centerY - 12,
                               view.values[index].size() > 13 ? 1 : 2, value);
         if (adjustable) {
-            DrawSettingsLabel(image, "-", 42, centerY, 3, text);
-            DrawSettingsLabel(image, "+", 470, centerY, 3, text);
+            DrawSettingsLabel(image, "-", 42, centerY + 18, 3, text);
+            DrawSettingsLabel(image, "+", 470, centerY + 18, 3, text);
+            if (index < view.normalizedValues.size() && view.normalizedValues[index] >= 0.0F) {
+                constexpr int trackLeft = 82;
+                constexpr int trackWidth = 346;
+                FillSettingsRoundedRect(image, trackLeft, centerY + 14, trackWidth, 9, 4, track);
+                const int fillWidth = std::max(9, static_cast<int>(
+                    Clamp(view.normalizedValues[index], 0.0F, 1.0F) * trackWidth));
+                FillSettingsRoundedRect(image, trackLeft, centerY + 14, fillWidth, 9, 4, accent);
+                const int knobX = trackLeft + static_cast<int>(
+                    Clamp(view.normalizedValues[index], 0.0F, 1.0F) * trackWidth);
+                FillSettingsRoundedRect(image, knobX - 7, centerY + 9, 14, 19, 7, text);
+            }
         }
     }
+    FillSettingsRoundedRect(image, 176, static_cast<int>(kSettingsTextureHeight) - 35,
+                            160, 10, 5, value);
+    DrawSettingsLabel(image, "MOVE", 256,
+                      static_cast<int>(kSettingsTextureHeight) - 52, 1, value);
     return image;
 }
 
@@ -379,6 +410,22 @@ void FillImageRect(std::vector<std::uint8_t>& image, std::uint32_t width,
             SetImagePixel(image, width, height, column, row, color);
 }
 
+void FillImageRoundedRect(std::vector<std::uint8_t>& image, std::uint32_t width,
+                          std::uint32_t height, int x, int y, int rectWidth,
+                          int rectHeight, int radius,
+                          const std::array<std::uint8_t, 4>& color) {
+    for (int row = 0; row < rectHeight; ++row) {
+        for (int column = 0; column < rectWidth; ++column) {
+            const int dx = column < radius ? radius - column - 1
+                : column >= rectWidth - radius ? column - (rectWidth - radius) : 0;
+            const int dy = row < radius ? radius - row - 1
+                : row >= rectHeight - radius ? row - (rectHeight - radius) : 0;
+            if (dx * dx + dy * dy <= radius * radius)
+                SetImagePixel(image, width, height, x + column, y + row, color);
+        }
+    }
+}
+
 void DrawImageLabel(std::vector<std::uint8_t>& image, std::uint32_t width,
                     std::uint32_t height, const std::string& label,
                     int centerX, int centerY, int scale,
@@ -427,35 +474,45 @@ std::string NotificationLine(const std::string& value, std::size_t maximumCharac
 
 std::vector<std::uint8_t> MakeNotificationTexture(
         const phonecast::core::protocol::NotificationEvent& notification) {
-    constexpr std::array<std::uint8_t, 4> background{8, 14, 24, 245};
-    constexpr std::array<std::uint8_t, 4> header{15, 45, 70, 250};
+    constexpr std::array<std::uint8_t, 4> shadow{0, 0, 0, 105};
+    constexpr std::array<std::uint8_t, 4> card{12, 22, 34, 250};
+    constexpr std::array<std::uint8_t, 4> badge{24, 112, 170, 255};
     constexpr std::array<std::uint8_t, 4> accent{65, 188, 245, 255};
     constexpr std::array<std::uint8_t, 4> text{245, 249, 255, 255};
     constexpr std::array<std::uint8_t, 4> secondary{170, 205, 225, 255};
+    constexpr std::array<std::uint8_t, 4> action{19, 54, 78, 255};
     std::vector<std::uint8_t> image(
         static_cast<std::size_t>(kNotificationTextureWidth) *
         kNotificationTextureHeight * 4U, 0);
-    FillImageRect(image, kNotificationTextureWidth, kNotificationTextureHeight,
-                  0, 0, static_cast<int>(kNotificationTextureWidth),
-                  static_cast<int>(kNotificationTextureHeight), background);
-    FillImageRect(image, kNotificationTextureWidth, kNotificationTextureHeight,
-                  0, 0, static_cast<int>(kNotificationTextureWidth), 62, header);
-    FillImageRect(image, kNotificationTextureWidth, kNotificationTextureHeight,
-                  0, 58, static_cast<int>(kNotificationTextureWidth), 4, accent);
+    FillImageRoundedRect(image, kNotificationTextureWidth, kNotificationTextureHeight,
+                         18, 18, 738, 226, 24, shadow);
+    FillImageRoundedRect(image, kNotificationTextureWidth, kNotificationTextureHeight,
+                         10, 10, 738, 226, 24, card);
+    FillImageRoundedRect(image, kNotificationTextureWidth, kNotificationTextureHeight,
+                         28, 28, 70, 70, 18, badge);
+    const std::string application = NotificationLine(notification.applicationName, 28);
+    const std::string badgeLabel = application.empty() ? "N" : application.substr(0, 1);
     DrawImageLabel(image, kNotificationTextureWidth, kNotificationTextureHeight,
-                   NotificationLine(notification.applicationName, 28), 384, 31, 3, accent);
+                   badgeLabel, 63, 63, 5, text);
+    FillImageRoundedRect(image, kNotificationTextureWidth, kNotificationTextureHeight,
+                         112, 28, 610, 4, 2, accent);
+    DrawImageLabel(image, kNotificationTextureWidth, kNotificationTextureHeight,
+                   application, 400, 56, 2, accent);
     const std::string title = NotificationLine(notification.title, 38);
     const std::string body = notification.contentRedacted
-        ? "CONTENT HIDDEN ON PHONE"
+        ? "CONTENT HIDDEN FOR PRIVACY"
         : NotificationLine(notification.body, 54);
     DrawImageLabel(image, kNotificationTextureWidth, kNotificationTextureHeight,
-                   title.empty() ? "NEW NOTIFICATION" : title, 384, 105,
+                   title.empty() ? "NEW NOTIFICATION" : title, 400, 111,
                    title.size() > 30 ? 2 : 3, text);
     if (!body.empty())
         DrawImageLabel(image, kNotificationTextureWidth, kNotificationTextureHeight,
-                       body, 384, 157, body.size() > 38 ? 1 : 2, secondary);
+                       body, 400, 157, body.size() > 38 ? 1 : 2, secondary);
+    FillImageRoundedRect(image, kNotificationTextureWidth, kNotificationTextureHeight,
+                         230, 188, 340, 34, 13, action);
     DrawImageLabel(image, kNotificationTextureWidth, kNotificationTextureHeight,
-                   "SELECT TO OPEN PHONE", 384, 220, 2, accent);
+                   notification.actionToken == 0U ? "OPEN PHONE" : "OPEN APP",
+                   400, 205, 2, accent);
     return image;
 }
 
@@ -471,8 +528,8 @@ void AddGrabHandle(const phonecast::core::VideoFrame& frame,
     constexpr std::array<std::uint8_t, 4> background{8, 14, 24, 190};
     constexpr std::array<std::uint8_t, 4> separator{31, 147, 220, 220};
     constexpr std::array<std::uint8_t, 4> handle{210, 230, 242, 235};
-    constexpr std::array<std::uint8_t, 4> backButton{18, 35, 52, 205};
-    constexpr std::array<std::uint8_t, 4> backIcon{245, 249, 255, 245};
+    constexpr std::array<std::uint8_t, 4> footerButton{18, 35, 52, 205};
+    constexpr std::array<std::uint8_t, 4> footerIcon{245, 249, 255, 245};
     const int phoneHeight = static_cast<int>(frame.height);
     FillImageRect(composite.pixels, composite.width, composite.height, 0, phoneHeight,
                   static_cast<int>(composite.width),
@@ -491,20 +548,40 @@ void AddGrabHandle(const phonecast::core::VideoFrame& frame,
     // icon translucent so it remains recognizable without dominating the video.
     FillImageRect(composite.pixels, composite.width, composite.height, 0, phoneHeight,
                   static_cast<int>(kGrabHandleHeightPixels),
-                  static_cast<int>(kGrabHandleHeightPixels), backButton);
+                  static_cast<int>(kGrabHandleHeightPixels), footerButton);
     const int centerX = static_cast<int>(kGrabHandleHeightPixels / 2U);
     const int centerY = phoneHeight + static_cast<int>(kGrabHandleHeightPixels / 2U);
     for (int step = 0; step < 10; ++step) {
         for (int thickness = -2; thickness <= 2; ++thickness) {
             SetImagePixel(composite.pixels, composite.width, composite.height,
-                          centerX - 5 + step + thickness, centerY - step, backIcon);
+                          centerX - 5 + step + thickness, centerY - step, footerIcon);
             SetImagePixel(composite.pixels, composite.width, composite.height,
-                          centerX - 5 + step + thickness, centerY + step, backIcon);
+                          centerX - 5 + step + thickness, centerY + step, footerIcon);
+        }
+    }
+
+    // The lower-right footer target hides the phone locally. It is deliberately
+    // smaller and quieter than the streamed content while remaining selectable.
+    const int closeLeft = std::max(0, static_cast<int>(composite.width) -
+                                      static_cast<int>(kGrabHandleHeightPixels));
+    FillImageRect(composite.pixels, composite.width, composite.height,
+                  closeLeft, phoneHeight, static_cast<int>(kGrabHandleHeightPixels),
+                  static_cast<int>(kGrabHandleHeightPixels), footerButton);
+    const int closeX = closeLeft + static_cast<int>(kGrabHandleHeightPixels / 2U);
+    for (int step = -7; step <= 7; ++step) {
+        for (int thickness = -1; thickness <= 1; ++thickness) {
+            SetImagePixel(composite.pixels, composite.width, composite.height,
+                          closeX + step, centerY + step + thickness, footerIcon);
+            SetImagePixel(composite.pixels, composite.width, composite.height,
+                          closeX + step, centerY - step + thickness, footerIcon);
         }
     }
 }
 
-std::vector<std::uint8_t> MakeDashboardTexture(bool currentlyVisible) {
+std::vector<std::uint8_t> MakeDashboardTexture(bool currentlyVisible,
+                                                bool remoteStatusKnown,
+                                                bool remoteAppEnabled,
+                                                bool remoteAccessibilityEnabled) {
     constexpr std::array<std::uint8_t, 4> background{8, 14, 24, 255};
     constexpr std::array<std::uint8_t, 4> header{15, 31, 50, 255};
     constexpr std::array<std::uint8_t, 4> cell{25, 52, 78, 255};
@@ -531,7 +608,22 @@ std::vector<std::uint8_t> MakeDashboardTexture(bool currentlyVisible) {
                    "PHONECAST", 190, 50, 4, text);
     DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
                    currentlyVisible ? "PHONE VISIBLE" : "PHONE HIDDEN",
-                   760, 50, 3, accent);
+                   760, 38, 3, accent);
+    std::string remoteStatus = "CONTROL STATUS PENDING";
+    if (remoteStatusKnown) {
+        if (remoteAppEnabled && remoteAccessibilityEnabled)
+            remoteStatus = "REMOTE CONTROL READY";
+        else if (!remoteAppEnabled && !remoteAccessibilityEnabled)
+            remoteStatus = "ENABLE BOTH CONTROL GATES";
+        else if (!remoteAppEnabled)
+            remoteStatus = "ENABLE APP CONTROL";
+        else
+            remoteStatus = "ENABLE ACCESSIBILITY";
+    }
+    DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                   remoteStatus, 760, 74, 2,
+                   remoteStatusKnown && remoteAppEnabled && remoteAccessibilityEnabled
+                       ? accent : std::array<std::uint8_t, 4>{255, 183, 77, 255});
     for (int index = 0; index < kDashboardColumns * kDashboardRows; ++index) {
         const int column = index % kDashboardColumns;
         const int row = index / kDashboardColumns;
@@ -678,12 +770,43 @@ public:
 
     void RenderDashboard() {
         if (dashboardOverlay == vr::k_ulOverlayHandleInvalid) return;
-        auto image = MakeDashboardTexture(desiredVisible);
+        auto image = MakeDashboardTexture(desiredVisible, remoteStatusKnown,
+                                           remoteAppEnabled, remoteAccessibilityEnabled);
         const auto result = overlayApi->SetOverlayRaw(
             dashboardOverlay, image.data(), kDashboardTextureWidth, kDashboardTextureHeight, 4);
         if (result != vr::VROverlayError_None)
             logger.Log(core::LogLevel::Warning, "openvr-dashboard",
                        "Failed to update the PhoneCast dashboard panel.");
+    }
+
+    void UpdateNotificationPreview(bool visible) {
+        if (notificationOverlay == vr::k_ulOverlayHandleInvalid) return;
+        if (!visible) {
+            if (notificationPreviewVisible) overlayApi->HideOverlay(notificationOverlay);
+            notificationPreviewVisible = false;
+            return;
+        }
+        core::protocol::NotificationEvent preview;
+        preview.applicationName = "PHONECAST PREVIEW";
+        preview.title = "NOTIFICATION CARD";
+        preview.body = "DRAG THE SLIDERS TO PLACE ME";
+        preview.packageName = "com.phonecastvr.preview";
+        preview.contentRedacted = false;
+        auto image = MakeNotificationTexture(preview);
+        const auto textureResult = overlayApi->SetOverlayRaw(
+            notificationOverlay, image.data(), kNotificationTextureWidth,
+            kNotificationTextureHeight, 4);
+        const auto showResult = textureResult == vr::VROverlayError_None
+            ? overlayApi->ShowOverlay(notificationOverlay) : textureResult;
+        if (textureResult != vr::VROverlayError_None ||
+            showResult != vr::VROverlayError_None) {
+            logger.Log(core::LogLevel::Warning, "openvr-notification",
+                       "Could not display the notification placement preview.");
+            return;
+        }
+        notificationVisible = false;
+        currentNotificationActionToken = 0;
+        notificationPreviewVisible = true;
     }
 
     void DestroyDashboard() {
@@ -714,7 +837,9 @@ public:
         const vr::HmdVector2_t mouseScale{{static_cast<float>(kDashboardTextureWidth),
                                            static_cast<float>(kDashboardTextureHeight)}};
         const auto panelResult = overlayApi->SetOverlayRaw(
-            dashboardOverlay, MakeDashboardTexture(desiredVisible).data(),
+            dashboardOverlay,
+            MakeDashboardTexture(desiredVisible, remoteStatusKnown,
+                                 remoteAppEnabled, remoteAccessibilityEnabled).data(),
             kDashboardTextureWidth, kDashboardTextureHeight, 4);
         const auto thumbnailResult = overlayApi->SetOverlayRaw(
             dashboardThumbnail, thumbnail.data(),
@@ -1238,19 +1363,71 @@ public:
         return -1;
     }
 
+    bool IsSettingsGrabHandle(float mouseY) const {
+        const int y = static_cast<int>(kSettingsTextureHeight - mouseY);
+        return y >= static_cast<int>(kSettingsTextureHeight) - 70;
+    }
+
     void QueueSettingsLaserClick(float mouseX, float mouseY) {
         const int row = SettingsRow(mouseY);
         if (row < 0) return;
         settingsLaserTargetRow = row;
-        const bool adjustable = static_cast<std::size_t>(row) < settingsMenuView.values.size() &&
-                                !settingsMenuView.values[static_cast<std::size_t>(row)].empty() &&
-                                settingsMenuView.values[static_cast<std::size_t>(row)] != ">";
-        if (adjustable && mouseX < 100.0F)
-            settingsLaserCommand = phonecast::vr::SettingsMenuCommand::Decrease;
-        else if (adjustable && mouseX > static_cast<float>(kSettingsTextureWidth) - 100.0F)
-            settingsLaserCommand = phonecast::vr::SettingsMenuCommand::Increase;
-        else
-            settingsLaserCommand = phonecast::vr::SettingsMenuCommand::Activate;
+        const auto index = static_cast<std::size_t>(row);
+        const bool adjustable = index < settingsMenuView.values.size() &&
+                                !settingsMenuView.values[index].empty() &&
+                                settingsMenuView.values[index] != ">";
+        const bool slider = index < settingsMenuView.normalizedValues.size() &&
+                            settingsMenuView.normalizedValues[index] >= 0.0F;
+        if (adjustable && mouseX < 72.0F) {
+            settingsLaserInput = {phonecast::vr::SettingsMenuCommand::Decrease, 0.0F};
+        } else if (adjustable && mouseX > static_cast<float>(kSettingsTextureWidth) - 72.0F) {
+            settingsLaserInput = {phonecast::vr::SettingsMenuCommand::Increase, 0.0F};
+        } else if (slider && mouseX >= 82.0F && mouseX <= 428.0F) {
+            settingsLaserInput = {phonecast::vr::SettingsMenuCommand::SetNormalized,
+                                  Clamp((mouseX - 82.0F) / 346.0F, 0.0F, 1.0F)};
+        } else {
+            settingsLaserInput = {phonecast::vr::SettingsMenuCommand::Activate, 0.0F};
+        }
+    }
+
+    bool CaptureSettingsTransform() {
+        if (settingsWorldTransformValid) {
+            return overlayApi->SetOverlayTransformAbsolute(
+                settingsOverlay, vr::TrackingUniverseStanding, &settingsWorldTransform) ==
+                vr::VROverlayError_None;
+        }
+        vr::HmdMatrix34_t hmd{};
+        if (!DevicePose(vr::k_unTrackedDeviceIndex_Hmd, hmd)) return false;
+        const vr::HmdMatrix34_t local{{{1.0F, 0.0F, 0.0F, 0.0F},
+                                       {0.0F, 1.0F, 0.0F, -0.04F},
+                                       {0.0F, 0.0F, 1.0F, -0.85F}}};
+        settingsWorldTransform = Multiply(hmd, local);
+        settingsWorldTransformValid = true;
+        return overlayApi->SetOverlayTransformAbsolute(
+            settingsOverlay, vr::TrackingUniverseStanding, &settingsWorldTransform) ==
+            vr::VROverlayError_None;
+    }
+
+    void BeginSettingsGrab(vr::TrackedDeviceIndex_t device) {
+        vr::HmdMatrix34_t controllerPose{};
+        if (!DevicePose(device, controllerPose) || !settingsWorldTransformValid) return;
+        settingsGrabRelative = Multiply(InverseRigid(controllerPose), settingsWorldTransform);
+        if (overlayApi->SetOverlayTransformTrackedDeviceRelative(
+                settingsOverlay, device, &settingsGrabRelative) == vr::VROverlayError_None)
+            settingsGrabbedDevice = device;
+    }
+
+    void EndSettingsGrab(vr::TrackedDeviceIndex_t device) {
+        if (settingsGrabbedDevice == vr::k_unTrackedDeviceIndexInvalid ||
+            device != settingsGrabbedDevice) return;
+        vr::HmdMatrix34_t controllerPose{};
+        if (DevicePose(device, controllerPose)) {
+            settingsWorldTransform = Multiply(controllerPose, settingsGrabRelative);
+            settingsWorldTransformValid = true;
+            overlayApi->SetOverlayTransformAbsolute(
+                settingsOverlay, vr::TrackingUniverseStanding, &settingsWorldTransform);
+        }
+        settingsGrabbedDevice = vr::k_unTrackedDeviceIndexInvalid;
     }
 
     bool HandleSettingsMenu(const HandInput& left, const HandInput& right) {
@@ -1258,10 +1435,10 @@ public:
         const auto& active = settingsMenuLeft ? left : right;
         if (!hasPendingSettingsMenuCommand &&
             (left.calibratePressed || right.calibratePressed)) {
-            pendingSettingsMenuCommand = phonecast::vr::SettingsMenuCommand::Back;
+            pendingSettingsMenuInput = {phonecast::vr::SettingsMenuCommand::Back, 0.0F};
             hasPendingSettingsMenuCommand = true;
         } else if (!hasPendingSettingsMenuCommand && active.glancePressed) {
-            pendingSettingsMenuCommand = phonecast::vr::SettingsMenuCommand::Activate;
+            pendingSettingsMenuInput = {phonecast::vr::SettingsMenuCommand::Activate, 0.0F};
             hasPendingSettingsMenuCommand = true;
         }
         const float magnitude = std::sqrt(active.x * active.x + active.y * active.y);
@@ -1269,13 +1446,15 @@ public:
             settingsAxisLatched = false;
         } else if (!settingsAxisLatched && !hasPendingSettingsMenuCommand) {
             if (std::fabs(active.y) >= std::fabs(active.x))
-                pendingSettingsMenuCommand = active.y > 0.0F
-                    ? phonecast::vr::SettingsMenuCommand::PreviousItem
-                    : phonecast::vr::SettingsMenuCommand::NextItem;
+                pendingSettingsMenuInput = {
+                    active.y > 0.0F ? phonecast::vr::SettingsMenuCommand::PreviousItem
+                                    : phonecast::vr::SettingsMenuCommand::NextItem,
+                    0.0F};
             else
-                pendingSettingsMenuCommand = active.x > 0.0F
-                    ? phonecast::vr::SettingsMenuCommand::Increase
-                    : phonecast::vr::SettingsMenuCommand::Decrease;
+                pendingSettingsMenuInput = {
+                    active.x > 0.0F ? phonecast::vr::SettingsMenuCommand::Increase
+                                    : phonecast::vr::SettingsMenuCommand::Decrease,
+                    0.0F};
             hasPendingSettingsMenuCommand = true;
             settingsAxisLatched = true;
         }
@@ -1534,16 +1713,23 @@ public:
     int gestureProgressStep{-1};
     bool settingsMenuVisible{false};
     bool notificationVisible{false};
+    bool notificationPreviewVisible{false};
     bool notificationOpenRequested{false};
+    std::uint64_t currentNotificationActionToken{};
+    std::uint64_t pendingNotificationActionToken{};
+    bool hideRequested{false};
     bool settingsMenuLeft{true};
     phonecast::vr::SettingsMenuView settingsMenuView{};
     int settingsLaserTargetRow{-1};
-    phonecast::vr::SettingsMenuCommand settingsLaserCommand{
-        phonecast::vr::SettingsMenuCommand::Activate};
+    phonecast::vr::SettingsMenuInput settingsLaserInput{};
     bool settingsAxisLatched{false};
-    phonecast::vr::SettingsMenuCommand pendingSettingsMenuCommand{
-        phonecast::vr::SettingsMenuCommand::Back};
+    phonecast::vr::SettingsMenuInput pendingSettingsMenuInput{
+        phonecast::vr::SettingsMenuCommand::Back, 0.0F};
     bool hasPendingSettingsMenuCommand{false};
+    vr::HmdMatrix34_t settingsWorldTransform{};
+    bool settingsWorldTransformValid{false};
+    vr::TrackedDeviceIndex_t settingsGrabbedDevice{vr::k_unTrackedDeviceIndexInvalid};
+    vr::HmdMatrix34_t settingsGrabRelative{};
     bool radialMenuVisible{false};
     bool radialMenuLeft{true};
     bool radialAwaitRelease{false};
@@ -1555,6 +1741,9 @@ public:
     phonecast::vr::WristMenuGesture wristMenuGesture{};
     bool shown{false};
     bool desiredVisible{true};
+    bool remoteStatusKnown{false};
+    bool remoteAppEnabled{false};
+    bool remoteAccessibilityEnabled{false};
     bool hasFrame{false};
     phonecast::vr::OverlaySettings currentSettings{};
     phonecast::vr::OverlaySettings pendingSettings{};
@@ -1837,8 +2026,10 @@ bool OpenVrOverlayRenderer::PumpEvents() {
            impl_->overlayApi->PollNextOverlayEvent(
                impl_->notificationOverlay, &event, sizeof(event))) {
         if (event.eventType == vr::VREvent_MouseButtonDown &&
-            (event.data.mouse.button & vr::VRMouseButton_Left) != 0) {
+            (event.data.mouse.button & vr::VRMouseButton_Left) != 0 &&
+            !impl_->notificationPreviewVisible) {
             impl_->notificationOpenRequested = true;
+            impl_->pendingNotificationActionToken = impl_->currentNotificationActionToken;
             impl_->overlayApi->HideOverlay(impl_->notificationOverlay);
             impl_->notificationVisible = false;
             impl_->logger.Log(core::LogLevel::Info, "openvr-notification",
@@ -1850,7 +2041,14 @@ bool OpenVrOverlayRenderer::PumpEvents() {
                impl_->settingsOverlay, &event, sizeof(event))) {
         if (event.eventType == vr::VREvent_MouseButtonDown &&
             (event.data.mouse.button & vr::VRMouseButton_Left) != 0) {
-            impl_->QueueSettingsLaserClick(event.data.mouse.x, event.data.mouse.y);
+            if (impl_->IsSettingsGrabHandle(event.data.mouse.y))
+                impl_->BeginSettingsGrab(event.trackedDeviceIndex);
+            else
+                impl_->QueueSettingsLaserClick(event.data.mouse.x, event.data.mouse.y);
+        } else if (event.eventType == vr::VREvent_MouseButtonUp &&
+                   (event.data.mouse.button & vr::VRMouseButton_Left) != 0 &&
+                   impl_->settingsGrabbedDevice != vr::k_unTrackedDeviceIndexInvalid) {
+            impl_->EndSettingsGrab(event.trackedDeviceIndex);
         }
         if (IsQuitEvent(event.eventType)) {
             impl_->logger.Log(core::LogLevel::Info, "openvr", "Runtime requested overlay shutdown.");
@@ -1882,6 +2080,12 @@ bool OpenVrOverlayRenderer::PumpEvents() {
                 impl_->QueuePointer(impl_->interaction.Back());
                 impl_->logger.Log(core::LogLevel::Info, "openvr-input",
                                   "Android Back requested from the overlay button.");
+            } else if (impl_->interaction.IsCloseButton(
+                           event.data.mouse.x, event.data.mouse.y)) {
+                impl_->backButtonDown = true;
+                impl_->hideRequested = true;
+                impl_->logger.Log(core::LogLevel::Info, "openvr-input",
+                                  "Phone hide requested from the overlay close button.");
             } else if (impl_->interaction.IsGrabHandle(event.data.mouse.y)) {
                 impl_->BeginGrab(event.trackedDeviceIndex);
             } else {
@@ -1962,6 +2166,10 @@ bool OpenVrOverlayRenderer::ShowSettingsMenu(
     }
     impl_->settingsMenuView = view;
     auto image = MakeSettingsTexture(view);
+    if (!impl_->CaptureSettingsTransform()) {
+        error = "Could not place the settings panel in world space.";
+        return false;
+    }
     if (!impl_->OverlayCall(impl_->overlayApi->SetOverlayRaw(
                                 impl_->settingsOverlay, image.data(),
                                 kSettingsTextureWidth, kSettingsTextureHeight, 4),
@@ -1970,6 +2178,7 @@ bool OpenVrOverlayRenderer::ShowSettingsMenu(
                             "Show settings overlay", error)) return false;
     impl_->settingsMenuLeft = impl_->radialMenuLeft;
     impl_->settingsMenuVisible = true;
+    impl_->UpdateNotificationPreview(view.showNotificationPreview);
     impl_->logger.Log(core::LogLevel::Info, "openvr-settings", "In-headset settings menu shown.");
     error.clear();
     return true;
@@ -1984,6 +2193,7 @@ bool OpenVrOverlayRenderer::HideSettingsMenu(std::string& error) {
     if (!impl_->OverlayCall(impl_->overlayApi->HideOverlay(impl_->settingsOverlay),
                             "Hide settings overlay", error)) return false;
     impl_->settingsMenuVisible = false;
+    impl_->UpdateNotificationPreview(false);
     impl_->settingsAxisLatched = false;
     impl_->hasPendingSettingsMenuCommand = false;
     impl_->settingsLaserTargetRow = -1;
@@ -1993,9 +2203,9 @@ bool OpenVrOverlayRenderer::HideSettingsMenu(std::string& error) {
 }
 
 bool OpenVrOverlayRenderer::TakeSettingsMenuInput(
-        phonecast::vr::SettingsMenuCommand& command) {
+        phonecast::vr::SettingsMenuInput& input) {
     if (impl_->hasPendingSettingsMenuCommand) {
-        command = impl_->pendingSettingsMenuCommand;
+        input = impl_->pendingSettingsMenuInput;
         impl_->hasPendingSettingsMenuCommand = false;
         return true;
     }
@@ -2007,14 +2217,25 @@ bool OpenVrOverlayRenderer::TakeSettingsMenuInput(
         const auto target = static_cast<std::size_t>(impl_->settingsLaserTargetRow);
         const auto forward = (target + count - current) % count;
         const auto backward = (current + count - target) % count;
-        command = forward <= backward
+        input = {forward <= backward
             ? phonecast::vr::SettingsMenuCommand::NextItem
-            : phonecast::vr::SettingsMenuCommand::PreviousItem;
+            : phonecast::vr::SettingsMenuCommand::PreviousItem, 0.0F};
         return true;
     }
-    command = impl_->settingsLaserCommand;
+    input = impl_->settingsLaserInput;
     impl_->settingsLaserTargetRow = -1;
     return true;
+}
+
+void OpenVrOverlayRenderer::SetRemoteControlStatus(bool known, bool appEnabled,
+                                                    bool accessibilityEnabled) {
+    const bool changed = impl_->remoteStatusKnown != known ||
+        impl_->remoteAppEnabled != appEnabled ||
+        impl_->remoteAccessibilityEnabled != accessibilityEnabled;
+    impl_->remoteStatusKnown = known;
+    impl_->remoteAppEnabled = appEnabled;
+    impl_->remoteAccessibilityEnabled = accessibilityEnabled;
+    if (changed) impl_->RenderDashboard();
 }
 
 bool OpenVrOverlayRenderer::TakePointerEvent(core::PointerEvent& event) {
@@ -2038,9 +2259,13 @@ bool OpenVrOverlayRenderer::ShowNotification(
                             "Set notification texture", error) ||
         !impl_->OverlayCall(impl_->overlayApi->ShowOverlay(impl_->notificationOverlay),
                             "Show notification overlay", error)) return false;
+    impl_->notificationPreviewVisible = false;
+    impl_->currentNotificationActionToken = notification.actionToken;
     impl_->notificationVisible = true;
     impl_->logger.Log(core::LogLevel::Info, "openvr-notification",
-                      "Displayed a privacy-filtered notification card.");
+                      notification.actionToken == 0U
+                          ? "Displayed a notification card without an Android open action."
+                          : "Displayed a notification card with an Android open action.");
     error.clear();
     return true;
 }
@@ -2059,9 +2284,17 @@ bool OpenVrOverlayRenderer::HideNotification(std::string& error) {
     return true;
 }
 
-bool OpenVrOverlayRenderer::TakeNotificationOpenRequest() {
+bool OpenVrOverlayRenderer::TakeNotificationOpenRequest(std::uint64_t& actionToken) {
     if (!impl_->notificationOpenRequested) return false;
+    actionToken = impl_->pendingNotificationActionToken;
     impl_->notificationOpenRequested = false;
+    impl_->pendingNotificationActionToken = 0;
+    return true;
+}
+
+bool OpenVrOverlayRenderer::TakeHideRequest() {
+    if (!impl_->hideRequested) return false;
+    impl_->hideRequested = false;
     return true;
 }
 
@@ -2097,6 +2330,9 @@ void OpenVrOverlayRenderer::Stop() noexcept {
     impl_->overlayApi = nullptr;
     impl_->shown = false;
     impl_->desiredVisible = true;
+    impl_->remoteStatusKnown = false;
+    impl_->remoteAppEnabled = false;
+    impl_->remoteAccessibilityEnabled = false;
     impl_->hasFrame = false;
     impl_->hasPendingSettings = false;
     impl_->hasPendingGlanceInput = false;
@@ -2105,8 +2341,14 @@ void OpenVrOverlayRenderer::Stop() noexcept {
     impl_->gestureProgressVisible = false;
     impl_->gestureProgressStep = -1;
     impl_->settingsMenuVisible = false;
+    impl_->settingsWorldTransformValid = false;
+    impl_->settingsGrabbedDevice = vr::k_unTrackedDeviceIndexInvalid;
     impl_->notificationVisible = false;
+    impl_->notificationPreviewVisible = false;
     impl_->notificationOpenRequested = false;
+    impl_->currentNotificationActionToken = 0;
+    impl_->pendingNotificationActionToken = 0;
+    impl_->hideRequested = false;
     impl_->settingsAxisLatched = false;
     impl_->settingsLaserTargetRow = -1;
     impl_->radialMenuVisible = false;

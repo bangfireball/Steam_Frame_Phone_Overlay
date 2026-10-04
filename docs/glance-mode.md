@@ -39,9 +39,11 @@ The earlier thumbstick long-press and wrist-pose paths can open a separate portr
 
 Choose **Settings** from the control grid to open a separate head-relative panel. It is transactional: changes preview live, **Apply** persists them, and **Cancel** or Back from the root restores the values from before the panel opened.
 
-The portrait settings panel supports the same controller laser as the control grid. Click a row to open a category or activate an action. Adjustable rows show `-` and `+` targets at their left and right edges. Apply and Cancel remain explicit root actions. SteamVR Input navigation remains available as an optional fallback if button delivery becomes functional.
+The portrait settings panel supports the same controller laser as the control grid. It uses styled cards, selected-row emphasis, and left/right **Dock** terminology matching the dashboard. Click a row to open a category or activate an action. Numeric rows provide an interactive slider as well as precise `-` and `+` targets; discrete mode/orientation rows retain `-` and `+`. Apply and Cancel remain explicit root actions. SteamVR Input navigation remains available as an optional fallback if button delivery becomes functional.
 
-The panel contains Appearance, Placement, independent Left/Right Controller calibration, and Glance and Controls categories. Reset Position and Reset Hand are explicit row actions. Reset All requires a second confirmation click. Glance preview scale and radial-menu long-press duration are persisted with the overlay settings. `Ctrl+Alt+S` is a development fallback for opening the panel.
+The settings panel snapshots into standing/world space when opened rather than continuing to follow the user's head. Its labeled bottom handle can be trigger-dragged with the dashboard laser; release leaves the panel at the new world-space pose for the remainder of the receiver session. This movement does not alter the phone overlay's persisted placement.
+
+The panel contains Appearance, Placement, independent Left/Right Dock calibration, and Glance and Controls categories. Entering Notifications displays a representative notification card at the current live placement; slider and `-` / `+` changes move and resize it immediately, and leaving the category or closing settings removes the preview. Reset Position and Reset Hand are explicit row actions. Reset All requires a second confirmation click. Glance preview scale and radial-menu long-press duration are persisted with the overlay settings. `Ctrl+Alt+S` is a development fallback for opening the panel.
 
 ## Gesture decision
 
