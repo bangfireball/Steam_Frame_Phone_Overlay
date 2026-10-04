@@ -80,6 +80,20 @@ struct TcpVideoServer::Implementation {
             messages.push_back({std::move(message), now});
             return true;
         }
+        if (message.type == MessageType::Notification) {
+            // Notification cards must never disturb video prediction state. If
+            // the queue is busy, discard an older card rather than a video AU.
+            if (messages.size() >= kMaximumQueuedMessages) {
+                const auto old = std::find_if(messages.begin(), messages.end(),
+                    [](const QueuedMessage& queued) {
+                        return queued.message.type == MessageType::Notification;
+                    });
+                if (old == messages.end()) return false;
+                messages.erase(old);
+            }
+            messages.push_back({std::move(message), now});
+            return false;
+        }
 
         ++receivedFrames;
         receivedBytes += message.payload.size();
@@ -169,7 +183,8 @@ struct TcpVideoServer::Implementation {
                 pong.timestampMicros = message.timestampMicros;
                 if (!SendMessage(socket, pong)) return;
             } else if (message.type == MessageType::VideoConfig ||
-                       message.type == MessageType::VideoFrame) {
+                       message.type == MessageType::VideoFrame ||
+                       message.type == MessageType::Notification) {
                 if (Push(std::move(message)) && !SendKeyFrameRequest(socket)) return;
             }
         }

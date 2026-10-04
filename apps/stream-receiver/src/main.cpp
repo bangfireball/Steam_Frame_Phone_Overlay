@@ -99,6 +99,11 @@ int main(int argc, char** argv) {
         while (server.Pop(message, &queueAge)) {
             windowQueueMillis += queueAge.count() / 1000.0;
             ++windowMessages;
+            if (message.type == MessageType::Notification) {
+                // The desktop decoder target has no VR card surface. Consume
+                // notification messages without feeding them to H.264.
+                continue;
+            }
             if (message.type == MessageType::VideoConfig) {
                 codecConfig = std::move(message.payload);
                 streamWidth = message.width;

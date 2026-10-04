@@ -28,6 +28,10 @@ public:
     bool HideSettingsMenu(std::string& error) override;
     bool TakeSettingsMenuInput(vr::SettingsMenuCommand& command) override;
     bool TakePointerEvent(core::PointerEvent& event) override;
+    bool ShowNotification(const core::protocol::NotificationEvent& notification,
+                          std::string& error) override;
+    bool HideNotification(std::string& error) override;
+    bool TakeNotificationOpenRequest() override;
     void Stop() noexcept override;
 
 private:

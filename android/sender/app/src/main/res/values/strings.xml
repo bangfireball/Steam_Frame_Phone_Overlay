@@ -5,6 +5,12 @@
     <string name="capture_notification_title">PhoneCast is capturing your screen</string>
     <string name="stop_casting">Stop casting</string>
     <string name="sprint_two_explanation">Enter the receiver address and pairing code, then approve screen capture to stream H.264 over your local network.</string>
+    <string name="notification_listener_label">PhoneCast notification bridge</string>
+    <string name="notification_forwarding_disclosure">Optional notification forwarding sends brief cards only while casting. It is off by default. Message titles and text stay hidden unless you explicitly enable content. Package allow/block lists accept comma-separated Android package names. The current trusted-LAN connection is not encrypted.</string>
+    <string name="enable_notification_forwarding">Forward notifications to VR while casting</string>
+    <string name="include_notification_content">Include notification titles and message text (sensitive)</string>
+    <string name="open_notification_access_settings">Grant Android notification access</string>
+    <string name="notification_access_enabled">Android notification access enabled</string>
     <string name="remote_control_service_label">PhoneCast remote control</string>
     <string name="remote_control_service_description">Injects only the taps, swipes, scrolls, and Back actions you request from your paired PhoneCast VR receiver. It does not read app text or inspect window content.</string>
     <string name="remote_control_disclosure">Optional remote control uses Android Accessibility to inject taps, swipes, scrolls, and Back requested from the connected VR receiver. PhoneCast does not inspect app text or window content. Commands and video use the current unencrypted trusted-LAN connection.</string>

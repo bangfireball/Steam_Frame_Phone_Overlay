@@ -12,7 +12,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$receiver = Join-Path $projectRoot "out\build\windows-x64-reviewfix2\bin\phonecast-vr-stream-receiver.exe"
+$receiver = Join-Path $projectRoot "out\build\windows-x64\bin\phonecast-vr-stream-receiver.exe"
 if ($Diagnostic -eq "Visible") {
     $receiver = Join-Path $projectRoot "out\build\windows-x64-diagnostic\bin\phonecast-vr-stream-receiver.exe"
 }
@@ -226,7 +226,7 @@ if ($null -ne $running) {
         Stop-PhoneCastReceiver
         $running = $null
     } else {
-        Write-Host "PhoneCast VR is already running from the latest review build (PID $($running.Id))."
+        Write-Host "PhoneCast VR is already running from the current canonical build (PID $($running.Id))."
         exit 0
     }
 }

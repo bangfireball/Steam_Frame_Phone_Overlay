@@ -20,6 +20,7 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.util.Locale;
@@ -36,6 +37,11 @@ public final class MainActivity extends Activity {
     private Button stopButton;
     private CheckBox remoteControlView;
     private Button accessibilityButton;
+    private CheckBox notificationForwardingView;
+    private CheckBox notificationContentView;
+    private EditText notificationAllowListView;
+    private EditText notificationBlockListView;
+    private Button notificationAccessButton;
     private boolean captureAfterPermission;
 
     private final BroadcastReceiver statusReceiver = new BroadcastReceiver() {
@@ -64,6 +70,7 @@ public final class MainActivity extends Activity {
         super.onStart();
         registerStatusReceiver();
         updateAccessibilityButton();
+        updateNotificationAccessButton();
     }
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
@@ -124,6 +131,54 @@ public final class MainActivity extends Activity {
         pairCodeView.setHintTextColor(Color.rgb(130, 145, 160));
         root.addView(pairCodeView, matchWrap());
 
+        android.content.SharedPreferences senderPreferences = getSharedPreferences(
+                ScreenCaptureService.PREFERENCES, MODE_PRIVATE);
+        TextView notificationDisclosure = new TextView(this);
+        notificationDisclosure.setText(R.string.notification_forwarding_disclosure);
+        notificationDisclosure.setTextColor(Color.rgb(190, 205, 220));
+        notificationDisclosure.setTextSize(14);
+        LinearLayout.LayoutParams notificationDisclosureParams = matchWrap();
+        notificationDisclosureParams.setMargins(0, dp(16), 0, dp(4));
+        root.addView(notificationDisclosure, notificationDisclosureParams);
+
+        notificationForwardingView = new CheckBox(this);
+        notificationForwardingView.setText(R.string.enable_notification_forwarding);
+        notificationForwardingView.setTextColor(Color.WHITE);
+        notificationForwardingView.setChecked(senderPreferences.getBoolean(
+                NotificationForwardingService.PREFERENCE_ENABLED, false));
+        root.addView(notificationForwardingView, matchWrap());
+
+        notificationContentView = new CheckBox(this);
+        notificationContentView.setText(R.string.include_notification_content);
+        notificationContentView.setTextColor(Color.WHITE);
+        notificationContentView.setChecked(senderPreferences.getBoolean(
+                NotificationForwardingService.PREFERENCE_INCLUDE_CONTENT, false));
+        root.addView(notificationContentView, matchWrap());
+
+        notificationAllowListView = notificationListField(
+                "Allowed package names (blank = all)",
+                senderPreferences.getString(NotificationForwardingService.PREFERENCE_ALLOW_LIST, ""));
+        root.addView(notificationAllowListView, matchWrap());
+        notificationBlockListView = notificationListField(
+                "Blocked package names",
+                senderPreferences.getString(NotificationForwardingService.PREFERENCE_BLOCK_LIST, ""));
+        root.addView(notificationBlockListView, matchWrap());
+
+        notificationAccessButton = new Button(this);
+        notificationAccessButton.setOnClickListener(view -> {
+            saveNotificationPreferences();
+            startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
+        });
+        root.addView(notificationAccessButton, matchWrap());
+        notificationForwardingView.setOnCheckedChangeListener((button, checked) -> {
+            saveNotificationPreferences();
+            ScreenCaptureService.notificationPreferencesChanged();
+        });
+        notificationContentView.setOnCheckedChangeListener((button, checked) -> {
+            saveNotificationPreferences();
+            ScreenCaptureService.notificationPreferencesChanged();
+        });
+
         TextView remoteDisclosure = new TextView(this);
         remoteDisclosure.setText(R.string.remote_control_disclosure);
         remoteDisclosure.setTextColor(Color.rgb(190, 205, 220));
@@ -175,10 +230,13 @@ public final class MainActivity extends Activity {
         stopParams.setMargins(0, dp(12), 0, 0);
         root.addView(stopButton, stopParams);
 
-        setContentView(root);
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(root);
+        setContentView(scroll);
     }
 
     private void requestCapture() {
+        saveNotificationPreferences();
         String receiverHost = receiverHostView.getText().toString().trim();
         String pairCode = pairCodeView.getText().toString().trim();
         if (receiverHost.isEmpty() || !StreamProtocol.validPairCode(pairCode)) {
@@ -265,6 +323,47 @@ public final class MainActivity extends Activity {
                     ? R.string.remote_control_service_enabled
                     : R.string.open_accessibility_settings);
         }
+    }
+
+    private EditText notificationListField(String hint, String value) {
+        EditText field = new EditText(this);
+        field.setHint(hint);
+        field.setSingleLine(true);
+        field.setInputType(InputType.TYPE_CLASS_TEXT);
+        field.setText(value);
+        field.setTextColor(Color.WHITE);
+        field.setHintTextColor(Color.rgb(130, 145, 160));
+        field.setOnFocusChangeListener((view, focused) -> {
+            if (!focused) {
+                saveNotificationPreferences();
+                ScreenCaptureService.notificationPreferencesChanged();
+            }
+        });
+        return field;
+    }
+
+    private void saveNotificationPreferences() {
+        if (notificationForwardingView == null) return;
+        getSharedPreferences(ScreenCaptureService.PREFERENCES, MODE_PRIVATE).edit()
+                .putBoolean(NotificationForwardingService.PREFERENCE_ENABLED,
+                        notificationForwardingView.isChecked())
+                .putBoolean(NotificationForwardingService.PREFERENCE_INCLUDE_CONTENT,
+                        notificationContentView.isChecked())
+                .putString(NotificationForwardingService.PREFERENCE_ALLOW_LIST,
+                        notificationAllowListView.getText().toString().trim())
+                .putString(NotificationForwardingService.PREFERENCE_BLOCK_LIST,
+                        notificationBlockListView.getText().toString().trim())
+                .apply();
+    }
+
+    private void updateNotificationAccessButton() {
+        if (notificationAccessButton == null) return;
+        String enabled = Settings.Secure.getString(getContentResolver(),
+                "enabled_notification_listeners");
+        boolean active = enabled != null && enabled.contains(getPackageName());
+        notificationAccessButton.setText(active
+                ? R.string.notification_access_enabled
+                : R.string.open_notification_access_settings);
     }
 
     private LinearLayout.LayoutParams matchWrap() {

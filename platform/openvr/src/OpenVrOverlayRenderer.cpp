@@ -38,6 +38,10 @@ constexpr char kSettingsOverlayKey[] = "com.phonecastvr.receiver.settings";
 constexpr char kSettingsOverlayName[] = "PhoneCast Settings";
 constexpr char kDashboardOverlayKey[] = "com.phonecastvr.receiver.dashboard";
 constexpr char kDashboardOverlayName[] = "PhoneCast";
+constexpr char kNotificationOverlayKey[] = "com.phonecastvr.receiver.notification";
+constexpr char kNotificationOverlayName[] = "PhoneCast Notification";
+constexpr std::uint32_t kNotificationTextureWidth = 768;
+constexpr std::uint32_t kNotificationTextureHeight = 256;
 constexpr std::uint32_t kMenuTextureWidth = 512;
 constexpr std::uint32_t kMenuTextureHeight = 896;
 constexpr int kMenuColumns = 2;
@@ -180,18 +184,21 @@ const std::unordered_map<char, Glyph> kMenuGlyphs{
     {'G', {"01110", "10001", "10000", "10111", "10001", "10001", "01110"}},
     {'H', {"10001", "10001", "10001", "11111", "10001", "10001", "10001"}},
     {'I', {"11111", "00100", "00100", "00100", "00100", "00100", "11111"}},
+    {'J', {"00111", "00010", "00010", "00010", "10010", "10010", "01100"}},
     {'K', {"10001", "10010", "10100", "11000", "10100", "10010", "10001"}},
     {'L', {"10000", "10000", "10000", "10000", "10000", "10000", "11111"}},
     {'M', {"10001", "11011", "10101", "10101", "10001", "10001", "10001"}},
     {'N', {"10001", "11001", "10101", "10011", "10001", "10001", "10001"}},
     {'O', {"01110", "10001", "10001", "10001", "10001", "10001", "01110"}},
     {'P', {"11110", "10001", "10001", "11110", "10000", "10000", "10000"}},
+    {'Q', {"01110", "10001", "10001", "10001", "10101", "10010", "01101"}},
     {'R', {"11110", "10001", "10001", "11110", "10100", "10010", "10001"}},
     {'S', {"01111", "10000", "10000", "01110", "00001", "00001", "11110"}},
     {'T', {"11111", "00100", "00100", "00100", "00100", "00100", "00100"}},
     {'U', {"10001", "10001", "10001", "10001", "10001", "10001", "01110"}},
     {'V', {"10001", "10001", "10001", "10001", "10001", "01010", "00100"}},
     {'W', {"10001", "10001", "10001", "10101", "10101", "10101", "01010"}},
+    {'X', {"10001", "10001", "01010", "00100", "01010", "10001", "10001"}},
     {'Y', {"10001", "10001", "01010", "00100", "00100", "00100", "00100"}},
     {'Z', {"11111", "00001", "00010", "00100", "01000", "10000", "11111"}},
     {'0', {"01110", "10001", "10011", "10101", "11001", "10001", "01110"}},
@@ -207,6 +214,8 @@ const std::unordered_map<char, Glyph> kMenuGlyphs{
     {'.', {"00000", "00000", "00000", "00000", "00000", "00110", "00110"}},
     {'-', {"00000", "00000", "00000", "11111", "00000", "00000", "00000"}},
     {'+', {"00000", "00100", "00100", "11111", "00100", "00100", "00000"}},
+    {':', {"00000", "00110", "00110", "00000", "00110", "00110", "00000"}},
+    {'?', {"01110", "10001", "00001", "00010", "00100", "00000", "00100"}},
     {'>', {"10000", "01000", "00100", "00010", "00100", "01000", "10000"}}
 };
 
@@ -394,6 +403,60 @@ void DrawImageLabel(std::vector<std::uint8_t>& image, std::uint32_t width,
         }
         cursorX += advance;
     }
+}
+
+std::string NotificationLine(const std::string& value, std::size_t maximumCharacters) {
+    std::string result;
+    result.reserve(std::min(value.size(), maximumCharacters));
+    bool previousSpace = false;
+    for (const unsigned char byte : value) {
+        if (result.size() >= maximumCharacters) break;
+        char character = byte < 128U ? static_cast<char>(byte) : '?';
+        if (character >= 'a' && character <= 'z') character =
+            static_cast<char>(character - 'a' + 'A');
+        if (character == '\n' || character == '\r' || character == '\t') character = ' ';
+        if (character != ' ' && kMenuGlyphs.find(character) == kMenuGlyphs.end())
+            character = '?';
+        if (character == ' ' && previousSpace) continue;
+        result.push_back(character);
+        previousSpace = character == ' ';
+    }
+    while (!result.empty() && result.back() == ' ') result.pop_back();
+    return result;
+}
+
+std::vector<std::uint8_t> MakeNotificationTexture(
+        const phonecast::core::protocol::NotificationEvent& notification) {
+    constexpr std::array<std::uint8_t, 4> background{8, 14, 24, 245};
+    constexpr std::array<std::uint8_t, 4> header{15, 45, 70, 250};
+    constexpr std::array<std::uint8_t, 4> accent{65, 188, 245, 255};
+    constexpr std::array<std::uint8_t, 4> text{245, 249, 255, 255};
+    constexpr std::array<std::uint8_t, 4> secondary{170, 205, 225, 255};
+    std::vector<std::uint8_t> image(
+        static_cast<std::size_t>(kNotificationTextureWidth) *
+        kNotificationTextureHeight * 4U, 0);
+    FillImageRect(image, kNotificationTextureWidth, kNotificationTextureHeight,
+                  0, 0, static_cast<int>(kNotificationTextureWidth),
+                  static_cast<int>(kNotificationTextureHeight), background);
+    FillImageRect(image, kNotificationTextureWidth, kNotificationTextureHeight,
+                  0, 0, static_cast<int>(kNotificationTextureWidth), 62, header);
+    FillImageRect(image, kNotificationTextureWidth, kNotificationTextureHeight,
+                  0, 58, static_cast<int>(kNotificationTextureWidth), 4, accent);
+    DrawImageLabel(image, kNotificationTextureWidth, kNotificationTextureHeight,
+                   NotificationLine(notification.applicationName, 28), 384, 31, 3, accent);
+    const std::string title = NotificationLine(notification.title, 38);
+    const std::string body = notification.contentRedacted
+        ? "CONTENT HIDDEN ON PHONE"
+        : NotificationLine(notification.body, 54);
+    DrawImageLabel(image, kNotificationTextureWidth, kNotificationTextureHeight,
+                   title.empty() ? "NEW NOTIFICATION" : title, 384, 105,
+                   title.size() > 30 ? 2 : 3, text);
+    if (!body.empty())
+        DrawImageLabel(image, kNotificationTextureWidth, kNotificationTextureHeight,
+                       body, 384, 157, body.size() > 38 ? 1 : 2, secondary);
+    DrawImageLabel(image, kNotificationTextureWidth, kNotificationTextureHeight,
+                   "SELECT TO OPEN PHONE", 384, 220, 2, accent);
+    return image;
 }
 
 void AddGrabHandle(const phonecast::core::VideoFrame& frame,
@@ -780,6 +843,18 @@ public:
     }
 
     bool ApplySettings(phonecast::vr::OverlaySettings settings, std::string& error) {
+        auto notificationTransform = vr::HmdMatrix34_t{{
+            {1.0F, 0.0F, 0.0F, settings.notificationOffsetXMeters},
+            {0.0F, 1.0F, 0.0F, settings.notificationOffsetYMeters},
+            {0.0F, 0.0F, 1.0F, -settings.notificationDistanceMeters}}};
+        if (!OverlayCall(overlayApi->SetOverlayWidthInMeters(
+                             notificationOverlay, settings.notificationWidthMeters),
+                         "Set notification width", error) ||
+            !OverlayCall(overlayApi->SetOverlayTransformTrackedDeviceRelative(
+                             notificationOverlay, vr::k_unTrackedDeviceIndex_Hmd,
+                             &notificationTransform),
+                         "Set notification transform", error)) return false;
+
         const float placementScale = IsControllerMode(settings.placementMode)
             ? ControllerFor(settings).scale : 1.0F;
         if (!OverlayCall(overlayApi->SetOverlayWidthInMeters(overlay, settings.widthMeters * placementScale),
@@ -1452,11 +1527,14 @@ public:
     vr::VROverlayHandle_t menuOverlay{vr::k_ulOverlayHandleInvalid};
     vr::VROverlayHandle_t gestureOverlay{vr::k_ulOverlayHandleInvalid};
     vr::VROverlayHandle_t settingsOverlay{vr::k_ulOverlayHandleInvalid};
+    vr::VROverlayHandle_t notificationOverlay{vr::k_ulOverlayHandleInvalid};
     vr::VROverlayHandle_t dashboardOverlay{vr::k_ulOverlayHandleInvalid};
     vr::VROverlayHandle_t dashboardThumbnail{vr::k_ulOverlayHandleInvalid};
     bool gestureProgressVisible{false};
     int gestureProgressStep{-1};
     bool settingsMenuVisible{false};
+    bool notificationVisible{false};
+    bool notificationOpenRequested{false};
     bool settingsMenuLeft{true};
     phonecast::vr::SettingsMenuView settingsMenuView{};
     int settingsLaserTargetRow{-1};
@@ -1578,7 +1656,20 @@ bool OpenVrOverlayRenderer::Start(const phonecast::vr::OverlaySettings& settings
         !impl_->OverlayCall(impl_->overlayApi->SetOverlayFlag(
                                 impl_->settingsOverlay,
                                 vr::VROverlayFlags_MakeOverlaysInteractiveIfVisible, true),
-                            "Set settings interactive flag", error)) {
+                            "Set settings interactive flag", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->CreateOverlay(
+                                kNotificationOverlayKey, kNotificationOverlayName,
+                                &impl_->notificationOverlay),
+                            "Create notification overlay", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayWidthInMeters(
+                                impl_->notificationOverlay, 0.48F),
+                            "Set notification width", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlaySortOrder(
+                                impl_->notificationOverlay, 110U),
+                            "Set notification sort order", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayInputMethod(
+                                impl_->notificationOverlay, vr::VROverlayInputMethod_Mouse),
+                            "Set notification input method", error)) {
         Stop();
         return false;
     }
@@ -1594,12 +1685,18 @@ bool OpenVrOverlayRenderer::Start(const phonecast::vr::OverlaySettings& settings
 
     const vr::HmdVector2_t settingsMouseScale{{static_cast<float>(kSettingsTextureWidth),
                                                static_cast<float>(kSettingsTextureHeight)}};
+    const vr::HmdVector2_t notificationMouseScale{{
+        static_cast<float>(kNotificationTextureWidth),
+        static_cast<float>(kNotificationTextureHeight)}};
     auto settingsTransform = vr::HmdMatrix34_t{{{1.0F, 0.0F, 0.0F, 0.0F},
                                                  {0.0F, 1.0F, 0.0F, -0.04F},
                                                  {0.0F, 0.0F, 1.0F, -0.85F}}};
     auto gestureTransform = vr::HmdMatrix34_t{{{1.0F, 0.0F, 0.0F, 0.0F},
                                                 {0.0F, 1.0F, 0.0F, -0.18F},
                                                 {0.0F, 0.0F, 1.0F, -0.60F}}};
+    auto notificationTransform = vr::HmdMatrix34_t{{{1.0F, 0.0F, 0.0F, 0.18F},
+                                                     {0.0F, 1.0F, 0.0F, 0.12F},
+                                                     {0.0F, 0.0F, 1.0F, -0.75F}}};
     if (!impl_->OverlayCall(impl_->overlayApi->SetOverlayTransformTrackedDeviceRelative(
                                 impl_->settingsOverlay, vr::k_unTrackedDeviceIndex_Hmd,
                                 &settingsTransform),
@@ -1611,6 +1708,13 @@ bool OpenVrOverlayRenderer::Start(const phonecast::vr::OverlaySettings& settings
                                 impl_->gestureOverlay, vr::k_unTrackedDeviceIndex_Hmd,
                                 &gestureTransform),
                             "Set gesture-progress transform", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayTransformTrackedDeviceRelative(
+                                impl_->notificationOverlay, vr::k_unTrackedDeviceIndex_Hmd,
+                                &notificationTransform),
+                            "Set notification transform", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayMouseScale(
+                                impl_->notificationOverlay, &notificationMouseScale),
+                            "Set notification mouse scale", error) ||
         !impl_->OverlayCall(impl_->overlayApi->SetOverlayInputMethod(
                                 impl_->overlay, vr::VROverlayInputMethod_Mouse),
                             "SetOverlayInputMethod", error) ||
@@ -1728,6 +1832,19 @@ bool OpenVrOverlayRenderer::PumpEvents() {
                               "Runtime requested overlay shutdown.");
             return false;
         }
+    }
+    while (impl_->notificationOverlay != vr::k_ulOverlayHandleInvalid &&
+           impl_->overlayApi->PollNextOverlayEvent(
+               impl_->notificationOverlay, &event, sizeof(event))) {
+        if (event.eventType == vr::VREvent_MouseButtonDown &&
+            (event.data.mouse.button & vr::VRMouseButton_Left) != 0) {
+            impl_->notificationOpenRequested = true;
+            impl_->overlayApi->HideOverlay(impl_->notificationOverlay);
+            impl_->notificationVisible = false;
+            impl_->logger.Log(core::LogLevel::Info, "openvr-notification",
+                              "Notification card requested the full phone view.");
+        }
+        if (IsQuitEvent(event.eventType)) return false;
     }
     while (impl_->overlayApi->PollNextOverlayEvent(
                impl_->settingsOverlay, &event, sizeof(event))) {
@@ -1907,11 +2024,56 @@ bool OpenVrOverlayRenderer::TakePointerEvent(core::PointerEvent& event) {
     return true;
 }
 
+bool OpenVrOverlayRenderer::ShowNotification(
+        const core::protocol::NotificationEvent& notification, std::string& error) {
+    if (impl_->overlayApi == nullptr ||
+        impl_->notificationOverlay == vr::k_ulOverlayHandleInvalid) {
+        error = "The OpenVR notification overlay is unavailable.";
+        return false;
+    }
+    auto image = MakeNotificationTexture(notification);
+    if (!impl_->OverlayCall(impl_->overlayApi->SetOverlayRaw(
+                                impl_->notificationOverlay, image.data(),
+                                kNotificationTextureWidth, kNotificationTextureHeight, 4),
+                            "Set notification texture", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->ShowOverlay(impl_->notificationOverlay),
+                            "Show notification overlay", error)) return false;
+    impl_->notificationVisible = true;
+    impl_->logger.Log(core::LogLevel::Info, "openvr-notification",
+                      "Displayed a privacy-filtered notification card.");
+    error.clear();
+    return true;
+}
+
+bool OpenVrOverlayRenderer::HideNotification(std::string& error) {
+    if (impl_->overlayApi == nullptr ||
+        impl_->notificationOverlay == vr::k_ulOverlayHandleInvalid) {
+        error = "The OpenVR notification overlay is unavailable.";
+        return false;
+    }
+    if (impl_->notificationVisible &&
+        !impl_->OverlayCall(impl_->overlayApi->HideOverlay(impl_->notificationOverlay),
+                            "Hide notification overlay", error)) return false;
+    impl_->notificationVisible = false;
+    error.clear();
+    return true;
+}
+
+bool OpenVrOverlayRenderer::TakeNotificationOpenRequest() {
+    if (!impl_->notificationOpenRequested) return false;
+    impl_->notificationOpenRequested = false;
+    return true;
+}
+
 void OpenVrOverlayRenderer::Stop() noexcept {
     impl_->DestroyDashboard();
     if (impl_->overlayApi != nullptr && impl_->gestureOverlay != vr::k_ulOverlayHandleInvalid) {
         impl_->overlayApi->HideOverlay(impl_->gestureOverlay);
         impl_->overlayApi->DestroyOverlay(impl_->gestureOverlay);
+    }
+    if (impl_->overlayApi != nullptr && impl_->notificationOverlay != vr::k_ulOverlayHandleInvalid) {
+        impl_->overlayApi->HideOverlay(impl_->notificationOverlay);
+        impl_->overlayApi->DestroyOverlay(impl_->notificationOverlay);
     }
     if (impl_->overlayApi != nullptr && impl_->settingsOverlay != vr::k_ulOverlayHandleInvalid) {
         impl_->overlayApi->HideOverlay(impl_->settingsOverlay);
@@ -1927,6 +2089,7 @@ void OpenVrOverlayRenderer::Stop() noexcept {
     }
     impl_->gestureOverlay = vr::k_ulOverlayHandleInvalid;
     impl_->settingsOverlay = vr::k_ulOverlayHandleInvalid;
+    impl_->notificationOverlay = vr::k_ulOverlayHandleInvalid;
     impl_->dashboardOverlay = vr::k_ulOverlayHandleInvalid;
     impl_->dashboardThumbnail = vr::k_ulOverlayHandleInvalid;
     impl_->menuOverlay = vr::k_ulOverlayHandleInvalid;
@@ -1942,6 +2105,8 @@ void OpenVrOverlayRenderer::Stop() noexcept {
     impl_->gestureProgressVisible = false;
     impl_->gestureProgressStep = -1;
     impl_->settingsMenuVisible = false;
+    impl_->notificationVisible = false;
+    impl_->notificationOpenRequested = false;
     impl_->settingsAxisLatched = false;
     impl_->settingsLaserTargetRow = -1;
     impl_->radialMenuVisible = false;

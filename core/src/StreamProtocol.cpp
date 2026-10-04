@@ -1,6 +1,7 @@
 #include "phonecast/core/protocol/StreamProtocol.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 
@@ -39,7 +40,7 @@ std::uint64_t Read64(const std::uint8_t* data) {
 }
 bool IsKnownType(std::uint8_t type) {
     return type >= static_cast<std::uint8_t>(MessageType::Hello) &&
-           type <= static_cast<std::uint8_t>(MessageType::RemoteInput);
+           type <= static_cast<std::uint8_t>(MessageType::Notification);
 }
 
 void WriteFloat(std::vector<std::uint8_t>& bytes, std::size_t offset, float value) {
@@ -59,6 +60,13 @@ float ReadFloat(const std::uint8_t* data) {
 bool IsKnownPointerType(std::uint8_t type) {
     return type >= static_cast<std::uint8_t>(phonecast::core::PointerEvent::Type::Down) &&
            type <= static_cast<std::uint8_t>(phonecast::core::PointerEvent::Type::Back);
+}
+
+constexpr std::size_t kNotificationHeaderSize = 18;
+constexpr std::size_t kMaximumNotificationFieldSize = 1024;
+
+bool NotificationFieldValid(const std::string& field) {
+    return field.size() <= kMaximumNotificationFieldSize && field.size() <= 0xffffU;
 }
 }  // namespace
 
@@ -149,6 +157,75 @@ bool ParsePointerEvent(const std::uint8_t* data, std::size_t size,
     event.normalizedX = x;
     event.normalizedY = y;
     event.scrollDelta = scroll;
+    error.clear();
+    return true;
+}
+
+std::vector<std::uint8_t> SerializeNotification(const NotificationEvent& notification) {
+    if (!NotificationFieldValid(notification.applicationName) ||
+        !NotificationFieldValid(notification.title) ||
+        !NotificationFieldValid(notification.body) ||
+        !NotificationFieldValid(notification.packageName)) return {};
+    const std::size_t payloadSize = kNotificationHeaderSize +
+        notification.applicationName.size() + notification.title.size() +
+        notification.body.size() + notification.packageName.size();
+    if (payloadSize > kMaximumPayloadSize) return {};
+    std::vector<std::uint8_t> bytes(payloadSize, 0);
+    bytes[0] = 1;
+    bytes[1] = notification.contentRedacted ? 1U : 0U;
+    Write16(bytes, 2, static_cast<std::uint16_t>(notification.applicationName.size()));
+    Write16(bytes, 4, static_cast<std::uint16_t>(notification.title.size()));
+    Write16(bytes, 6, static_cast<std::uint16_t>(notification.body.size()));
+    Write16(bytes, 8, static_cast<std::uint16_t>(notification.packageName.size()));
+    Write64(bytes, 10, notification.postedAtMillis);
+    auto output = bytes.begin() + static_cast<std::ptrdiff_t>(kNotificationHeaderSize);
+    for (const auto* field : {&notification.applicationName, &notification.title,
+                              &notification.body, &notification.packageName}) {
+        output = std::copy(field->begin(), field->end(), output);
+    }
+    return bytes;
+}
+
+bool ParseNotification(const std::uint8_t* data, std::size_t size,
+                       NotificationEvent& notification, std::string& error) {
+    if (data == nullptr || size < kNotificationHeaderSize) {
+        error = "Notification payload is incomplete.";
+        return false;
+    }
+    if (data[0] != 1 || (data[1] & 0xfeU) != 0U) {
+        error = "Unsupported notification payload version or flags.";
+        return false;
+    }
+    const std::array<std::size_t, 4> lengths{
+        Read16(data + 2), Read16(data + 4), Read16(data + 6), Read16(data + 8)};
+    std::size_t expected = kNotificationHeaderSize;
+    for (const auto length : lengths) {
+        if (length > kMaximumNotificationFieldSize || expected > size || length > size - expected) {
+            error = "Notification field length is invalid.";
+            return false;
+        }
+        expected += length;
+    }
+    if (expected != size) {
+        error = "Notification payload has trailing or missing data.";
+        return false;
+    }
+    std::size_t offset = kNotificationHeaderSize;
+    auto readString = [&](std::size_t length) {
+        std::string value(reinterpret_cast<const char*>(data + offset), length);
+        offset += length;
+        return value;
+    };
+    notification.applicationName = readString(lengths[0]);
+    notification.title = readString(lengths[1]);
+    notification.body = readString(lengths[2]);
+    notification.packageName = readString(lengths[3]);
+    notification.postedAtMillis = Read64(data + 10);
+    notification.contentRedacted = (data[1] & 1U) != 0U;
+    if (notification.applicationName.empty() || notification.packageName.empty()) {
+        error = "Notification source is missing.";
+        return false;
+    }
     error.clear();
     return true;
 }

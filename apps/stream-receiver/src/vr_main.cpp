@@ -251,6 +251,8 @@ int main(int argc, char** argv) {
     bool firstFrameReported = false;
     std::uint32_t streamWidth = 0;
     std::uint32_t streamHeight = 0;
+    bool notificationShowing = false;
+    std::chrono::steady_clock::time_point notificationDeadline{};
 
     while (running && renderer.PumpEvents()) {
         OverlayAction action{};
@@ -381,6 +383,17 @@ int main(int argc, char** argv) {
             }
         }
 
+        if (renderer.TakeNotificationOpenRequest()) {
+            glance.ShowExpanded();
+            const auto displayed = SettingsForStream(
+                glance.PresentationSettings(controls.Settings()), streamWidth, streamHeight);
+            if (!renderer.ApplySettings(displayed, error) ||
+                !renderer.SetVisible(controls.Visible(), error)) {
+                std::cerr << error << '\n';
+            }
+            notificationShowing = false;
+        }
+
         phonecast::core::PointerEvent pointerEvent;
         while (renderer.TakePointerEvent(pointerEvent)) {
             if (!server.Send(pointerEvent, error))
@@ -423,6 +436,20 @@ int main(int argc, char** argv) {
             windowQueueMillis += queueMillis;
             maximumQueueMillis = std::max(maximumQueueMillis, queueMillis);
             ++windowMessages;
+            if (message.type == MessageType::Notification) {
+                phonecast::core::protocol::NotificationEvent notification;
+                if (!phonecast::core::protocol::ParseNotification(
+                        message.payload.data(), message.payload.size(), notification, error)) {
+                    std::cerr << "[notification] Rejected malformed card: " << error << '\n';
+                } else if (!renderer.ShowNotification(notification, error)) {
+                    std::cerr << "[notification] " << error << '\n';
+                } else {
+                    notificationShowing = true;
+                    notificationDeadline = std::chrono::steady_clock::now() +
+                        std::chrono::seconds(6);
+                }
+                continue;
+            }
             if (message.type == MessageType::VideoConfig) {
                 codecConfig = std::move(message.payload);
                 streamWidth = message.width;
@@ -499,6 +526,11 @@ int main(int argc, char** argv) {
         }
 
         const auto now = std::chrono::steady_clock::now();
+        if (notificationShowing && now >= notificationDeadline) {
+            if (!renderer.HideNotification(error))
+                std::cerr << "[notification] " << error << '\n';
+            notificationShowing = false;
+        }
         if (now - lastStats >= std::chrono::seconds(1)) {
             const double seconds = std::chrono::duration<double>(now - lastStats).count();
             const auto serverStats = server.Stats();

@@ -4,7 +4,9 @@ Last reviewed: 2026-10-03
 
 Sprint 3 status: **physical Android-to-PC streaming confirmed**
 
-Sprints 7–8 status: **remote-input protocol implemented and automatically tested; physical validation pending**
+Sprints 7–8 status: **remote-input protocol physically approved on the PC-hosted path**
+
+Sprint 9 status: **notification protocol implemented and tested; the PC-hosted notification experience was physically approved on 2026-10-04**
 
 ## Transport decision
 
@@ -58,8 +60,11 @@ Message types:
 6. `END_STREAM` — orderly sender shutdown.
 7. `REQUEST_KEY_FRAME` — receiver-to-sender recovery feedback with an empty payload.
 8. `REMOTE_INPUT` — receiver-to-phone normalized pointer or Back event.
+9. `NOTIFICATION` — phone-to-receiver privacy-filtered notification card.
 
 A `REMOTE_INPUT` payload is exactly 16 bytes: one event-type byte (`DOWN`, `MOVE`, `UP`, `SCROLL`, or `BACK`), three reserved zero bytes, then network-byte-order IEEE-754 float32 values for normalized X, normalized Y, and scroll delta. Coordinates are top-left-origin and limited to `[0, 1]`; scroll is limited to `[-1, 1]`. The common header sequence field orders input within a connection. Both endpoints reject malformed types, lengths, non-finite values, and out-of-range values.
+
+A `NOTIFICATION` payload starts with a one-byte payload version (`1`), one-byte flags field (bit 0 means content was redacted), four network-byte-order uint16 byte lengths for application label, title, body, and package name, and a network-byte-order uint64 Android post time in milliseconds. The four bounded UTF-8 fields follow in that order. Each field is limited to 1024 bytes, all lengths are validated, and application/package fields may not be empty. Notification cards use a separate bounded sender queue and do not participate in H.264 frame sequencing or keyframe recovery.
 
 `VIDEO_FRAME` flag bit 0 identifies a keyframe. Android output buffers are copied only from `BufferInfo.offset` through `offset + size`. Codec-config output is not counted as a video frame.
 
@@ -74,6 +79,7 @@ A `REMOTE_INPUT` payload is exactly 16 bytes: one event-type byte (`DOWN`, `MOVE
 7. A sequence gap or queue overrun causes both endpoints to discard stale dependent frames and resume only at a requested keyframe.
 8. A disconnect leaves capture active while the sender retries with bounded exponential backoff.
 9. After authentication, the receiver may send remote-input messages on the same duplex connection. Android ignores them unless the user separately enabled both PhoneCast remote control and its Accessibility service.
+10. While casting, Android may send notification cards only when notification forwarding and OS notification access are both enabled. Content is redacted by default and package allow/block filters run before serialization.
 
 Manual address entry satisfies Sprint 3's “discovers or connects” criterion. Automatic discovery is deferred until the basic stream has physical-device validation.
 
@@ -87,7 +93,7 @@ Steam Frame will require a Linux ARM64 decoder backend. FFmpeg/libavcodec remain
 
 The receiver accepts only an outbound connection initiated by a user-configured Android sender and requires the displayed six-digit code before accepting video. This prevents an unauthenticated LAN client from injecting video into the receiver.
 
-**The protocol is not encrypted and the short code is not a cryptographic authentication protocol. Screen content and remote input can be observed or modified by an attacker able to intercept LAN traffic, and an active attacker could impersonate an endpoint. Keep Android remote control disabled and do not use PhoneCast on an untrusted network.**
+**The protocol is not encrypted and the short code is not a cryptographic authentication protocol. Screen content, notification data, and remote input can be observed or modified by an attacker able to intercept LAN traffic, and an active attacker could impersonate an endpoint. Keep Android remote control disabled and do not use PhoneCast on an untrusted network.**
 
 Sprint 3 must not be represented as security-complete. Before normal product use, replace this bootstrap with authenticated encryption and persistent device identity (for example TLS with certificate pinning established through a QR/fingerprint pairing flow), plus device revocation.
 

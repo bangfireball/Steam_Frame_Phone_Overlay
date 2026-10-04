@@ -7,7 +7,9 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.ByteArrayInputStream;
 
 public final class StreamProtocolTest {
     @Test public void writesVersionedBigEndianHeader() throws Exception {
@@ -28,6 +30,31 @@ public final class StreamProtocolTest {
     @Test public void keyFrameRequestHasStableWireType() {
         assertEquals(7, StreamProtocol.TYPE_REQUEST_KEY_FRAME);
         assertEquals(8, StreamProtocol.TYPE_REMOTE_INPUT);
+        assertEquals(9, StreamProtocol.TYPE_NOTIFICATION);
+    }
+
+    @Test public void writesBoundedNotificationPayload() throws Exception {
+        byte[] payload = StreamProtocol.notificationPayload(
+                "Messages", "Hello", "Are you coming?", "com.example.messages", 1234L, false);
+        DataInputStream input = new DataInputStream(new ByteArrayInputStream(payload));
+        assertEquals(1, input.readUnsignedByte());
+        assertEquals(0, input.readUnsignedByte());
+        assertEquals(8, input.readUnsignedShort());
+        assertEquals(5, input.readUnsignedShort());
+        assertEquals(15, input.readUnsignedShort());
+        assertEquals(20, input.readUnsignedShort());
+        assertEquals(1234L, input.readLong());
+    }
+
+    @Test public void notificationPolicyUsesAllowAndBlockLists() {
+        assertTrue(NotificationPolicy.allows("com.example.chat", "", ""));
+        assertTrue(NotificationPolicy.allows("com.example.chat",
+                "com.example.chat, com.example.mail", ""));
+        assertFalse(NotificationPolicy.allows("com.example.bank",
+                "com.example.chat", ""));
+        assertFalse(NotificationPolicy.allows("com.example.chat",
+                "com.example.chat", "com.example.chat"));
+        assertEquals("hello world", NotificationPolicy.clean(" hello\n world ", 20));
     }
 
     @Test public void parsesNormalizedRemoteInput() throws Exception {

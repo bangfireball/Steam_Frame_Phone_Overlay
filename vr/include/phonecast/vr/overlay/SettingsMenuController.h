@@ -29,7 +29,8 @@ private:
         Placement,
         LeftController,
         RightController,
-        Glance
+        Glance,
+        Notifications
     };
 
     [[nodiscard]] std::size_t ItemCount() const noexcept;

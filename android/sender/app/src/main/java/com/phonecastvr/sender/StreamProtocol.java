@@ -1,6 +1,7 @@
 package com.phonecastvr.sender;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -16,6 +17,7 @@ final class StreamProtocol {
     static final int TYPE_END_STREAM = 6;
     static final int TYPE_REQUEST_KEY_FRAME = 7;
     static final int TYPE_REMOTE_INPUT = 8;
+    static final int TYPE_NOTIFICATION = 9;
     static final int FLAG_KEY_FRAME = 1;
     static final int MAX_PAYLOAD_SIZE = 4 * 1024 * 1024;
 
@@ -61,6 +63,36 @@ final class StreamProtocol {
         int width = input.readUnsignedShort();
         int height = input.readUnsignedShort();
         return new Header(type, flags, payloadSize, sequence, timestampMicros, width, height);
+    }
+
+    static byte[] notificationPayload(String applicationName, String title, String body,
+                                      String packageName, long postedAtMillis,
+                                      boolean contentRedacted) throws IOException {
+        byte[] application = utf8Field(applicationName);
+        byte[] heading = utf8Field(title);
+        byte[] text = utf8Field(body);
+        byte[] source = utf8Field(packageName);
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream(
+                18 + application.length + heading.length + text.length + source.length);
+        DataOutputStream output = new DataOutputStream(bytes);
+        output.writeByte(1);
+        output.writeByte(contentRedacted ? 1 : 0);
+        output.writeShort(application.length);
+        output.writeShort(heading.length);
+        output.writeShort(text.length);
+        output.writeShort(source.length);
+        output.writeLong(postedAtMillis);
+        output.write(application);
+        output.write(heading);
+        output.write(text);
+        output.write(source);
+        return bytes.toByteArray();
+    }
+
+    private static byte[] utf8Field(String value) throws IOException {
+        byte[] bytes = (value == null ? "" : value).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        if (bytes.length > 1024) throw new IOException("Notification field exceeds 1024 bytes");
+        return bytes;
     }
 
     static RemoteInputEvent parseRemoteInput(byte[] payload, long sequence) throws IOException {

@@ -1170,6 +1170,62 @@ should function from VR if supported by the selected Android integration.
 
 # Sprint 9 — Notification Bridge
 
+**Status:** `[x] Complete for the PC-hosted path — notification display, placement, and open-phone action physically approved`
+
+- `[x]` Optional Android NotificationListenerService with explicit OS access
+- `[x]` Forwarding disabled by default with a separate sensitive-content opt-in
+- `[x]` Package allowlist and blocklist filtering
+- `[x]` Versioned, bounded notification wire payload on the active paired stream
+- `[x]` Notification traffic isolated from H.264 queue and keyframe recovery state
+- `[x]` Portable notification renderer contract and transient OpenVR card
+- `[x]` Six-second peripheral card with newer-notification replacement
+- `[x]` Persisted in-headset notification size, distance, horizontal, and vertical settings with safer defaults
+- `[x]` Dashboard-laser card selection opens the full phone overlay
+- `[x]` C++ protocol tests, Windows build/tests, Android tests, APK, and lint
+- `[x]` Physical confirmation that cards appear with the dashboard open or closed and selecting a card opens the phone
+- `[x]` Revised default placement is readable and approved after the original fixed upper-right placement was rejected
+- `[x]` Project owner accepted Sprint 9 for progression
+- `[~]` Allow/block filtering, redaction variants, access revocation, and game-input coexistence retain automated/design coverage but were not each physically exercised before closure
+- `[ ]` Native ARM64 notification-card lifecycle remains Sprint 11 validation
+
+## Session Handoff Snapshot — 2026-10-04
+
+Sprint 9 is closed for the Windows PC-hosted path by project-owner approval.
+
+Implemented:
+
+- Android notification forwarding is separately opt-in and requires Android notification-listener access;
+- notification title/body content is redacted by default and requires a separate sensitive-content opt-in;
+- comma-separated package allowlists and blocklists are applied on Android before serialization;
+- notification payloads are versioned, bounded, validated, and carried only over the active paired stream;
+- notification traffic uses a separate bounded sender queue and does not affect H.264 frame sequencing or keyframe recovery;
+- OpenVR displays the newest card for six seconds independently of full-phone visibility;
+- cards remain visible with the SteamVR dashboard open or closed;
+- selecting a card with the dashboard laser opens the full phone overlay;
+- Settings → Notifications provides live Size, Distance, Horizontal, and Vertical controls with transactional apply/cancel and version-3 persistence;
+- the accepted defaults are 0.55 m width, 0.75 m distance, +0.18 m horizontal offset, and +0.12 m vertical offset;
+- the root launcher now uses the canonical `out/build/windows-x64` receiver rather than the stale pre-Sprint-9 review build.
+
+Validation:
+
+- the project owner physically confirmed card visibility, dashboard-open/dashboard-closed behavior, open-phone selection, and the revised default placement;
+- all 11 Windows CTest tests pass;
+- Android JVM tests, debug APK assembly, and lint pass;
+- Docker cross-build produces an AArch64 receiver executable;
+- receiver logs confirm authenticated streaming, displayed notification cards, and a card-triggered full-phone request.
+
+Known limitations and deferred evidence:
+
+- the paired TCP transport remains unencrypted, so notification forwarding is restricted to a trusted LAN;
+- allow/block combinations, redacted-versus-content cards, notification-access revocation, and running-game input coexistence were not each manually exercised before owner-approved closure; do not represent those individual cases as physically tested;
+- native Steam Frame ARM64 notification rendering and lifecycle remain Sprint 11 work.
+
+Recommended next work:
+
+1. Begin Sprint 10 with instrumented startup, sustained FPS, glass-to-glass latency, CPU/GPU, memory, bandwidth, and VR-frametime measurements.
+2. Preserve notification/video queue isolation while measuring load.
+3. Do not fold native Steam Frame backend implementation into Sprint 10; it remains Sprint 11.
+
 ## Objective
 
 Make PhoneCast useful without displaying the entire phone.

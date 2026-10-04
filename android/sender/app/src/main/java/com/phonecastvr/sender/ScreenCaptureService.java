@@ -53,6 +53,19 @@ public final class ScreenCaptureService extends Service {
     private static final String TAG = "PhoneCastCapture";
     private static final String CHANNEL_ID = "phonecast_capture";
     private static final int NOTIFICATION_ID = 100;
+    private static volatile NetworkStreamer activeNetworkStreamer;
+
+    static boolean forwardNotification(byte[] payload, long postedAtMillis) {
+        NetworkStreamer streamer = activeNetworkStreamer;
+        if (streamer == null) return false;
+        streamer.offerNotification(payload, postedAtMillis);
+        return true;
+    }
+
+    static void notificationPreferencesChanged() {
+        NetworkStreamer streamer = activeNetworkStreamer;
+        if (streamer != null) streamer.clearNotifications();
+    }
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Object encoderLock = new Object();
@@ -182,6 +195,7 @@ public final class ScreenCaptureService extends Service {
                     }
                 }
             });
+            activeNetworkStreamer = networkStreamer;
             networkStreamer.start();
 
             DisplayMetrics metrics = currentDisplayMetrics();
@@ -427,6 +441,7 @@ public final class ScreenCaptureService extends Service {
         }
         if (old != null) old.release();
         if (networkStreamer != null) {
+            if (activeNetworkStreamer == networkStreamer) activeNetworkStreamer = null;
             networkStreamer.stop();
             networkStreamer = null;
         }

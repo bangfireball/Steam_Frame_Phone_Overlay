@@ -67,12 +67,13 @@ void SettingsMenuController::MergeRendererUpdate(const OverlaySettings& settings
 
 std::size_t SettingsMenuController::ItemCount() const noexcept {
     switch (page_) {
-        case Page::Root: return 8;
+        case Page::Root: return 9;
         case Page::Appearance: return 4;
         case Page::Placement: return 5;
         case Page::LeftController:
         case Page::RightController: return 9;
         case Page::Glance: return 3;
+        case Page::Notifications: return 5;
     }
     return 0;
 }
@@ -84,8 +85,9 @@ SettingsMenuView SettingsMenuController::View() const {
         case Page::Root:
             view.title = "PHONECAST SETTINGS";
             view.labels = {"APPEARANCE", "PLACEMENT", "LEFT CONTROLLER", "RIGHT CONTROLLER",
-                           "GLANCE AND CONTROLS", "APPLY", "CANCEL", "RESET ALL"};
-            view.values = {">", ">", ">", ">", ">", "", "", resetConfirmation_ ? "CONFIRM" : ""};
+                           "GLANCE AND CONTROLS", "NOTIFICATIONS", "APPLY", "CANCEL", "RESET ALL"};
+            view.values = {">", ">", ">", ">", ">", ">", "", "",
+                           resetConfirmation_ ? "CONFIRM" : ""};
             break;
         case Page::Appearance:
             view.title = "APPEARANCE";
@@ -119,6 +121,14 @@ SettingsMenuView SettingsMenuController::View() const {
             view.labels = {"PREVIEW SCALE", "BUTTON HOLD", "BACK"};
             view.values = {Decimal(draft_.glancePreviewScale),
                            std::to_string(draft_.radialLongPressMilliseconds) + " MS", ""};
+            break;
+        case Page::Notifications:
+            view.title = "NOTIFICATIONS";
+            view.labels = {"SIZE", "DISTANCE", "HORIZONTAL", "VERTICAL", "BACK"};
+            view.values = {Decimal(draft_.notificationWidthMeters) + " M",
+                           Decimal(draft_.notificationDistanceMeters) + " M",
+                           Decimal(draft_.notificationOffsetXMeters) + " M",
+                           Decimal(draft_.notificationOffsetYMeters) + " M", ""};
             break;
     }
     return view;
@@ -181,23 +191,38 @@ SettingsMenuResult SettingsMenuController::Adjust(int direction) {
                     std::max(250, std::min(1500, value)));
             } else return SettingsMenuResult::None;
             return SettingsMenuResult::Updated;
+        case Page::Notifications:
+            if (selected_ == 0)
+                draft_.notificationWidthMeters = Clamp(
+                    draft_.notificationWidthMeters + direction * 0.05F, 0.20F, 1.20F);
+            else if (selected_ == 1)
+                draft_.notificationDistanceMeters = Clamp(
+                    draft_.notificationDistanceMeters + direction * 0.05F, 0.40F, 2.00F);
+            else if (selected_ == 2)
+                draft_.notificationOffsetXMeters = Clamp(
+                    draft_.notificationOffsetXMeters + direction * 0.05F, -1.00F, 1.00F);
+            else if (selected_ == 3)
+                draft_.notificationOffsetYMeters = Clamp(
+                    draft_.notificationOffsetYMeters + direction * 0.05F, -0.75F, 0.75F);
+            else return SettingsMenuResult::None;
+            return SettingsMenuResult::Updated;
     }
     return SettingsMenuResult::None;
 }
 
 SettingsMenuResult SettingsMenuController::Activate() {
     if (page_ == Page::Root) {
-        if (selected_ <= 4) {
+        if (selected_ <= 5) {
             page_ = static_cast<Page>(static_cast<int>(Page::Appearance) + static_cast<int>(selected_));
             selected_ = 0;
             resetConfirmation_ = false;
             return SettingsMenuResult::None;
         }
-        if (selected_ == 5) {
+        if (selected_ == 6) {
             open_ = false;
             return SettingsMenuResult::Applied;
         }
-        if (selected_ == 6) {
+        if (selected_ == 7) {
             open_ = false;
             return SettingsMenuResult::Cancelled;
         }

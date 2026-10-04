@@ -124,6 +124,21 @@ OpenVR overlay mouse/scroll events
 
 The renderer, protocol, and Android injector remain separate. OpenVR coordinates and Android framework classes do not enter Core. While the SteamVR dashboard is open, trigger controls the phone, trigger-dragging the separate bottom handle provides direct overlay placement without an ambiguous grip chord, and a lower-left `<` target emits Android Back. The persistent phone overlay deliberately omits `MakeOverlaysInteractiveIfVisible`: that OpenVR flag activates system-wide laser mode and was physically observed to withhold hand input from the running game whenever the phone was visible. The phone is therefore view-only while the dashboard is closed. Android uses one complete gesture for taps and stationary long presses, then switches moving pointers to serialized `StrokeDescription.continueStroke` segments so held-trigger drag scrolling updates before release. The service is separately user-enabled, does not retrieve window content, and can be disabled while capture remains active. See `docs/remote-control.md`.
 
+## Sprint 9 notification path
+
+```text
+Android NotificationListenerService
+    → opt-in privacy and package filters
+    → bounded NOTIFICATION message on the active stream connection
+    → portable NotificationEvent
+    → transient IOverlayRenderer notification card
+    → OpenVR head-relative card
+```
+
+Notification access, filtering, and redaction stay on Android. Content is hidden by default; the receiver renders only the already-filtered event and does not persist it. Notification messages use a separate bounded sender queue and receiver handling that does not alter H.264 sequence/keyframe state. The renderer contract contains no Android or OpenVR types. The OpenVR implementation uses a separate short-lived overlay, avoiding texture composition with the phone stream and preserving the phone's Hidden/Glance/Expanded/Pinned state. Selecting a card with the dashboard laser requests the portable application to show the full phone.
+
+See `docs/notifications.md` for privacy, security, and pending physical validation.
+
 ## Deferred work
 
 Encrypted pairing, automatic discovery, extended ergonomic tuning of controller-placement defaults, standalone native-overlay validation, and native decoder-to-GPU surface sharing remain deferred. The custom TCP transport is subject to head-of-line blocking and must be measured on real Wi-Fi before it is treated as a long-term choice.

@@ -151,6 +151,30 @@ void TestStreamProtocol() {
     invalidPointer[7] = 0x00;
     Check(!ParsePointerEvent(invalidPointer.data(), invalidPointer.size(), parsedPointer, error),
           "non-finite remote input is rejected");
+
+    NotificationEvent notification;
+    notification.applicationName = "Messages";
+    notification.title = "Are you coming?";
+    notification.body = "Dinner is ready";
+    notification.packageName = "com.example.messages";
+    notification.postedAtMillis = 123456789;
+    notification.contentRedacted = false;
+    const auto notificationBytes = SerializeNotification(notification);
+    NotificationEvent parsedNotification;
+    Check(ParseNotification(notificationBytes.data(), notificationBytes.size(),
+                            parsedNotification, error) &&
+              parsedNotification.applicationName == notification.applicationName &&
+              parsedNotification.title == notification.title &&
+              parsedNotification.body == notification.body &&
+              parsedNotification.packageName == notification.packageName &&
+              parsedNotification.postedAtMillis == notification.postedAtMillis &&
+              !parsedNotification.contentRedacted,
+          "privacy-filtered notification payload round trips");
+    auto malformedNotification = notificationBytes;
+    malformedNotification[2] = 0x7f;
+    Check(!ParseNotification(malformedNotification.data(), malformedNotification.size(),
+                             parsedNotification, error),
+          "malformed notification lengths are rejected");
 }
 
 void TestOverlayInteraction() {
@@ -309,6 +333,10 @@ void TestOverlaySettingsPersistence() {
     saved.rightController.orientation = phonecast::vr::ControllerOrientation::Wrist;
     saved.glancePreviewScale = 0.7F;
     saved.radialLongPressMilliseconds = 850;
+    saved.notificationWidthMeters = 0.75F;
+    saved.notificationDistanceMeters = 0.65F;
+    saved.notificationOffsetXMeters = -0.15F;
+    saved.notificationOffsetYMeters = 0.05F;
     std::string error;
     Check(store.Save(saved, error), "overlay settings save");
     phonecast::vr::OverlaySettings loaded;
@@ -326,7 +354,11 @@ void TestOverlaySettingsPersistence() {
               loaded.leftController.orientation == phonecast::vr::ControllerOrientation::ControllerRelative &&
               loaded.rightController.orientation == phonecast::vr::ControllerOrientation::Wrist &&
               loaded.glancePreviewScale == 0.7F &&
-              loaded.radialLongPressMilliseconds == 850,
+              loaded.radialLongPressMilliseconds == 850 &&
+              loaded.notificationWidthMeters == 0.75F &&
+              loaded.notificationDistanceMeters == 0.65F &&
+              loaded.notificationOffsetXMeters == -0.15F &&
+              loaded.notificationOffsetYMeters == 0.05F,
           "overlay settings round trip");
     std::filesystem::remove(path, ignored);
 }
@@ -352,7 +384,7 @@ void TestSettingsMenu() {
               menu.Draft().widthMeters > initial.widthMeters,
           "settings changes update the transactional draft");
     menu.Handle(phonecast::vr::SettingsMenuCommand::Back);
-    for (int index = 0; index < 5; ++index)
+    for (int index = 0; index < 6; ++index)
         menu.Handle(phonecast::vr::SettingsMenuCommand::NextItem);
     Check(menu.Handle(phonecast::vr::SettingsMenuCommand::Activate) ==
               phonecast::vr::SettingsMenuResult::Applied && !menu.IsOpen(),
@@ -374,6 +406,25 @@ void TestSettingsMenu() {
     Check(menu.Handle(phonecast::vr::SettingsMenuCommand::Back) ==
               phonecast::vr::SettingsMenuResult::None,
           "Back returns from a settings page");
+    for (int index = 0; index < 5; ++index)
+        menu.Handle(phonecast::vr::SettingsMenuCommand::NextItem);
+    menu.Handle(phonecast::vr::SettingsMenuCommand::Activate);
+    Check(menu.View().title == "NOTIFICATIONS", "Notification placement settings are reachable");
+    menu.Handle(phonecast::vr::SettingsMenuCommand::Increase);
+    menu.Handle(phonecast::vr::SettingsMenuCommand::NextItem);
+    menu.Handle(phonecast::vr::SettingsMenuCommand::Decrease);
+    menu.Handle(phonecast::vr::SettingsMenuCommand::NextItem);
+    menu.Handle(phonecast::vr::SettingsMenuCommand::Decrease);
+    menu.Handle(phonecast::vr::SettingsMenuCommand::NextItem);
+    menu.Handle(phonecast::vr::SettingsMenuCommand::Decrease);
+    Check(menu.Draft().notificationWidthMeters > initial.notificationWidthMeters &&
+              menu.Draft().notificationDistanceMeters < initial.notificationDistanceMeters &&
+              menu.Draft().notificationOffsetXMeters < initial.notificationOffsetXMeters &&
+              menu.Draft().notificationOffsetYMeters < initial.notificationOffsetYMeters,
+          "notification size and head-relative placement are editable");
+    Check(menu.Handle(phonecast::vr::SettingsMenuCommand::Back) ==
+              phonecast::vr::SettingsMenuResult::None,
+          "Back returns from notification settings");
     Check(menu.Handle(phonecast::vr::SettingsMenuCommand::Back) ==
               phonecast::vr::SettingsMenuResult::Cancelled && !menu.IsOpen() &&
               menu.Original().widthMeters == initial.widthMeters,

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "phonecast/core/input/IInputProvider.h"
+#include "phonecast/core/protocol/StreamProtocol.h"
 #include "phonecast/core/streaming/VideoFrame.h"
 
 #include <array>
@@ -89,6 +90,10 @@ struct OverlaySettings {
     bool worldTransformValid{false};
     float glancePreviewScale{0.55F};
     std::uint32_t radialLongPressMilliseconds{600};
+    float notificationWidthMeters{0.55F};
+    float notificationDistanceMeters{0.75F};
+    float notificationOffsetXMeters{0.18F};
+    float notificationOffsetYMeters{0.12F};
 };
 
 class IOverlayRenderer {
@@ -124,6 +129,17 @@ public:
         (void)event;
         return false;
     }
+    // Displays a short-lived privacy-filtered notification card independently
+    // of the full phone overlay.
+    virtual bool ShowNotification(const core::protocol::NotificationEvent& notification,
+                                  std::string& error) {
+        (void)notification;
+        error = "The renderer does not support notification cards.";
+        return false;
+    }
+    virtual bool HideNotification(std::string& error) { error.clear(); return true; }
+    // A card can request the full phone view while the dashboard laser is active.
+    virtual bool TakeNotificationOpenRequest() { return false; }
     virtual void Stop() noexcept = 0;
 };
 

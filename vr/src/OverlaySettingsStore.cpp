@@ -99,7 +99,9 @@ bool OverlaySettingsStore::Load(OverlaySettings& settings, bool& found, std::str
         values[line.substr(0, separator)] = line.substr(separator + 1);
     }
     const bool legacy = values["version"] == "1";
-    if (!legacy && values["version"] != "2") {
+    const bool versionTwo = values["version"] == "2";
+    const bool versionThree = values["version"] == "3";
+    if (!legacy && !versionTwo && !versionThree) {
         error = "Unsupported overlay settings version.";
         return false;
     }
@@ -151,6 +153,18 @@ bool OverlaySettingsStore::Load(OverlaySettings& settings, bool& found, std::str
         error = "Overlay settings contain an invalid radial-menu long-press duration.";
         return false;
     }
+    if (versionThree &&
+        (!ParseFloat(values["notification_width"], 0.20F, 1.20F,
+                     loaded.notificationWidthMeters) ||
+         !ParseFloat(values["notification_distance"], 0.40F, 2.00F,
+                     loaded.notificationDistanceMeters) ||
+         !ParseFloat(values["notification_offset_x"], -1.00F, 1.00F,
+                     loaded.notificationOffsetXMeters) ||
+         !ParseFloat(values["notification_offset_y"], -0.75F, 0.75F,
+                     loaded.notificationOffsetYMeters))) {
+        error = "Overlay settings contain an invalid notification placement.";
+        return false;
+    }
     loaded.worldTransformValid = values["world_valid"] == "1";
     for (std::size_t index = 0; index < loaded.worldTransform.size(); ++index) {
         if (!ParseFloat(values["world_" + std::to_string(index)], -10000.0F, 10000.0F,
@@ -180,7 +194,7 @@ bool OverlaySettingsStore::Save(const OverlaySettings& settings, std::string& er
         return false;
     }
     output << std::setprecision(9)
-           << "version=2\n"
+           << "version=3\n"
            << "mode=" << ModeName(settings.placementMode) << '\n'
            << "width=" << settings.widthMeters << '\n'
            << "distance=" << settings.distanceMeters << '\n'
@@ -188,7 +202,11 @@ bool OverlaySettingsStore::Save(const OverlaySettings& settings, std::string& er
            << "offset_x=" << settings.offsetXMeters << '\n'
            << "offset_y=" << settings.offsetYMeters << '\n'
            << "glance_preview_scale=" << settings.glancePreviewScale << '\n'
-           << "radial_long_press_ms=" << settings.radialLongPressMilliseconds << '\n';
+           << "radial_long_press_ms=" << settings.radialLongPressMilliseconds << '\n'
+           << "notification_width=" << settings.notificationWidthMeters << '\n'
+           << "notification_distance=" << settings.notificationDistanceMeters << '\n'
+           << "notification_offset_x=" << settings.notificationOffsetXMeters << '\n'
+           << "notification_offset_y=" << settings.notificationOffsetYMeters << '\n';
     const auto writeController = [&](const char* prefix, const ControllerCalibration& calibration) {
         output << prefix << "_distance=" << calibration.distanceMeters << '\n'
                << prefix << "_height=" << calibration.heightMeters << '\n'

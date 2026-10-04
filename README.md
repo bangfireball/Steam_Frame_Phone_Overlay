@@ -11,6 +11,7 @@ Moving to another development machine or starting a fresh Pi agent? Follow [`doc
 - `[x]` Sprint 5.1 controller calibration implementation is complete; extended ergonomic tuning is deferred to ongoing headset use
 - `[~]` Sprint 6 functional baseline is accepted for progression: the OpenVR dashboard is physically approved, while broader manual UI validation continues alongside later functional work
 - `[x]` Sprints 7–8 are complete and physically approved for the PC-hosted path: gestures, scrolling, Back controls, placement handle, rotation, reconnect, opt-out, and running-game input coexistence are validated
+- `[x]` Sprint 9 is complete for the PC-hosted path: notification cards, revised placement, dashboard-open/closed visibility, and open-phone selection are physically approved; native ARM64 remains Sprint 11 work
 - `[!]` Native coexistence over a standalone VR scene and the Steam Frame decoder/rendering backend remain future validation and Sprint 11 work
 - `[!]` The current LAN transport is paired but not encrypted
 
@@ -24,7 +25,7 @@ The equivalent manual command is:
 .\out\build\windows-x64\bin\phonecast-vr-stream-receiver.exe --pair-code 123456
 ```
 
-Connect the Android sender to the PC as described below. The receiver starts hidden while continuing to decode. Open the normal SteamVR dashboard, select the **PhoneCast** tab, and use its controller-laser targets for Show/Hide, Glance, Pin, Settings, placement, and Android Back. Wrist-pose and thumbstick menu gestures are disabled; the dashboard is the supported in-headset entry point. The Glance preview follows the selected hand, while Expanded and Pinned restore normal placement. Optional remote control requires both the Android in-app checkbox and Accessibility steps in [`docs/remote-control.md`](docs/remote-control.md). While the SteamVR dashboard is open, trigger interacts with the phone, including live drag scrolling; trigger-dragging the horizontal handle below the phone repositions the overlay, and the translucent lower-left `<` button sends Android Back. With the dashboard closed, the visible phone is view-only so it does not capture controller input from the running game. Hold **Ctrl+Alt** while pressing:
+Connect the Android sender to the PC as described below. The receiver starts hidden while continuing to decode. Open the normal SteamVR dashboard, select the **PhoneCast** tab, and use its controller-laser targets for Show/Hide, Glance, Pin, Settings, placement, and Android Back. Wrist-pose and thumbstick menu gestures are disabled; the dashboard is the supported in-headset entry point. The Glance preview follows the selected hand, while Expanded and Pinned restore normal placement. Optional remote control requires both the Android in-app checkbox and Accessibility steps in [`docs/remote-control.md`](docs/remote-control.md). Optional notification cards are disabled and content-redacted by default; setup and privacy details are in [`docs/notifications.md`](docs/notifications.md). While the SteamVR dashboard is open, trigger interacts with the phone, including live drag scrolling; trigger-dragging the horizontal handle below the phone repositions the overlay, and the translucent lower-left `<` button sends Android Back. With the dashboard closed, the visible phone is view-only so it does not capture controller input from the running game. Hold **Ctrl+Alt** while pressing:
 
 - `G` — cycle glance states
 - `P` — quick Hidden/Expanded toggle
@@ -86,6 +87,7 @@ See:
 - [`docs/android-capture.md`](docs/android-capture.md) — Android capture decisions and validation status
 - [`docs/protocol.md`](docs/protocol.md) — transport, framing, and security limitations
 - [`docs/remote-control.md`](docs/remote-control.md) — Sprints 7–8 interaction design, Android permissions, alternatives, and validation status
+- [`docs/notifications.md`](docs/notifications.md) — Sprint 9 notification privacy, filtering, rendering, and validation status
 - [`android/sender/README.md`](android/sender/README.md) — sender build and test instructions
 - [`docs/development.md`](docs/development.md) — build, test, and run instructions
 - [`docs/steam-frame.md`](docs/steam-frame.md) — Steam Frame evidence and open questions

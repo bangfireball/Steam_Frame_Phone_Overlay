@@ -26,6 +26,7 @@ public:
     void SetHand(GlanceHand hand) noexcept { hand_ = hand; }
     void ShowGlance(GlanceHand hand) noexcept { hand_ = hand; state_ = GlanceState::Glance; }
     void ShowPinned() noexcept { state_ = GlanceState::Pinned; }
+    void ShowExpanded() noexcept { state_ = GlanceState::Expanded; }
     void SetPreviewScale(float previewScale) noexcept;
     [[nodiscard]] float PreviewScale() const noexcept { return previewScale_; }
     void ToggleExpanded() noexcept;

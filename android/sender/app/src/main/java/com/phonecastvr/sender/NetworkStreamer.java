@@ -31,10 +31,12 @@ final class NetworkStreamer {
     private final String pairCode;
     private final Listener listener;
     private final ArrayBlockingQueue<Packet> frames = new ArrayBlockingQueue<>(3);
+    private final ArrayBlockingQueue<Packet> notifications = new ArrayBlockingQueue<>(8);
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicBoolean waitingForKeyFrame = new AtomicBoolean(true);
     private final AtomicLong droppedFrames = new AtomicLong();
     private final AtomicLong roundTripMicros = new AtomicLong(-1);
+    private final AtomicLong notificationSequence = new AtomicLong();
     private volatile Packet latestConfig;
     private volatile Packet latestKeyFrame;
     private volatile Socket socket;
@@ -87,6 +89,20 @@ final class NetworkStreamer {
         if (waitingForKeyFrame.compareAndSet(false, true)) listener.onKeyFrameNeeded();
     }
 
+    void offerNotification(byte[] payload, long postedAtMillis) {
+        if (!running.get() || payload == null || payload.length == 0) return;
+        Packet packet = new Packet(StreamProtocol.TYPE_NOTIFICATION, 0,
+                notificationSequence.getAndIncrement(), postedAtMillis * 1000L,
+                0, 0, payload);
+        if (notifications.offer(packet)) return;
+        notifications.poll();
+        notifications.offer(packet);
+    }
+
+    void clearNotifications() {
+        notifications.clear();
+    }
+
     long droppedFrames() {
         return droppedFrames.get();
     }
@@ -131,6 +147,7 @@ final class NetworkStreamer {
                 listener.onConnectionChanged(true, "Connected to " + host + ':' + port);
                 droppedFrames.addAndGet(frames.size());
                 frames.clear();
+                notifications.clear();
                 waitingForKeyFrame.set(true);
                 listener.onKeyFrameNeeded();
                 backoffMillis = 250;
@@ -149,6 +166,12 @@ final class NetworkStreamer {
                                 now / 1000L, 0, 0, new byte[0]);
                         output.flush();
                         nextPingNanos = now + 1_000_000_000L;
+                    }
+                    Packet notification = notifications.poll();
+                    if (notification != null) {
+                        notification.write(output);
+                        output.flush();
+                        continue;
                     }
                     Packet packet = frames.poll(100, TimeUnit.MILLISECONDS);
                     if (packet == null) continue;
