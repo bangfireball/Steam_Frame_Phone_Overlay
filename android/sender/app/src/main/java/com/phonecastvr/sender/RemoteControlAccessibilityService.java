@@ -22,6 +22,12 @@ public final class RemoteControlAccessibilityService extends AccessibilityServic
     private float lastY;
     private long downTime;
     private boolean pointerDown;
+    private boolean finishPointerGesture;
+    private boolean gestureDispatchInFlight;
+    private float dispatchedX;
+    private float dispatchedY;
+    private GestureDescription.StrokeDescription activeStroke;
+    private int pointerGestureGeneration;
     private long lastSequence = -1;
 
     static boolean isConnected() {
@@ -32,7 +38,7 @@ public final class RemoteControlAccessibilityService extends AccessibilityServic
         RemoteControlAccessibilityService service = instance;
         if (service != null) service.getMainExecutor().execute(() -> {
             service.lastSequence = -1;
-            service.pointerDown = false;
+            service.resetPointerGesture();
         });
     }
 
@@ -60,7 +66,7 @@ public final class RemoteControlAccessibilityService extends AccessibilityServic
     }
 
     @Override public void onInterrupt() {
-        pointerDown = false;
+        resetPointerGesture();
     }
 
     private void handle(RemoteInputEvent event) {
@@ -68,8 +74,11 @@ public final class RemoteControlAccessibilityService extends AccessibilityServic
         lastSequence = event.sequence;
         switch (event.type) {
             case RemoteInputEvent.DOWN:
+                resetPointerGesture();
                 downX = lastX = event.normalizedX;
                 downY = lastY = event.normalizedY;
+                dispatchedX = downX;
+                dispatchedY = downY;
                 downTime = SystemClock.uptimeMillis();
                 pointerDown = true;
                 break;
@@ -77,16 +86,22 @@ public final class RemoteControlAccessibilityService extends AccessibilityServic
                 if (pointerDown) {
                     lastX = event.normalizedX;
                     lastY = event.normalizedY;
+                    dispatchNextPointerSegment();
                 }
                 break;
             case RemoteInputEvent.UP:
                 if (pointerDown) {
                     lastX = event.normalizedX;
                     lastY = event.normalizedY;
-                    long duration = Math.max(50L, Math.min(1500L,
-                            SystemClock.uptimeMillis() - downTime));
-                    dispatchNormalizedGesture(downX, downY, lastX, lastY, duration);
                     pointerDown = false;
+                    if (activeStroke == null && !gestureDispatchInFlight) {
+                        long duration = Math.max(50L, Math.min(1500L,
+                                SystemClock.uptimeMillis() - downTime));
+                        dispatchNormalizedGesture(downX, downY, lastX, lastY, duration);
+                    } else {
+                        finishPointerGesture = true;
+                        dispatchNextPointerSegment();
+                    }
                 }
                 break;
             case RemoteInputEvent.SCROLL:
@@ -94,11 +109,84 @@ public final class RemoteControlAccessibilityService extends AccessibilityServic
                 break;
             case RemoteInputEvent.BACK:
                 performGlobalAction(GLOBAL_ACTION_BACK);
-                pointerDown = false;
+                resetPointerGesture();
                 break;
             default:
                 break;
         }
+    }
+
+    private void dispatchNextPointerSegment() {
+        if (gestureDispatchInFlight) return;
+        if (activeStroke == null) {
+            if (!pointerDown || distance(dispatchedX, dispatchedY, lastX, lastY) < 0.003f) return;
+            Path path = normalizedPath(dispatchedX, dispatchedY, lastX, lastY);
+            activeStroke = new GestureDescription.StrokeDescription(path, 0, 32L, true);
+            dispatchedX = lastX;
+            dispatchedY = lastY;
+            dispatchPointerStroke(false);
+            return;
+        }
+
+        if (pointerDown && distance(dispatchedX, dispatchedY, lastX, lastY) < 0.002f) return;
+        boolean completes = !pointerDown && finishPointerGesture;
+        Path path = normalizedPath(dispatchedX, dispatchedY, lastX, lastY);
+        activeStroke = activeStroke.continueStroke(path, 0, completes ? 16L : 32L, !completes);
+        dispatchedX = lastX;
+        dispatchedY = lastY;
+        dispatchPointerStroke(completes);
+    }
+
+    private void dispatchPointerStroke(boolean completes) {
+        gestureDispatchInFlight = true;
+        final int generation = pointerGestureGeneration;
+        GestureDescription gesture = new GestureDescription.Builder()
+                .addStroke(activeStroke)
+                .build();
+        boolean accepted = dispatchGesture(gesture, new GestureResultCallback() {
+            @Override public void onCompleted(GestureDescription description) {
+                if (generation != pointerGestureGeneration) return;
+                gestureDispatchInFlight = false;
+                if (completes) {
+                    activeStroke = null;
+                    finishPointerGesture = false;
+                } else {
+                    dispatchNextPointerSegment();
+                }
+            }
+
+            @Override public void onCancelled(GestureDescription description) {
+                if (generation != pointerGestureGeneration) return;
+                Log.w(TAG, "Android cancelled a continued remote gesture");
+                resetPointerGesture();
+            }
+        }, null);
+        if (!accepted) {
+            Log.w(TAG, "Android rejected a continued remote gesture");
+            resetPointerGesture();
+        }
+    }
+
+    private Path normalizedPath(float startX, float startY, float endX, float endY) {
+        DisplayMetrics metrics = displayMetrics();
+        float width = Math.max(1, metrics.widthPixels - 1);
+        float height = Math.max(1, metrics.heightPixels - 1);
+        Path path = new Path();
+        path.moveTo(clamp(startX) * width, clamp(startY) * height);
+        path.lineTo(clamp(endX) * width, clamp(endY) * height);
+        return path;
+    }
+
+    private void resetPointerGesture() {
+        ++pointerGestureGeneration;
+        pointerDown = false;
+        finishPointerGesture = false;
+        gestureDispatchInFlight = false;
+        activeStroke = null;
+    }
+
+    private static float distance(float x1, float y1, float x2, float y2) {
+        return (float) Math.hypot(x2 - x1, y2 - y1);
     }
 
     private void dispatchScroll(float x, float y, float delta) {

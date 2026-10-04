@@ -1030,16 +1030,22 @@ This does not change the current dashboard-first direction. If optional hotkeys 
 
 # Sprint 7 — VR Interaction
 
-**Status:** `[~] Implementation complete on review branch; physical headset validation pending`
+**Status:** `[x] Complete for the PC-hosted path — controller interaction and game-input coexistence physically approved`
 
 - `[x]` Portable normalized pointer event model and bounded wire encoding
 - `[x]` OpenVR overlay mouse/raycast coordinates mapped to top-left phone UV coordinates
 - `[x]` Trigger tap, hold/drag/release, and runtime scroll event capture
-- `[x]` Dashboard Android Back action
-- `[x]` Grip+trigger overlay grab retained without consuming ordinary trigger interaction
-- `[x]` Automated coordinate, orientation, sequence, and protocol tests
-- `[ ]` Physical controller-laser tap/swipe/scroll validation through SteamVR/VRLink
-- `[ ]` Physical regression test of grip+trigger overlay placement
+- `[x]` Dashboard and lower-left overlay Android Back actions
+- `[x]` Dedicated horizontal grab handle below the phone avoids grip-button conflicts and preserves ordinary trigger interaction
+- `[x]` Continued Android accessibility strokes support live held-trigger drag scrolling
+- `[x]` Automated coordinate, handle/back-button inset, orientation, sequence, and protocol tests
+- `[x]` Physical tap, long-press, four-direction swipe, runtime scroll, live held-trigger drag scrolling, and corner-coordinate validation in portrait and landscape
+- `[x]` Dashboard and lower-left Back controls physically validated
+- `[x]` Bottom-handle placement and stable world-lock release physically validated in portrait and landscape
+- `[x]` Reconnect plus both active-stream opt-out/re-enable gates physically validated
+- `[x]` Running-game regression fixed by removing persistent `MakeOverlaysInteractiveIfVisible`; the visible phone keeps updating while the dashboard is closed and game hand input remains active
+- `[x]` Dashboard-open phone interaction works, and closing the dashboard immediately restores priority to the game
+- `[~]` Controller/hand-locked placement can visibly jitter while the overlay is swept across the view; accepted as a non-blocking follow-up rather than characterized as eliminated
 
 ## Objective
 
@@ -1092,7 +1098,7 @@ The receiver should not care how Android eventually implements these actions.
 
 # Sprint 8 — Android Remote Control
 
-**Status:** `[~] Implementation complete on review branch; physical Android/VR validation pending`
+**Status:** `[x] Complete for the PC-hosted path — Android permissions, gestures, lifecycle, and opt-out physically approved`
 
 - `[x]` Accessibility, ADB, scrcpy-style, device-owner, privileged, and root alternatives investigated
 - `[x]` Optional user-enabled AccessibilityService selected as the public non-root path
@@ -1103,7 +1109,8 @@ The receiver should not care how Android eventually implements these actions.
 - `[x]` Android JVM tests, debug APK, and lint
 - `[!]` Existing transport remains unencrypted; use only on a trusted LAN
 - `[!]` Accessibility use has Google Play policy/declaration implications documented in `docs/remote-control.md`
-- `[ ]` Physical phone validation of permissions, gestures, rotation, reconnect, and opt-out
+- `[x]` Physical phone validation of permissions, gestures, portrait/landscape coordinates, reconnect, and opt-out
+- `[x]` Project owner approved Sprints 7 and 8 after running-game coexistence validation
 
 ## Objective
 

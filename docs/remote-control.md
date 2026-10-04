@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-10-03
 
-Sprints: 7 and 8 — implementation complete; physical phone/headset validation pending
+Sprints: 7 and 8 — complete and physically approved for the PC-hosted Windows/VRLink path
 
 ## Selected Android integration
 
@@ -54,10 +54,10 @@ The stream protocol carries a fixed 16-byte input payload in a `REMOTE_INPUT` me
 - Press and release trigger for a tap.
 - Hold trigger, move, and release for a swipe or long press.
 - Runtime overlay scroll events map to Android scroll gestures.
-- Select **Back** from the PhoneCast dashboard for Android Back.
-- Hold grip while pressing trigger to grab/reposition the overlay; trigger without grip is reserved for phone interaction.
+- Select **Back** from the PhoneCast dashboard or use the translucent `<` button at the lower-left edge of the phone overlay.
+- Point at the horizontal handle below the phone, hold trigger, move, and release to reposition the overlay. The handle is outside the Android touch surface, so trigger gestures on the phone remain unambiguous.
 
-The Android service buffers the normalized Down/Move/Up path and submits one gesture on Up. Android's `dispatchGesture` API submits complete gestures and cancels an already-dispatched gesture, so streaming partial gesture segments would be less reliable. This means the phone receives the swipe when trigger is released rather than seeing a continuously injected finger.
+For a tap or stationary long press, Android receives one complete gesture on trigger release. Once a held pointer starts moving, the Accessibility service uses `StrokeDescription.continueStroke` to dispatch serialized gesture segments while trigger remains held. This permits live drag-scrolling instead of waiting until release; the final segment releases the injected finger.
 
 ## Security and privacy
 
@@ -77,14 +77,17 @@ Automated validation completed:
 - Windows x64 clean configure/build and all CTest tests;
 - Android JVM tests, debug APK assembly, and lint.
 
-Still requires physical validation:
+Physically confirmed on the Windows/VRLink path:
 
-- Accessibility disclosure/enable/disable flow on a phone;
-- tap, long press, swipe, scroll, and Back in ordinary Android applications;
-- portrait/landscape coordinate accuracy;
-- controller laser and scroll delivery through SteamVR/VRLink;
-- overlay grip+trigger placement after trigger interaction changed;
-- reconnect behavior and disabling control during an active stream;
-- behavior over a running VR game and native Steam Frame backend.
+- Accessibility service enablement and the separate in-app opt-in gate;
+- tap, long press, four-direction swipe, runtime scroll, and smooth held-trigger drag scrolling;
+- corner-coordinate accuracy in portrait and landscape;
+- dashboard and lower-left overlay Back controls;
+- bottom-handle placement and stable world-lock release in portrait and landscape;
+- reconnect, disabling either Android gate during an active stream, and restoration after re-enabling both gates.
 
-Do not mark Sprints 7 or 8 physically complete until those checks pass.
+The first running-game test found that leaving OpenVR's `MakeOverlaysInteractiveIfVisible` flag on the persistent phone surface activated SteamVR's system-wide laser and withheld controller poses/input from the game whenever the phone was visible. Removing that flag fixed the regression. Physical retesting confirmed that the phone remains visible and continues updating—including video playback—while a game runs, game hands remain active with the dashboard closed, dashboard-open phone interaction still works, and closing the dashboard immediately restores input priority to the game.
+
+Controller/hand-locked placement can visibly jitter while the overlay is moved across the view. The project owner accepted this as non-blocking for Sprints 7–8; it remains a placement-quality follow-up rather than a claim of jitter-free tracking.
+
+Sprints 7 and 8 were approved for the PC-hosted path after these checks. Native Steam Frame backend behavior remains separately owned by Sprint 11.

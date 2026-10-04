@@ -10,9 +10,21 @@ float ClampUnit(float value) noexcept {
 }  // namespace
 
 void OverlayInteractionController::SetSurfaceSize(std::uint32_t width,
-                                                  std::uint32_t height) noexcept {
+                                                  std::uint32_t height,
+                                                  std::uint32_t bottomInset) noexcept {
     width_ = std::max<std::uint32_t>(1, width);
     height_ = std::max<std::uint32_t>(1, height);
+    bottomInset_ = bottomInset;
+}
+
+bool OverlayInteractionController::IsGrabHandle(float overlayY) const noexcept {
+    return bottomInset_ > 0 && overlayY >= 0.0F &&
+           overlayY < static_cast<float>(bottomInset_);
+}
+
+bool OverlayInteractionController::IsBackButton(float overlayX, float overlayY) const noexcept {
+    return IsGrabHandle(overlayY) && overlayX >= 0.0F &&
+           overlayX < static_cast<float>(bottomInset_);
 }
 
 core::PointerEvent OverlayInteractionController::Make(core::PointerEvent::Type type,
@@ -21,8 +33,11 @@ core::PointerEvent OverlayInteractionController::Make(core::PointerEvent::Type t
     core::PointerEvent event;
     event.type = type;
     event.normalizedX = ClampUnit(overlayX / static_cast<float>(width_));
-    // OpenVR overlay events have a bottom-left origin; Android uses top-left.
-    event.normalizedY = ClampUnit(1.0F - overlayY / static_cast<float>(height_));
+    // OpenVR overlay events have a bottom-left origin. The renderer may place a
+    // grab handle below the phone image, so remove that inset before converting
+    // the phone region to Android's top-left coordinate system.
+    const float phoneY = overlayY - static_cast<float>(bottomInset_);
+    event.normalizedY = ClampUnit(1.0F - phoneY / static_cast<float>(height_));
     event.scrollDelta = std::max(-1.0F, std::min(1.0F, scrollDelta));
     event.sequence = nextSequence_++;
     return event;

@@ -12,7 +12,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$receiver = Join-Path $projectRoot "out\build\windows-x64\bin\phonecast-vr-stream-receiver.exe"
+$receiver = Join-Path $projectRoot "out\build\windows-x64-reviewfix2\bin\phonecast-vr-stream-receiver.exe"
 if ($Diagnostic -eq "Visible") {
     $receiver = Join-Path $projectRoot "out\build\windows-x64-diagnostic\bin\phonecast-vr-stream-receiver.exe"
 }
@@ -109,7 +109,7 @@ function Stop-SteamClient {
 }
 
 if ($Diagnostic -ne "Baseline" -and -not (Test-Path $receiver)) {
-    throw "Receiver not found at '$receiver'. Build the windows-x64 preset first."
+    throw "Receiver not found at '$receiver'. Build the current review receiver before launching PhoneCast."
 }
 
 $currentSessionId = (Get-Process -Id $PID).SessionId
@@ -218,8 +218,17 @@ if ($null -ne $running) {
     if ($running.SessionId -ne $currentSessionId) {
         throw "PhoneCast is already running in Windows session $($running.SessionId), not console session $currentSessionId."
     }
-    Write-Host "PhoneCast VR is already running (PID $($running.Id))."
-    exit 0
+    $runningPath = if ($running.Path) { [System.IO.Path]::GetFullPath($running.Path) } else { "" }
+    $desiredPath = [System.IO.Path]::GetFullPath($receiver)
+    if (-not [string]::Equals($runningPath, $desiredPath,
+                              [System.StringComparison]::OrdinalIgnoreCase)) {
+        Write-Host "Replacing the running PhoneCast receiver with '$receiver'..."
+        Stop-PhoneCastReceiver
+        $running = $null
+    } else {
+        Write-Host "PhoneCast VR is already running from the latest review build (PID $($running.Id))."
+        exit 0
+    }
 }
 
 $existingSteam = Get-Process -Name "steam" -ErrorAction SilentlyContinue | Select-Object -First 1

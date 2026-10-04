@@ -10,7 +10,7 @@ Moving to another development machine or starting a fresh Pi agent? Follow [`doc
 - `[x]` Sprint 5 placement complete for the PC-hosted path: head, world, left-controller, and right-controller modes with direct VR placement
 - `[x]` Sprint 5.1 controller calibration implementation is complete; extended ergonomic tuning is deferred to ongoing headset use
 - `[~]` Sprint 6 functional baseline is accepted for progression: the OpenVR dashboard is physically approved, while broader manual UI validation continues alongside later functional work
-- `[~]` Combined Sprints 7–8 implementation is on `review/sprints-7-8`: normalized VR pointer input and optional non-root Android Accessibility control are built and automatically tested; physical tap/swipe/scroll/Back validation is pending
+- `[x]` Sprints 7–8 are complete and physically approved for the PC-hosted path: gestures, scrolling, Back controls, placement handle, rotation, reconnect, opt-out, and running-game input coexistence are validated
 - `[!]` Native coexistence over a standalone VR scene and the Steam Frame decoder/rendering backend remain future validation and Sprint 11 work
 - `[!]` The current LAN transport is paired but not encrypted
 
@@ -24,7 +24,7 @@ The equivalent manual command is:
 .\out\build\windows-x64\bin\phonecast-vr-stream-receiver.exe --pair-code 123456
 ```
 
-Connect the Android sender to the PC as described below. The receiver starts hidden while continuing to decode. Open the normal SteamVR dashboard, select the **PhoneCast** tab, and use its controller-laser targets for Show/Hide, Glance, Pin, Settings, placement, and Android Back. Wrist-pose and thumbstick menu gestures are disabled; the dashboard is the supported in-headset entry point. The Glance preview follows the selected hand, while Expanded and Pinned restore normal placement. Optional remote control requires the Android consent and Accessibility steps in [`docs/remote-control.md`](docs/remote-control.md). Trigger interacts with the phone; grip+trigger grabs the overlay. Hold **Ctrl+Alt** while pressing:
+Connect the Android sender to the PC as described below. The receiver starts hidden while continuing to decode. Open the normal SteamVR dashboard, select the **PhoneCast** tab, and use its controller-laser targets for Show/Hide, Glance, Pin, Settings, placement, and Android Back. Wrist-pose and thumbstick menu gestures are disabled; the dashboard is the supported in-headset entry point. The Glance preview follows the selected hand, while Expanded and Pinned restore normal placement. Optional remote control requires both the Android in-app checkbox and Accessibility steps in [`docs/remote-control.md`](docs/remote-control.md). While the SteamVR dashboard is open, trigger interacts with the phone, including live drag scrolling; trigger-dragging the horizontal handle below the phone repositions the overlay, and the translucent lower-left `<` button sends Android Back. With the dashboard closed, the visible phone is view-only so it does not capture controller input from the running game. Hold **Ctrl+Alt** while pressing:
 
 - `G` — cycle glance states
 - `P` — quick Hidden/Expanded toggle

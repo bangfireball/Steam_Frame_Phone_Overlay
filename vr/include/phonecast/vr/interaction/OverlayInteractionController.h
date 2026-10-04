@@ -10,7 +10,10 @@ namespace phonecast::vr {
 // coordinate system shared by every remote-control backend.
 class OverlayInteractionController {
 public:
-    void SetSurfaceSize(std::uint32_t width, std::uint32_t height) noexcept;
+    void SetSurfaceSize(std::uint32_t width, std::uint32_t height,
+                        std::uint32_t bottomInset = 0) noexcept;
+    bool IsGrabHandle(float overlayY) const noexcept;
+    bool IsBackButton(float overlayX, float overlayY) const noexcept;
     core::PointerEvent PointerDown(float overlayX, float overlayY) noexcept;
     core::PointerEvent PointerMove(float overlayX, float overlayY) noexcept;
     core::PointerEvent PointerUp(float overlayX, float overlayY) noexcept;
@@ -23,6 +26,7 @@ private:
 
     std::uint32_t width_{1};
     std::uint32_t height_{1};
+    std::uint32_t bottomInset_{};
     std::uint64_t nextSequence_{};
 };
 

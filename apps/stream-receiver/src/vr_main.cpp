@@ -43,7 +43,7 @@ void PrintUsage() {
               << "  End        Quit PhoneCast\n\n"
               << "Open the SteamVR dashboard and select PhoneCast for Show/Hide, Glance, Pin, Settings, placement, and Android Back.\n"
               << "Experimental wrist and thumbstick menu gestures are disabled.\n"
-              << "In VR, trigger taps/drags the phone; hold grip while pressing trigger to grab the overlay.\n"
+              << "With the SteamVR dashboard open, trigger taps/drags the phone; drag the horizontal handle below the phone to move the overlay.\n"
               << "Press left View or right Menu to select that hand and enter/leave calibration:\n"
               << "  Axis             Lateral / height\n"
               << "  Grip + axis      Yaw / tilt\n"

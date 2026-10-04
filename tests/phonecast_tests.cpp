@@ -168,6 +168,18 @@ void TestOverlayInteraction() {
     Check(back.type == phonecast::core::PointerEvent::Type::Back &&
               back.sequence == move.sequence + 1,
           "Android Back is represented independently of renderer APIs");
+
+    interaction.SetSurfaceSize(1000, 2000, 100);
+    const auto top = interaction.PointerDown(250.0F, 2100.0F);
+    const auto bottom = interaction.PointerUp(250.0F, 100.0F);
+    Check(interaction.IsGrabHandle(50.0F) && !interaction.IsGrabHandle(100.0F),
+          "the bottom inset is reserved for the overlay grab handle");
+    Check(interaction.IsBackButton(50.0F, 50.0F) &&
+              !interaction.IsBackButton(100.0F, 50.0F) &&
+              !interaction.IsBackButton(50.0F, 100.0F),
+          "the lower-left handle corner is reserved for Android Back");
+    Check(top.normalizedY == 0.0F && bottom.normalizedY == 1.0F,
+          "the grab handle inset does not offset phone touch coordinates");
 }
 
 void TestOverlayControls() {
