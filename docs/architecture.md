@@ -34,7 +34,7 @@ SteamVR compositor
 - `IVideoSource` supplies decoded or generated `VideoFrame` objects.
 - `IVideoDecoder` defines the future encoded-packet boundary; Sprint 1 has no codec.
 - `INetworkTransport` defines a future byte transport; Sprint 1 opens no sockets.
-- `IInputProvider` and `IRemoteInputSender` define normalized platform-independent input boundaries.
+- `IInputProvider` and `IRemoteInputSender` define normalized platform-independent input boundaries. The Windows TCP server implements the sender side; renderers publish input without owning the transport.
 - `IOverlayRenderer` owns VR startup, frame submission, event pumping, and shutdown.
 - `ILogger` receives severity, subsystem, and message fields.
 
@@ -108,6 +108,21 @@ The OpenVR backend also creates a best-effort dashboard main/thumbnail pair. Its
 Media Foundation may report an aligned coded width that exceeds the phone's visible width. The decoder now allocates using coded dimensions while converting and exposing only the original visible dimensions. This is intended to remove the previously observed right-edge green padding and requires physical revalidation.
 
 The current path still performs decoder NV12 → CPU RGBA → D3D11 upload. Direct Media Foundation/DXGI surface conversion and synchronization remain performance work; platform handles have not been added to Core merely to anticipate that optimization.
+
+## Sprints 7–8 interaction path
+
+```text
+OpenVR overlay mouse/scroll events
+    → OverlayInteractionController (normalized top-left coordinates)
+    → IOverlayRenderer::TakePointerEvent
+    → IRemoteInputSender / TcpVideoServer
+    → REMOTE_INPUT protocol message
+    → Android NetworkStreamer
+    → opt-in RemoteControlAccessibilityService
+    → dispatchGesture / Android Back
+```
+
+The renderer, protocol, and Android injector remain separate. OpenVR coordinates and Android framework classes do not enter Core. Trigger controls the phone; grip+trigger retains direct overlay placement. Android buffers Down/Move/Up into one complete gesture on release because `dispatchGesture` is a whole-gesture API. The service is separately user-enabled, does not retrieve window content, and can be disabled while capture remains active. See `docs/remote-control.md`.
 
 ## Deferred work
 

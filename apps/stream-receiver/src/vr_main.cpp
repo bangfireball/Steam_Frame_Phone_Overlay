@@ -41,9 +41,9 @@ void PrintUsage() {
               << "  L / R      Left/right-controller-locked\n"
               << "  Home       Reset appearance and position\n"
               << "  End        Quit PhoneCast\n\n"
-              << "Open the SteamVR dashboard and select PhoneCast for Show/Hide, Glance, Pin, Settings, and placement controls.\n"
+              << "Open the SteamVR dashboard and select PhoneCast for Show/Hide, Glance, Pin, Settings, placement, and Android Back.\n"
               << "Experimental wrist and thumbstick menu gestures are disabled.\n"
-              << "In VR, point at the overlay and hold trigger to grab it; release to world-lock it.\n"
+              << "In VR, trigger taps/drags the phone; hold grip while pressing trigger to grab the overlay.\n"
               << "Press left View or right Menu to select that hand and enter/leave calibration:\n"
               << "  Axis             Lateral / height\n"
               << "  Grip + axis      Yaw / tilt\n"
@@ -379,6 +379,12 @@ int main(int argc, char** argv) {
                 std::cerr << error << '\n';
                 settingsMenu.Close();
             }
+        }
+
+        phonecast::core::PointerEvent pointerEvent;
+        while (renderer.TakePointerEvent(pointerEvent)) {
+            if (!server.Send(pointerEvent, error))
+                std::cerr << "[input] " << error << '\n';
         }
 
         phonecast::vr::OverlaySettings vrUpdate;

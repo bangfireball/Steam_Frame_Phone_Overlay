@@ -31,7 +31,9 @@ Enable USB or wireless debugging, connect the phone, then:
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Start `phonecast-stream-receiver.exe --pair-code 123456` on the PC. Open **PhoneCast Sender**, enter the PC's LAN IPv4 address and matching code, press **Start casting**, approve notification permission when requested, and approve Android's screen-sharing dialog. The app displays encoded frame, byte, and congestion-drop counters. Use the in-app button or foreground notification action to stop.
+Start `phonecast-stream-receiver.exe --pair-code 123456` for desktop video or `phonecast-vr-stream-receiver.exe --pair-code 123456` for VR on the PC. Open **PhoneCast Sender**, enter the PC's LAN IPv4 address and matching code, press **Start casting**, approve notification permission when requested, and approve Android's screen-sharing dialog. The app displays encoded frame, byte, and congestion-drop counters. Use the in-app button or foreground notification action to stop.
+
+Remote control is optional. Read the in-app disclosure, check **Allow remote control while casting**, open Accessibility settings, and explicitly enable **PhoneCast remote control**. Casting does not require remote control. The service can inject user-requested taps, swipes, scrolls, and Back, but is configured not to retrieve window content. Disable either gate to stop control. See `docs/remote-control.md` for alternatives, Google Play policy implications, security limits, and pending physical validation.
 
 Useful diagnostics:
 
@@ -46,7 +48,8 @@ adb logcat -s PhoneCastCapture
 - Uses hardware H.264 when the device's default AVC encoder is hardware-backed; Android selects the encoder.
 - Runs capture from a `mediaProjection` foreground service.
 - Drains encoded output continuously and reports frame/byte counts.
-- Sends versioned, size-bounded messages over a low-delay TCP connection.
+- Sends versioned, size-bounded messages over a low-delay duplex TCP connection.
+- Optionally accepts normalized remote input from the authenticated receiver and forwards it to the separately enabled Accessibility service.
 - Keeps only a few pending frames so a slow network does not stall the encoder indefinitely.
 - Reconnects with bounded exponential backoff and requests a fresh keyframe.
 - Replaces the encoder surface and resizes the existing virtual display when captured content changes size.

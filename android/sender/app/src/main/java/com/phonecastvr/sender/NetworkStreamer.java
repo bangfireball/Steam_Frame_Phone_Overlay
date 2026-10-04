@@ -19,6 +19,7 @@ final class NetworkStreamer {
     interface Listener {
         void onConnectionChanged(boolean connected, String message);
         void onKeyFrameNeeded();
+        void onRemoteInput(RemoteInputEvent event);
     }
 
     private static final String TAG = "PhoneCastNetwork";
@@ -177,10 +178,8 @@ final class NetworkStreamer {
         try {
             while (running.get()) {
                 StreamProtocol.Header header = StreamProtocol.readHeader(input);
-                if (header.payloadSize > 0) {
-                    byte[] ignored = new byte[header.payloadSize];
-                    input.readFully(ignored);
-                }
+                byte[] payload = new byte[header.payloadSize];
+                if (header.payloadSize > 0) input.readFully(payload);
                 if (header.type == StreamProtocol.TYPE_PONG) {
                     roundTripMicros.set(Math.max(0L,
                             System.nanoTime() / 1000L - header.timestampMicros));
@@ -189,6 +188,8 @@ final class NetworkStreamer {
                     frames.clear();
                     waitingForKeyFrame.set(true);
                     listener.onKeyFrameNeeded();
+                } else if (header.type == StreamProtocol.TYPE_REMOTE_INPUT) {
+                    listener.onRemoteInput(StreamProtocol.parseRemoteInput(payload, header.sequence));
                 }
             }
         } catch (IOException ignored) {

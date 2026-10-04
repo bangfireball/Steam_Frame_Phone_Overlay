@@ -1,8 +1,10 @@
 # PhoneCast streaming protocol
 
-Last reviewed: 2026-10-02
+Last reviewed: 2026-10-03
 
-Sprint 3 status: **physical Android-to-PC streaming confirmed; performance and rendering fixes remain**
+Sprint 3 status: **physical Android-to-PC streaming confirmed**
+
+Sprints 7–8 status: **remote-input protocol implemented and automatically tested; physical validation pending**
 
 ## Transport decision
 
@@ -55,6 +57,9 @@ Message types:
 5. `PONG` — receiver echo of the `PING` timestamp.
 6. `END_STREAM` — orderly sender shutdown.
 7. `REQUEST_KEY_FRAME` — receiver-to-sender recovery feedback with an empty payload.
+8. `REMOTE_INPUT` — receiver-to-phone normalized pointer or Back event.
+
+A `REMOTE_INPUT` payload is exactly 16 bytes: one event-type byte (`DOWN`, `MOVE`, `UP`, `SCROLL`, or `BACK`), three reserved zero bytes, then network-byte-order IEEE-754 float32 values for normalized X, normalized Y, and scroll delta. Coordinates are top-left-origin and limited to `[0, 1]`; scroll is limited to `[-1, 1]`. The common header sequence field orders input within a connection. Both endpoints reject malformed types, lengths, non-finite values, and out-of-range values.
 
 `VIDEO_FRAME` flag bit 0 identifies a keyframe. Android output buffers are copied only from `BufferInfo.offset` through `offset + size`. Codec-config output is not counted as a video frame.
 
@@ -68,6 +73,7 @@ Message types:
 6. An orientation/configuration change clears queued old frames, sends new configuration and dimensions, resets the decoder, and requests a keyframe.
 7. A sequence gap or queue overrun causes both endpoints to discard stale dependent frames and resume only at a requested keyframe.
 8. A disconnect leaves capture active while the sender retries with bounded exponential backoff.
+9. After authentication, the receiver may send remote-input messages on the same duplex connection. Android ignores them unless the user separately enabled both PhoneCast remote control and its Accessibility service.
 
 Manual address entry satisfies Sprint 3's “discovers or connects” criterion. Automatic discovery is deferred until the basic stream has physical-device validation.
 
@@ -81,7 +87,7 @@ Steam Frame will require a Linux ARM64 decoder backend. FFmpeg/libavcodec remain
 
 The receiver accepts only an outbound connection initiated by a user-configured Android sender and requires the displayed six-digit code before accepting video. This prevents an unauthenticated LAN client from injecting video into the receiver.
 
-**The Sprint 3 protocol is not encrypted and the short code is not a cryptographic authentication protocol. Screen content can be observed by an attacker able to capture LAN traffic, and an active attacker could impersonate an endpoint. Do not use it on an untrusted network.**
+**The protocol is not encrypted and the short code is not a cryptographic authentication protocol. Screen content and remote input can be observed or modified by an attacker able to intercept LAN traffic, and an active attacker could impersonate an endpoint. Keep Android remote control disabled and do not use PhoneCast on an untrusted network.**
 
 Sprint 3 must not be represented as security-complete. Before normal product use, replace this bootstrap with authenticated encryption and persistent device identity (for example TLS with certificate pinning established through a QR/fingerprint pairing flow), plus device revocation.
 

@@ -1,4 +1,5 @@
 #include "phonecast/platform/openvr/OpenVrOverlayRenderer.h"
+#include "phonecast/vr/interaction/OverlayInteractionController.h"
 #include "phonecast/vr/overlay/WristMenuGesture.h"
 
 #include <openvr.h>
@@ -7,6 +8,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <deque>
 #include <filesystem>
 #include <string>
 #include <unordered_map>
@@ -48,8 +50,8 @@ constexpr std::uint32_t kSettingsTextureHeight = 896;
 constexpr std::uint32_t kDashboardTextureWidth = 1024;
 constexpr std::uint32_t kDashboardTextureHeight = 512;
 constexpr std::uint32_t kDashboardThumbnailSize = 256;
-constexpr int kDashboardColumns = 4;
-constexpr int kDashboardRows = 2;
+constexpr int kDashboardColumns = 3;
+constexpr int kDashboardRows = 3;
 // The dashboard is the approved in-headset entry point. Keep the earlier pose,
 // thumbstick-menu, and overlay-global input experiments dormant until product
 // direction changes. An active overlay-global set can suppress game bindings
@@ -67,8 +69,8 @@ constexpr std::array<phonecast::vr::RadialMenuAction, 8> kMenuActions{
     phonecast::vr::RadialMenuAction::WorldLocked,
     phonecast::vr::RadialMenuAction::LeftControllerLocked,
     phonecast::vr::RadialMenuAction::RightControllerLocked};
-constexpr std::array<const char*, 8> kDashboardLabels{
-    "SHOW", "GLANCE", "PIN", "SETTINGS", "HEAD", "WORLD", "LEFT", "RIGHT"};
+constexpr std::array<const char*, 9> kDashboardLabels{
+    "SHOW", "GLANCE", "PIN", "SETTINGS", "HEAD", "WORLD", "LEFT", "RIGHT", "BACK"};
 
 bool IsQuitEvent(std::uint32_t type) {
     // VREvent_ProcessQuit reports that some VR process exited; it is not a request
@@ -406,7 +408,7 @@ std::vector<std::uint8_t> MakeDashboardTexture(bool currentlyVisible) {
     const int cellWidth = (static_cast<int>(kDashboardTextureWidth) - margin * 2 -
                            gap * (kDashboardColumns - 1)) / kDashboardColumns;
     const int cellHeight = (static_cast<int>(kDashboardTextureHeight) - headerHeight -
-                            margin - gap) / kDashboardRows;
+                            margin - gap * (kDashboardRows - 1)) / kDashboardRows;
     std::vector<std::uint8_t> image(
         static_cast<std::size_t>(kDashboardTextureWidth) * kDashboardTextureHeight * 4U, 0);
     FillImageRect(image, kDashboardTextureWidth, kDashboardTextureHeight, 0, 0,
@@ -468,7 +470,7 @@ int DashboardCell(float mouseX, float mouseY) {
     const int cellWidth = (static_cast<int>(kDashboardTextureWidth) - margin * 2 -
                            gap * (kDashboardColumns - 1)) / kDashboardColumns;
     const int cellHeight = (static_cast<int>(kDashboardTextureHeight) - headerHeight -
-                            margin - gap) / kDashboardRows;
+                            margin - gap * (kDashboardRows - 1)) / kDashboardRows;
     for (int row = 0; row < kDashboardRows; ++row) {
         for (int column = 0; column < kDashboardColumns; ++column) {
             const int left = margin + column * (cellWidth + gap);
@@ -622,6 +624,12 @@ public:
     }
 
     void QueueDashboardCell(int cell) {
+        if (cell == 8) {
+            pendingPointerEvents.push_back(interaction.Back());
+            logger.Log(core::LogLevel::Info, "openvr-dashboard",
+                       "Android Back requested from the dashboard.");
+            return;
+        }
         if (cell < 0 || cell >= static_cast<int>(kMenuActions.size())) return;
         pendingRadialMenuSelection.action = kMenuActions[static_cast<std::size_t>(cell)];
         pendingRadialMenuSelection.hand =
@@ -1281,6 +1289,26 @@ public:
         ApplySettings(currentSettings, ignored);
     }
 
+    bool ControllerGripPressed(vr::TrackedDeviceIndex_t device) const {
+        vr::VRControllerState_t state{};
+        return device != vr::k_unTrackedDeviceIndexInvalid &&
+               system->GetControllerState(device, &state, sizeof(state)) &&
+               (state.ulButtonPressed & vr::ButtonMaskFromId(vr::k_EButton_Grip)) != 0;
+    }
+
+    void QueuePointer(core::PointerEvent event) {
+        // Keep input bounded if the application stalls; preserve down/up and drop
+        // only old motion samples.
+        if (pendingPointerEvents.size() >= 64 && event.type == core::PointerEvent::Type::Move) {
+            auto found = std::find_if(pendingPointerEvents.begin(), pendingPointerEvents.end(),
+                [](const core::PointerEvent& queued) {
+                    return queued.type == core::PointerEvent::Type::Move;
+                });
+            if (found != pendingPointerEvents.end()) pendingPointerEvents.erase(found);
+        }
+        if (pendingPointerEvents.size() < 64) pendingPointerEvents.push_back(event);
+    }
+
     void BeginGrab(vr::TrackedDeviceIndex_t device) {
         vr::HmdMatrix34_t controllerPose{};
         vr::HmdMatrix34_t overlayPose{};
@@ -1423,6 +1451,11 @@ public:
     std::chrono::steady_clock::time_point lastCalibrationAdjustment{};
     vr::TrackedDeviceIndex_t grabbedDevice{vr::k_unTrackedDeviceIndexInvalid};
     vr::HmdMatrix34_t grabRelative{};
+    phonecast::vr::OverlayInteractionController interaction{};
+    std::deque<core::PointerEvent> pendingPointerEvents;
+    bool pointerDown{false};
+    float lastPointerX{};
+    float lastPointerY{};
 #ifdef _WIN32
     ID3D11Device* device{nullptr};
     ID3D11DeviceContext* context{nullptr};
@@ -1543,13 +1576,19 @@ bool OpenVrOverlayRenderer::Start(const phonecast::vr::OverlaySettings& settings
         !impl_->OverlayCall(impl_->overlayApi->SetOverlayFlag(
                                 impl_->overlay, vr::VROverlayFlags_MakeOverlaysInteractiveIfVisible, true),
                             "SetOverlayFlag", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayFlag(
+                                impl_->overlay, vr::VROverlayFlags_SendVRDiscreteScrollEvents, true),
+                            "Enable discrete overlay scroll events", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayFlag(
+                                impl_->overlay, vr::VROverlayFlags_SendVRSmoothScrollEvents, true),
+                            "Enable smooth overlay scroll events", error) ||
         !impl_->ApplySettings(settings, error)) {
         Stop();
         return false;
     }
     impl_->InitializeDashboard();
     impl_->logger.Log(core::LogLevel::Info, "openvr",
-                      "Overlay created; point and hold trigger on it to grab and place it.");
+                      "Overlay created; trigger interacts with the phone, and grip+trigger grabs it.");
     error.clear();
     return true;
 }
@@ -1581,6 +1620,7 @@ bool OpenVrOverlayRenderer::SubmitFrame(const core::VideoFrame& frame, std::stri
                                       static_cast<float>(frame.height)}};
     if (!impl_->OverlayCall(impl_->overlayApi->SetOverlayMouseScale(impl_->overlay, &mouseScale),
                             "SetOverlayMouseScale", error)) return false;
+    impl_->interaction.SetSurfaceSize(frame.width, frame.height);
     impl_->hasFrame = true;
     if (impl_->desiredVisible && !impl_->shown) {
         if (!SetVisible(true, error)) return false;
@@ -1672,10 +1712,36 @@ bool OpenVrOverlayRenderer::PumpEvents() {
     while (impl_->overlayApi->PollNextOverlayEvent(impl_->overlay, &event, sizeof(event))) {
         if (!impl_->calibrationActive && event.eventType == vr::VREvent_MouseButtonDown &&
             (event.data.mouse.button & vr::VRMouseButton_Left) != 0) {
-            impl_->BeginGrab(event.trackedDeviceIndex);
+            if (impl_->ControllerGripPressed(event.trackedDeviceIndex)) {
+                impl_->BeginGrab(event.trackedDeviceIndex);
+            } else {
+                impl_->pointerDown = true;
+                impl_->lastPointerX = event.data.mouse.x;
+                impl_->lastPointerY = event.data.mouse.y;
+                impl_->QueuePointer(impl_->interaction.PointerDown(
+                    event.data.mouse.x, event.data.mouse.y));
+            }
+        } else if (!impl_->calibrationActive && event.eventType == vr::VREvent_MouseMove) {
+            impl_->lastPointerX = event.data.mouse.x;
+            impl_->lastPointerY = event.data.mouse.y;
+            if (impl_->pointerDown) {
+                impl_->QueuePointer(impl_->interaction.PointerMove(
+                    event.data.mouse.x, event.data.mouse.y));
+            }
         } else if (!impl_->calibrationActive && event.eventType == vr::VREvent_MouseButtonUp &&
                    (event.data.mouse.button & vr::VRMouseButton_Left) != 0) {
-            impl_->EndGrab(event.trackedDeviceIndex);
+            if (impl_->grabbedDevice != vr::k_unTrackedDeviceIndexInvalid) {
+                impl_->EndGrab(event.trackedDeviceIndex);
+            } else if (impl_->pointerDown) {
+                impl_->QueuePointer(impl_->interaction.PointerUp(
+                    event.data.mouse.x, event.data.mouse.y));
+            }
+            impl_->pointerDown = false;
+        } else if (!impl_->calibrationActive &&
+                   (event.eventType == vr::VREvent_ScrollDiscrete ||
+                    event.eventType == vr::VREvent_ScrollSmooth)) {
+            impl_->QueuePointer(impl_->interaction.Scroll(
+                impl_->lastPointerX, impl_->lastPointerY, event.data.scroll.ydelta));
         }
         if (IsQuitEvent(event.eventType)) {
             impl_->logger.Log(core::LogLevel::Info, "openvr", "Runtime requested overlay shutdown.");
@@ -1778,6 +1844,13 @@ bool OpenVrOverlayRenderer::TakeSettingsMenuInput(
     return true;
 }
 
+bool OpenVrOverlayRenderer::TakePointerEvent(core::PointerEvent& event) {
+    if (impl_->pendingPointerEvents.empty()) return false;
+    event = impl_->pendingPointerEvents.front();
+    impl_->pendingPointerEvents.pop_front();
+    return true;
+}
+
 void OpenVrOverlayRenderer::Stop() noexcept {
     impl_->DestroyDashboard();
     if (impl_->overlayApi != nullptr && impl_->gestureOverlay != vr::k_ulOverlayHandleInvalid) {
@@ -1832,6 +1905,8 @@ void OpenVrOverlayRenderer::Stop() noexcept {
     impl_->previousLeftControllerButtons = 0;
     impl_->previousRightControllerButtons = 0;
     impl_->grabbedDevice = vr::k_unTrackedDeviceIndexInvalid;
+    impl_->pendingPointerEvents.clear();
+    impl_->pointerDown = false;
 #ifdef _WIN32
     if (impl_->texture != nullptr) impl_->texture->Release();
     if (impl_->context != nullptr) impl_->context->Release();

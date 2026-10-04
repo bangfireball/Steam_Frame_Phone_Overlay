@@ -27,6 +27,7 @@ public:
     bool ShowSettingsMenu(const vr::SettingsMenuView& view, std::string& error) override;
     bool HideSettingsMenu(std::string& error) override;
     bool TakeSettingsMenuInput(vr::SettingsMenuCommand& command) override;
+    bool TakePointerEvent(core::PointerEvent& event) override;
     void Stop() noexcept override;
 
 private:

@@ -1030,6 +1030,17 @@ This does not change the current dashboard-first direction. If optional hotkeys 
 
 # Sprint 7 — VR Interaction
 
+**Status:** `[~] Implementation complete on review branch; physical headset validation pending`
+
+- `[x]` Portable normalized pointer event model and bounded wire encoding
+- `[x]` OpenVR overlay mouse/raycast coordinates mapped to top-left phone UV coordinates
+- `[x]` Trigger tap, hold/drag/release, and runtime scroll event capture
+- `[x]` Dashboard Android Back action
+- `[x]` Grip+trigger overlay grab retained without consuming ordinary trigger interaction
+- `[x]` Automated coordinate, orientation, sequence, and protocol tests
+- `[ ]` Physical controller-laser tap/swipe/scroll validation through SteamVR/VRLink
+- `[ ]` Physical regression test of grip+trigger overlay placement
+
 ## Objective
 
 Allow interaction with the displayed phone.
@@ -1080,6 +1091,19 @@ The receiver should not care how Android eventually implements these actions.
 ---
 
 # Sprint 8 — Android Remote Control
+
+**Status:** `[~] Implementation complete on review branch; physical Android/VR validation pending`
+
+- `[x]` Accessibility, ADB, scrcpy-style, device-owner, privileged, and root alternatives investigated
+- `[x]` Optional user-enabled AccessibilityService selected as the public non-root path
+- `[x]` Separate in-app consent toggle, prominent disclosure, and Android Settings enablement flow
+- `[x]` Accessibility service does not retrieve window content or inspect app text
+- `[x]` Tap/long-press, swipe, scroll, and Android Back implementation
+- `[x]` Remote input accepted only over the active phone-initiated streaming connection after its pairing handshake
+- `[x]` Android JVM tests, debug APK, and lint
+- `[!]` Existing transport remains unencrypted; use only on a trusted LAN
+- `[!]` Accessibility use has Google Play policy/declaration implications documented in `docs/remote-control.md`
+- `[ ]` Physical phone validation of permissions, gestures, rotation, reconnect, and opt-out
 
 ## Objective
 

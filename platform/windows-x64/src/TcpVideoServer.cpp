@@ -126,10 +126,15 @@ struct TcpVideoServer::Implementation {
         return false;
     }
 
+    bool SendMessage(SOCKET socket, const Message& message) {
+        std::lock_guard<std::mutex> lock(sendMutex);
+        return SendExact(socket, core::protocol::Serialize(message));
+    }
+
     bool SendKeyFrameRequest(SOCKET socket) {
         Message request;
         request.type = MessageType::RequestKeyFrame;
-        return SendExact(socket, core::protocol::Serialize(request));
+        return SendMessage(socket, request);
     }
 
     void HandleClient(SOCKET socket) {
@@ -162,7 +167,7 @@ struct TcpVideoServer::Implementation {
                 Message pong;
                 pong.type = MessageType::Pong;
                 pong.timestampMicros = message.timestampMicros;
-                if (!SendExact(socket, core::protocol::Serialize(pong))) return;
+                if (!SendMessage(socket, pong)) return;
             } else if (message.type == MessageType::VideoConfig ||
                        message.type == MessageType::VideoFrame) {
                 if (Push(std::move(message)) && !SendKeyFrameRequest(socket)) return;
@@ -224,6 +229,7 @@ struct TcpVideoServer::Implementation {
     std::thread thread;
     mutable std::mutex statusMutex;
     std::string status;
+    std::mutex sendMutex;
     // Absorb startup and short TCP/Android scheduler bursts without repeatedly
     // throwing away an otherwise decodable prediction chain. The decoder is
     // faster than the target 30 FPS and drains this queue after initialization.
@@ -291,6 +297,29 @@ void TcpVideoServer::Stop() noexcept {
         WSACleanup();
         state.winsockStarted = false;
     }
+}
+
+bool TcpVideoServer::Send(const core::PointerEvent& event, std::string& error) {
+    auto& state = *implementation_;
+    if (!state.connected.load()) {
+        error = "The phone is not connected; remote input was not sent.";
+        return false;
+    }
+    const SOCKET socket = state.clientSocket.load();
+    if (socket == INVALID_SOCKET) {
+        error = "The phone connection closed before remote input could be sent.";
+        return false;
+    }
+    Message message;
+    message.type = MessageType::RemoteInput;
+    message.sequence = event.sequence;
+    message.payload = core::protocol::SerializePointerEvent(event);
+    if (!state.SendMessage(socket, message)) {
+        error = "Sending remote input to the phone failed.";
+        return false;
+    }
+    error.clear();
+    return true;
 }
 
 bool TcpVideoServer::Connected() const noexcept { return implementation_->connected.load(); }

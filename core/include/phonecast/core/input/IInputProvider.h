@@ -5,7 +5,7 @@
 namespace phonecast::core {
 
 struct PointerEvent {
-    enum class Type { Down, Move, Up, Scroll, Back };
+    enum class Type : std::uint8_t { Down = 1, Move = 2, Up = 3, Scroll = 4, Back = 5 };
     Type type{Type::Move};
     float normalizedX{};
     float normalizedY{};

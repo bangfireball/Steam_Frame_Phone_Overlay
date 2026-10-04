@@ -10,6 +10,7 @@ Moving to another development machine or starting a fresh Pi agent? Follow [`doc
 - `[x]` Sprint 5 placement complete for the PC-hosted path: head, world, left-controller, and right-controller modes with direct VR placement
 - `[x]` Sprint 5.1 controller calibration implementation is complete; extended ergonomic tuning is deferred to ongoing headset use
 - `[~]` Sprint 6 functional baseline is accepted for progression: the OpenVR dashboard is physically approved, while broader manual UI validation continues alongside later functional work
+- `[~]` Combined Sprints 7–8 implementation is on `review/sprints-7-8`: normalized VR pointer input and optional non-root Android Accessibility control are built and automatically tested; physical tap/swipe/scroll/Back validation is pending
 - `[!]` Native coexistence over a standalone VR scene and the Steam Frame decoder/rendering backend remain future validation and Sprint 11 work
 - `[!]` The current LAN transport is paired but not encrypted
 
@@ -23,7 +24,7 @@ The equivalent manual command is:
 .\out\build\windows-x64\bin\phonecast-vr-stream-receiver.exe --pair-code 123456
 ```
 
-Connect the Android sender to the PC as described below. The receiver starts hidden while continuing to decode. Open the normal SteamVR dashboard, select the **PhoneCast** tab, and use its controller-laser targets for Show/Hide, Glance, Pin, Settings, and placement. Wrist-pose and thumbstick menu gestures are disabled; the dashboard is the supported in-headset entry point. The Glance preview follows the selected hand, while Expanded and Pinned restore normal placement. Hold **Ctrl+Alt** while pressing:
+Connect the Android sender to the PC as described below. The receiver starts hidden while continuing to decode. Open the normal SteamVR dashboard, select the **PhoneCast** tab, and use its controller-laser targets for Show/Hide, Glance, Pin, Settings, placement, and Android Back. Wrist-pose and thumbstick menu gestures are disabled; the dashboard is the supported in-headset entry point. The Glance preview follows the selected hand, while Expanded and Pinned restore normal placement. Optional remote control requires the Android consent and Accessibility steps in [`docs/remote-control.md`](docs/remote-control.md). Trigger interacts with the phone; grip+trigger grabs the overlay. Hold **Ctrl+Alt** while pressing:
 
 - `G` — cycle glance states
 - `P` — quick Hidden/Expanded toggle
@@ -52,7 +53,7 @@ The current transport is LAN-only framed TCP and is **not encrypted**. See [`doc
 
 ## Sprint 2 Android sender
 
-The Android app requests MediaProjection consent, captures into a surface-input H.264 encoder at 30 FPS, drains encoded frames, reports diagnostics, and handles start/stop and capture resizing. It intentionally does not transmit data until Sprint 3.
+The Android app requests MediaProjection consent, captures into a surface-input H.264 encoder at 30 FPS, streams encoded frames, reports diagnostics, and handles start/stop and capture resizing.
 
 ```powershell
 cd android\sender
@@ -83,7 +84,8 @@ See:
 - [`design.md`](design.md) — product and sprint plan
 - [`docs/architecture.md`](docs/architecture.md) — production boundaries and interfaces
 - [`docs/android-capture.md`](docs/android-capture.md) — Android capture decisions and validation status
-- [`docs/protocol.md`](docs/protocol.md) — Sprint 3 transport, framing, and security limitations
+- [`docs/protocol.md`](docs/protocol.md) — transport, framing, and security limitations
+- [`docs/remote-control.md`](docs/remote-control.md) — Sprints 7–8 interaction design, Android permissions, alternatives, and validation status
 - [`android/sender/README.md`](android/sender/README.md) — sender build and test instructions
 - [`docs/development.md`](docs/development.md) — build, test, and run instructions
 - [`docs/steam-frame.md`](docs/steam-frame.md) — Steam Frame evidence and open questions

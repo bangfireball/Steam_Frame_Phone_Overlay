@@ -1,5 +1,6 @@
 add_library(phonecast-vr
     src/GlanceController.cpp
+    src/OverlayInteractionController.cpp
     src/OverlayController.cpp
     src/OverlaySettingsStore.cpp
     src/SettingsMenuController.cpp
