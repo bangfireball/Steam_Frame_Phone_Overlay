@@ -8,8 +8,8 @@ Moving to another development machine or starting a fresh Pi agent? Follow [`doc
 
 - `[x]` Sprints 0–4 complete: Android capture, paired LAN streaming, low-latency decoding, and a responsive PC-hosted OpenVR overlay are physically approved
 - `[x]` Sprint 5 placement complete for the PC-hosted path: head, world, left-controller, and right-controller modes with direct VR placement
-- `[~]` Sprint 5.1 controller calibration is implemented and tested; physical ergonomic tuning remains
-- `[~]` Sprint 6 glance mode is implemented and tested; joint physical review with Sprint 5.1 remains
+- `[x]` Sprint 5.1 controller calibration implementation is complete; extended ergonomic tuning is deferred to ongoing headset use
+- `[~]` Sprint 6 functional baseline is accepted for progression: the OpenVR dashboard is physically approved, while broader manual UI validation continues alongside later functional work
 - `[!]` Native coexistence over a standalone VR scene and the Steam Frame decoder/rendering backend remain future validation and Sprint 11 work
 - `[!]` The current LAN transport is paired but not encrypted
 
@@ -23,7 +23,7 @@ The equivalent manual command is:
 .\out\build\windows-x64\bin\phonecast-vr-stream-receiver.exe --pair-code 123456
 ```
 
-Connect the Android sender to the PC as described below. The receiver starts hidden while continuing to decode. Short-click either thumbstick to cycle `Hidden -> Glance -> Expanded -> Pinned -> Hidden`. Hold a thumbstick for the configurable 0.6-second default to open the radial menu on that hand, release, point toward an item, and click to select. Its Settings wedge opens a controller-navigated in-headset configuration panel. The Glance preview follows the initiating hand; Expanded and Pinned restore normal placement. Hold **Ctrl+Alt** while pressing:
+Connect the Android sender to the PC as described below. The receiver starts hidden while continuing to decode. Open the normal SteamVR dashboard, select the **PhoneCast** tab, and use its controller-laser targets for Show/Hide, Glance, Pin, Settings, and placement. Wrist-pose and thumbstick menu gestures are disabled; the dashboard is the supported in-headset entry point. The Glance preview follows the selected hand, while Expanded and Pinned restore normal placement. Hold **Ctrl+Alt** while pressing:
 
 - `G` — cycle glance states
 - `P` — quick Hidden/Expanded toggle

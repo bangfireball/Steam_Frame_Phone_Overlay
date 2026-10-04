@@ -34,6 +34,8 @@ constexpr char kGestureOverlayKey[] = "com.phonecastvr.receiver.gesture-progress
 constexpr char kGestureOverlayName[] = "PhoneCast Gesture Progress";
 constexpr char kSettingsOverlayKey[] = "com.phonecastvr.receiver.settings";
 constexpr char kSettingsOverlayName[] = "PhoneCast Settings";
+constexpr char kDashboardOverlayKey[] = "com.phonecastvr.receiver.dashboard";
+constexpr char kDashboardOverlayName[] = "PhoneCast";
 constexpr std::uint32_t kMenuTextureWidth = 512;
 constexpr std::uint32_t kMenuTextureHeight = 896;
 constexpr int kMenuColumns = 2;
@@ -43,6 +45,14 @@ constexpr std::uint32_t kGestureTextureSize = 128;
 constexpr int kGestureProgressSteps = 24;
 constexpr std::uint32_t kSettingsTextureWidth = 512;
 constexpr std::uint32_t kSettingsTextureHeight = 896;
+constexpr std::uint32_t kDashboardTextureWidth = 1024;
+constexpr std::uint32_t kDashboardTextureHeight = 512;
+constexpr std::uint32_t kDashboardThumbnailSize = 256;
+constexpr int kDashboardColumns = 4;
+constexpr int kDashboardRows = 2;
+// The dashboard is the approved in-headset entry point. Keep the earlier pose
+// and thumbstick menu experiments dormant until product direction changes.
+constexpr bool kEnableExperimentalGestureControls = false;
 constexpr std::array<const char*, 9> kMenuLabels{
     "SHOW", "GLANCE", "PIN", "SETTINGS", "HEAD", "WORLD", "LEFT", "RIGHT", "CLOSE"};
 constexpr std::array<phonecast::vr::RadialMenuAction, 8> kMenuActions{
@@ -54,6 +64,8 @@ constexpr std::array<phonecast::vr::RadialMenuAction, 8> kMenuActions{
     phonecast::vr::RadialMenuAction::WorldLocked,
     phonecast::vr::RadialMenuAction::LeftControllerLocked,
     phonecast::vr::RadialMenuAction::RightControllerLocked};
+constexpr std::array<const char*, 8> kDashboardLabels{
+    "SHOW", "GLANCE", "PIN", "SETTINGS", "HEAD", "WORLD", "LEFT", "RIGHT"};
 
 bool IsQuitEvent(std::uint32_t type) {
     // VREvent_ProcessQuit reports that some VR process exited; it is not a request
@@ -336,6 +348,135 @@ std::vector<std::uint8_t> MakeGestureProgressTexture(int completedSteps) {
     return image;
 }
 
+void SetImagePixel(std::vector<std::uint8_t>& image, std::uint32_t width,
+                   std::uint32_t height, int x, int y,
+                   const std::array<std::uint8_t, 4>& color) {
+    if (x < 0 || y < 0 || x >= static_cast<int>(width) || y >= static_cast<int>(height)) return;
+    const auto offset = (static_cast<std::size_t>(y) * width + static_cast<std::size_t>(x)) * 4U;
+    std::copy(color.begin(), color.end(), image.begin() + static_cast<std::ptrdiff_t>(offset));
+}
+
+void FillImageRect(std::vector<std::uint8_t>& image, std::uint32_t width,
+                   std::uint32_t height, int x, int y, int rectWidth, int rectHeight,
+                   const std::array<std::uint8_t, 4>& color) {
+    for (int row = y; row < y + rectHeight; ++row)
+        for (int column = x; column < x + rectWidth; ++column)
+            SetImagePixel(image, width, height, column, row, color);
+}
+
+void DrawImageLabel(std::vector<std::uint8_t>& image, std::uint32_t width,
+                    std::uint32_t height, const std::string& label,
+                    int centerX, int centerY, int scale,
+                    const std::array<std::uint8_t, 4>& color) {
+    const int advance = 6 * scale;
+    const int labelWidth = static_cast<int>(label.size()) * advance - scale;
+    int cursorX = centerX - labelWidth / 2;
+    const int originY = centerY - 7 * scale / 2;
+    for (const char character : label) {
+        const auto glyph = kMenuGlyphs.find(character);
+        if (glyph != kMenuGlyphs.end()) {
+            for (int row = 0; row < 7; ++row) {
+                for (int column = 0; column < 5; ++column) {
+                    if (glyph->second[static_cast<std::size_t>(row)][column] != '1') continue;
+                    for (int yy = 0; yy < scale; ++yy)
+                        for (int xx = 0; xx < scale; ++xx)
+                            SetImagePixel(image, width, height,
+                                          cursorX + column * scale + xx,
+                                          originY + row * scale + yy, color);
+                }
+            }
+        }
+        cursorX += advance;
+    }
+}
+
+std::vector<std::uint8_t> MakeDashboardTexture(bool currentlyVisible) {
+    constexpr std::array<std::uint8_t, 4> background{8, 14, 24, 255};
+    constexpr std::array<std::uint8_t, 4> header{15, 31, 50, 255};
+    constexpr std::array<std::uint8_t, 4> cell{25, 52, 78, 255};
+    constexpr std::array<std::uint8_t, 4> primary{22, 116, 184, 255};
+    constexpr std::array<std::uint8_t, 4> text{245, 249, 255, 255};
+    constexpr std::array<std::uint8_t, 4> accent{65, 188, 245, 255};
+    constexpr int margin = 20;
+    constexpr int gap = 12;
+    constexpr int headerHeight = 104;
+    const int cellWidth = (static_cast<int>(kDashboardTextureWidth) - margin * 2 -
+                           gap * (kDashboardColumns - 1)) / kDashboardColumns;
+    const int cellHeight = (static_cast<int>(kDashboardTextureHeight) - headerHeight -
+                            margin - gap) / kDashboardRows;
+    std::vector<std::uint8_t> image(
+        static_cast<std::size_t>(kDashboardTextureWidth) * kDashboardTextureHeight * 4U, 0);
+    FillImageRect(image, kDashboardTextureWidth, kDashboardTextureHeight, 0, 0,
+                  static_cast<int>(kDashboardTextureWidth),
+                  static_cast<int>(kDashboardTextureHeight), background);
+    FillImageRect(image, kDashboardTextureWidth, kDashboardTextureHeight, 0, 0,
+                  static_cast<int>(kDashboardTextureWidth), headerHeight, header);
+    FillImageRect(image, kDashboardTextureWidth, kDashboardTextureHeight, 0,
+                  headerHeight - 6, static_cast<int>(kDashboardTextureWidth), 6, accent);
+    DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                   "PHONECAST", 190, 50, 4, text);
+    DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                   currentlyVisible ? "PHONE VISIBLE" : "PHONE HIDDEN",
+                   760, 50, 3, accent);
+    for (int index = 0; index < kDashboardColumns * kDashboardRows; ++index) {
+        const int column = index % kDashboardColumns;
+        const int row = index / kDashboardColumns;
+        const int left = margin + column * (cellWidth + gap);
+        const int top = headerHeight + row * (cellHeight + gap);
+        FillImageRect(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                      left, top, cellWidth, cellHeight, index == 0 ? primary : cell);
+        const std::string label = index == 0 && currentlyVisible
+            ? "HIDE" : kDashboardLabels[static_cast<std::size_t>(index)];
+        DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                       label, left + cellWidth / 2, top + cellHeight / 2,
+                       label.size() > 7 ? 3 : 4, text);
+    }
+    return image;
+}
+
+std::vector<std::uint8_t> MakeDashboardThumbnail() {
+    constexpr std::array<std::uint8_t, 4> background{8, 24, 40, 255};
+    constexpr std::array<std::uint8_t, 4> phone{31, 147, 220, 255};
+    constexpr std::array<std::uint8_t, 4> screen{11, 18, 28, 255};
+    constexpr std::array<std::uint8_t, 4> text{245, 249, 255, 255};
+    std::vector<std::uint8_t> image(
+        static_cast<std::size_t>(kDashboardThumbnailSize) * kDashboardThumbnailSize * 4U, 0);
+    FillImageRect(image, kDashboardThumbnailSize, kDashboardThumbnailSize, 0, 0,
+                  static_cast<int>(kDashboardThumbnailSize),
+                  static_cast<int>(kDashboardThumbnailSize), background);
+    FillImageRect(image, kDashboardThumbnailSize, kDashboardThumbnailSize,
+                  63, 20, 130, 176, phone);
+    FillImageRect(image, kDashboardThumbnailSize, kDashboardThumbnailSize,
+                  73, 32, 110, 144, screen);
+    DrawImageLabel(image, kDashboardThumbnailSize, kDashboardThumbnailSize,
+                   "PC", 128, 104, 8, text);
+    DrawImageLabel(image, kDashboardThumbnailSize, kDashboardThumbnailSize,
+                   "PHONECAST", 128, 224, 3, text);
+    return image;
+}
+
+int DashboardCell(float mouseX, float mouseY) {
+    constexpr int margin = 20;
+    constexpr int gap = 12;
+    constexpr int headerHeight = 104;
+    const int x = static_cast<int>(mouseX);
+    const int y = static_cast<int>(kDashboardTextureHeight - mouseY);
+    if (y < headerHeight) return -1;
+    const int cellWidth = (static_cast<int>(kDashboardTextureWidth) - margin * 2 -
+                           gap * (kDashboardColumns - 1)) / kDashboardColumns;
+    const int cellHeight = (static_cast<int>(kDashboardTextureHeight) - headerHeight -
+                            margin - gap) / kDashboardRows;
+    for (int row = 0; row < kDashboardRows; ++row) {
+        for (int column = 0; column < kDashboardColumns; ++column) {
+            const int left = margin + column * (cellWidth + gap);
+            const int top = headerHeight + row * (cellHeight + gap);
+            if (x >= left && x < left + cellWidth && y >= top && y < top + cellHeight)
+                return row * kDashboardColumns + column;
+        }
+    }
+    return -1;
+}
+
 std::vector<std::uint8_t> MakeRadialMenuTexture(int selected, bool currentlyVisible) {
     constexpr int margin = 12;
     constexpr int gap = 8;
@@ -419,6 +560,74 @@ public:
         } else {
             logger.Log(core::LogLevel::Info, "openvr", "Associated this process with the registered application key.");
         }
+    }
+
+    void RenderDashboard() {
+        if (dashboardOverlay == vr::k_ulOverlayHandleInvalid) return;
+        auto image = MakeDashboardTexture(desiredVisible);
+        const auto result = overlayApi->SetOverlayRaw(
+            dashboardOverlay, image.data(), kDashboardTextureWidth, kDashboardTextureHeight, 4);
+        if (result != vr::VROverlayError_None)
+            logger.Log(core::LogLevel::Warning, "openvr-dashboard",
+                       "Failed to update the PhoneCast dashboard panel.");
+    }
+
+    void DestroyDashboard() {
+        if (overlayApi == nullptr) return;
+        if (dashboardOverlay != vr::k_ulOverlayHandleInvalid)
+            overlayApi->DestroyOverlay(dashboardOverlay);
+        if (dashboardThumbnail != vr::k_ulOverlayHandleInvalid)
+            overlayApi->DestroyOverlay(dashboardThumbnail);
+        dashboardOverlay = vr::k_ulOverlayHandleInvalid;
+        dashboardThumbnail = vr::k_ulOverlayHandleInvalid;
+    }
+
+    void InitializeDashboard() {
+        const auto result = overlayApi->CreateDashboardOverlay(
+            kDashboardOverlayKey, kDashboardOverlayName,
+            &dashboardOverlay, &dashboardThumbnail);
+        if (result != vr::VROverlayError_None) {
+            const char* name = overlayApi->GetOverlayErrorNameFromEnum(result);
+            logger.Log(core::LogLevel::Warning, "openvr-dashboard",
+                       std::string("Dashboard tab is unavailable: ") +
+                       (name != nullptr ? name : "unknown error") + ".");
+            dashboardOverlay = vr::k_ulOverlayHandleInvalid;
+            dashboardThumbnail = vr::k_ulOverlayHandleInvalid;
+            return;
+        }
+
+        auto thumbnail = MakeDashboardThumbnail();
+        const vr::HmdVector2_t mouseScale{{static_cast<float>(kDashboardTextureWidth),
+                                           static_cast<float>(kDashboardTextureHeight)}};
+        const auto panelResult = overlayApi->SetOverlayRaw(
+            dashboardOverlay, MakeDashboardTexture(desiredVisible).data(),
+            kDashboardTextureWidth, kDashboardTextureHeight, 4);
+        const auto thumbnailResult = overlayApi->SetOverlayRaw(
+            dashboardThumbnail, thumbnail.data(),
+            kDashboardThumbnailSize, kDashboardThumbnailSize, 4);
+        const auto scaleResult = overlayApi->SetOverlayMouseScale(dashboardOverlay, &mouseScale);
+        if (panelResult != vr::VROverlayError_None ||
+            thumbnailResult != vr::VROverlayError_None ||
+            scaleResult != vr::VROverlayError_None) {
+            logger.Log(core::LogLevel::Warning, "openvr-dashboard",
+                       "Dashboard tab was created but its panel, icon, or pointer scale failed.");
+            DestroyDashboard();
+            return;
+        }
+        logger.Log(core::LogLevel::Info, "openvr-dashboard",
+                   "PhoneCast dashboard tab and launcher icon created.");
+    }
+
+    void QueueDashboardCell(int cell) {
+        if (cell < 0 || cell >= static_cast<int>(kMenuActions.size())) return;
+        pendingRadialMenuSelection.action = kMenuActions[static_cast<std::size_t>(cell)];
+        pendingRadialMenuSelection.hand =
+            currentSettings.placementMode == phonecast::vr::PlacementMode::RightControllerLocked
+                ? phonecast::vr::GlanceInput::RightController
+                : phonecast::vr::GlanceInput::LeftController;
+        hasPendingRadialMenuSelection = true;
+        logger.Log(core::LogLevel::Info, "openvr-dashboard",
+                   "Dashboard control selected.");
     }
 
     vr::TrackedDeviceIndex_t DeviceForMode(phonecast::vr::PlacementMode mode) const {
@@ -982,9 +1191,10 @@ public:
         if (!explicitInputReady || !PollExplicitInput(left, right)) PollLegacyInput(left, right);
 
         if (HandleSettingsMenu(left, right)) return;
-        if (!settingsMenuVisible && HandleWristMenuGesture()) return;
+        if (kEnableExperimentalGestureControls &&
+            !settingsMenuVisible && HandleWristMenuGesture()) return;
         if (HandleRadialMenu(left, right)) return;
-        if (!calibrationActive) {
+        if (kEnableExperimentalGestureControls && !calibrationActive) {
             if (HandleGlancePress(true, left, leftHold)) return;
             if (HandleGlancePress(false, right, rightHold)) return;
         }
@@ -1172,6 +1382,8 @@ public:
     vr::VROverlayHandle_t menuOverlay{vr::k_ulOverlayHandleInvalid};
     vr::VROverlayHandle_t gestureOverlay{vr::k_ulOverlayHandleInvalid};
     vr::VROverlayHandle_t settingsOverlay{vr::k_ulOverlayHandleInvalid};
+    vr::VROverlayHandle_t dashboardOverlay{vr::k_ulOverlayHandleInvalid};
+    vr::VROverlayHandle_t dashboardThumbnail{vr::k_ulOverlayHandleInvalid};
     bool gestureProgressVisible{false};
     int gestureProgressStep{-1};
     bool settingsMenuVisible{false};
@@ -1326,6 +1538,7 @@ bool OpenVrOverlayRenderer::Start(const phonecast::vr::OverlaySettings& settings
         Stop();
         return false;
     }
+    impl_->InitializeDashboard();
     impl_->logger.Log(core::LogLevel::Info, "openvr",
                       "Overlay created; point and hold trigger on it to grab and place it.");
     error.clear();
@@ -1380,7 +1593,9 @@ bool OpenVrOverlayRenderer::ApplySettings(const phonecast::vr::OverlaySettings& 
 }
 
 bool OpenVrOverlayRenderer::SetVisible(bool visible, std::string& error) {
+    const bool visibilityChanged = impl_->desiredVisible != visible;
     impl_->desiredVisible = visible;
+    if (visibilityChanged) impl_->RenderDashboard();
     if (impl_->overlayApi == nullptr || impl_->overlay == vr::k_ulOverlayHandleInvalid) {
         error = "OpenVR overlay is not started.";
         return false;
@@ -1403,6 +1618,20 @@ bool OpenVrOverlayRenderer::PumpEvents() {
     impl_->UpdateControllerPlacement();
     impl_->PollControllerCalibration();
     vr::VREvent_t event{};
+    while (impl_->dashboardOverlay != vr::k_ulOverlayHandleInvalid &&
+           impl_->overlayApi->PollNextOverlayEvent(
+               impl_->dashboardOverlay, &event, sizeof(event))) {
+        if (event.eventType == vr::VREvent_MouseButtonDown &&
+            (event.data.mouse.button & vr::VRMouseButton_Left) != 0) {
+            impl_->QueueDashboardCell(
+                DashboardCell(event.data.mouse.x, event.data.mouse.y));
+        }
+        if (IsQuitEvent(event.eventType)) {
+            impl_->logger.Log(core::LogLevel::Info, "openvr",
+                              "Runtime requested overlay shutdown.");
+            return false;
+        }
+    }
     while (impl_->overlayApi->PollNextOverlayEvent(
                impl_->settingsOverlay, &event, sizeof(event))) {
         if (event.eventType == vr::VREvent_MouseButtonDown &&
@@ -1541,6 +1770,7 @@ bool OpenVrOverlayRenderer::TakeSettingsMenuInput(
 }
 
 void OpenVrOverlayRenderer::Stop() noexcept {
+    impl_->DestroyDashboard();
     if (impl_->overlayApi != nullptr && impl_->gestureOverlay != vr::k_ulOverlayHandleInvalid) {
         impl_->overlayApi->HideOverlay(impl_->gestureOverlay);
         impl_->overlayApi->DestroyOverlay(impl_->gestureOverlay);
@@ -1559,6 +1789,8 @@ void OpenVrOverlayRenderer::Stop() noexcept {
     }
     impl_->gestureOverlay = vr::k_ulOverlayHandleInvalid;
     impl_->settingsOverlay = vr::k_ulOverlayHandleInvalid;
+    impl_->dashboardOverlay = vr::k_ulOverlayHandleInvalid;
+    impl_->dashboardThumbnail = vr::k_ulOverlayHandleInvalid;
     impl_->menuOverlay = vr::k_ulOverlayHandleInvalid;
     impl_->overlay = vr::k_ulOverlayHandleInvalid;
     impl_->overlayApi = nullptr;

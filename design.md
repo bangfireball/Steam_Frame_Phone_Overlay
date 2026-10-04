@@ -894,7 +894,7 @@ Settings persist between sessions.
 
 # Sprint 5.1 — Controller Placement Calibration
 
-**Status:** `[~] In progress — implementation and automated tests complete; physical calibration pending`
+**Status:** `[x] Complete for the implemented calibration scope — project owner closed Sprint 5.1; extended ergonomic tuning deferred to ongoing use`
 
 - `[x]` Independent persisted left- and right-controller calibration profiles
 - `[x]` Distance, height, lateral position, tilt, yaw, and scale adjustment
@@ -903,8 +903,8 @@ Settings persist between sessions.
 - `[x]` Tracking-loss behavior retains the last valid overlay transform and resumes on recovery
 - `[x]` Windows clean build and all automated tests
 - `[x]` Legacy `GetControllerState` polling replaced with explicit SteamVR Input actions and a Steam Frame controller binding; runtime accepted the action manifest and binding
-- `[!]` Physical retest: the phone overlay was visible and stable and keyboard controls worked, but no controller commands were delivered and a long press did not show the radial menu; overlay-global SteamVR Input priority is now being tested
-- `[ ]` Physical headset tuning and approval of defaults, stability, and ergonomics
+- `[!]` Physical retest: the phone overlay was visible and stable and keyboard controls worked, but global SteamVR Input commands were not delivered reliably while another application owned focus
+- `[~]` Extended headset tuning of defaults, stability, and ergonomics is deferred to ongoing interaction time rather than blocking later functional sprints
 
 ## Objective
 
@@ -919,7 +919,11 @@ Implement and physically tune:
 - per-hand persisted calibration profiles;
 - stable behavior while the controller rotates, moves, or temporarily loses tracking.
 
-Do not guess a universal pose. Validate the options in-headset and choose defaults from physical testing. The current world-upright face-the-user implementation remains the temporary functional behavior until this sprint.
+Do not guess a universal pose. The configurable implementation is accepted as the Sprint 5.1 deliverable. The current defaults remain provisional, and later interaction time may produce follow-up calibration changes without reopening this sprint. The OpenVR dashboard is the supported route into these controls; experimental global bindings are not an acceptance dependency.
+
+### Closure decision — 2026-10-03
+
+The project owner closed Sprint 5.1 so functional work can continue. This records acceptance of the implemented model and automated coverage, not a claim that every controller pose or ergonomic default has been physically validated. Remaining manual tuning is deferred and should be captured as follow-up evidence during later headset use.
 
 ### Acceptance Criteria
 
@@ -927,40 +931,38 @@ Do not guess a universal pose. Validate the options in-headset and choose defaul
 - Left and right controller settings persist independently.
 - At least controller-relative and face-the-user orientation modes are available.
 - The overlay does not visibly flip, roll, or jitter during ordinary controller movement.
-- Defaults are physically approved in-headset.
+- Default values are safe and adjustable; final ergonomic approval is explicitly deferred by the closure decision above.
 
 ---
 
 # Sprint 6 — Glance Mode
 
-**Status:** `[~] In progress — implementation and automated tests complete; joint physical review with Sprint 5.1 pending`
+**Status:** `[~] Functional baseline accepted for progression — dashboard controls physically approved; extended manual validation deferred while Sprint 7 begins`
 
 - `[x]` Portable Hidden, Glance, Expanded, and Pinned state model
 - `[x]` Small initiating-hand controller preview without overwriting persisted placement
-- `[x]` Controller primary-axis/touchpad button fallback
 - `[x]` Keyboard cycle and quick show/hide fallback
 - `[x]` Hidden startup with decoding retained for immediate reveal
-- `[x]` Physical test confirmed wrist opening, the phone-shaped control grid, and controller-laser selection work
-- `[x]` Three-second gesture dwell with circular progress feedback to address the physically observed easy activation
 - `[x]` Phone-shaped Settings panel with laser-selectable rows and `-`/`+` adjustment targets
 - `[~]` Menu flicker mitigation removes hover-driven raw-texture redraws; physical confirmation pending
 - `[x]` Automated state and presentation tests
-- `[x]` Failed legacy controller polling replaced with explicit SteamVR Input actions and a Steam Frame controller binding; runtime accepted the action manifest and binding
-- `[!]` Physical retest still delivered no controller commands and no radial menu on long press; overlay-global SteamVR Input priority remains unconfirmed and the new pose-only gesture path awaits testing
 - `[x]` Keyboard-driven state transitions and live, quick reveal physically confirmed
-- `[x]` Keyboard left/right placement selection now also selects the hand used by the next keyboard-driven Glance preview
-- `[x]` Experimental long-press thumbstick radial menu with show/hide, glance, pin, placement, and reset actions
-- `[x]` Settings entry in the radial menu
-- `[x]` Separate in-headset settings panel for PhoneCast configuration
+- `[x]` Keyboard left/right placement selection selects the hand used by the next keyboard-driven Glance preview
+- `[x]` OpenVR dashboard tab/icon with Show/Hide, Glance, Pin, Settings, and placement controls
+- `[x]` Dashboard icon, panel, and controller-laser controls physically validated and approved
+- `[x]` OpenVR dashboard adopted as the primary in-headset launcher and recovery path
+- `[!]` SteamVR Input actions did not reliably deliver controller commands while another application owned focus; overlay-global overrides are not required by the chosen dashboard path
+- `[x]` Wrist-pose gesture, progress indicator, and thumbstick long-press control grid disabled at runtime; dormant experimental code is retained only for possible future reconsideration
 - `[x]` Controller-only settings navigation, live editing, explicit apply/cancel, and intentional reset without requiring the PC keyboard
 - `[x]` Settings changed in-headset persist through the portable settings model only when applied
-- `[ ]` Physical headset approval of controller controls, long-press threshold/radial-menu ergonomics, settings usability, and 55% preview size/offsets
+- `[ ]` Native ARM64 dashboard lifecycle and operation over a standalone VR scene remain to be physically validated
+- `[ ]` Physical approval of the 55% Glance preview size and per-hand offsets remains pending
 
 ## Objective
 
-Prevent the phone from constantly cluttering the user's VR view.
+Prevent the phone from constantly cluttering the user's VR view while providing a dependable, supported way to recover it when hidden.
 
-Introduce:
+Retain the portable presentation states:
 
 ```text
 Hidden
@@ -972,37 +974,15 @@ Expanded
 Pinned
 ```
 
-A wrist/controller gesture or configurable action should reveal the phone.
+For the current product direction, the **OpenVR dashboard tab is the sole primary in-headset control surface**. The user opens the normal SteamVR dashboard, selects PhoneCast, and chooses Show/Hide, Glance, Pin, Settings, or placement controls with the controller laser.
 
-Example:
+The wrist-pose gesture is disabled for now. Do not require experimental overlay-global SteamVR Input overrides, thumbstick shortcuts, or gesture calibration for ordinary use. The dormant gesture work may be revisited only if a future headset test establishes a clear need beyond the dashboard path.
 
-```text
-Normal gameplay
-
-       ↓
-
-Raise wrist
-
-       ↓
-
-Small phone preview
-
-       ↓
-
-Select
-
-       ↓
-
-Full phone overlay
-```
-
-Investigate reliable gesture detection before implementing complex gesture logic.
-
-Provide a button-based fallback.
+Sprint 6 no longer blocks Sprint 7. Because this sprint is primarily UI and interaction work, its remaining manual validation will be accumulated during normal use while later functional interaction is implemented. Defects found during that use should be fixed as focused follow-up work; untested lifecycle or ergonomic behavior must remain recorded as unvalidated.
 
 ## In-Headset Settings
 
-Expand Sprint 6 beyond reveal controls with a PhoneCast settings section that can be opened from a **Settings** item in the radial menu. The user should not need the PC keyboard or edit configuration files for ordinary overlay setup.
+Expand Sprint 6 beyond reveal controls with a PhoneCast settings section opened from the dashboard's **Settings** control. The user should not need the PC keyboard, experimental global input overrides, gestures, or configuration-file editing for ordinary overlay setup.
 
 The first settings surface should cover functionality that already exists:
 
@@ -1018,14 +998,17 @@ Do not pull future performance presets, Android remote-control permissions, noti
 
 ### Acceptance Criteria
 
-- The radial menu contains a clear Settings entry.
+- The normal SteamVR dashboard exposes a recognizable PhoneCast tab while the receiver runs.
+- Show/Hide recovers the phone from fully Hidden without a custom global binding or wrist gesture.
+- Dashboard Glance, Pin, Settings, and placement controls respond reliably to the controller laser.
+- Closing the dashboard releases input immediately and does not activate the underlying game.
 - Settings can be opened, navigated, changed, applied/cancelled, and closed using VR controllers.
 - Existing appearance, placement, controller-calibration, and Glance settings are available without a PC keyboard.
 - Changes render live where safe and persist across receiver restarts only when applied.
 - Cancel restores the pre-edit values; reset requires an intentional action.
 - The panel is readable and does not unnecessarily obstruct central gameplay view.
-- Input has a reliable escape/cancel path and does not remain captured after closing settings.
-- Defaults, long-press behavior, and settings ergonomics are physically approved in-headset.
+- The wrist-pose gesture and its progress indicator do not activate during ordinary use.
+- Native ARM64 dashboard lifecycle and standalone-VR-scene coexistence are recorded separately until physically tested.
 
 ---
 

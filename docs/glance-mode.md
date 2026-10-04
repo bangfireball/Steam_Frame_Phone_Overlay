@@ -25,11 +25,15 @@ The button fallback is implemented first because it is deterministic and can be 
 
 Controller input is translated by the OpenVR backend into a portable `GlanceInput`; OpenVR button identifiers do not enter the state model.
 
-## Phone-shaped control grid
+## SteamVR dashboard launcher
 
-A thumbstick long press or the wrist gesture opens a separate portrait OpenVR overlay without replacing the phone texture. The world-stable 2×5 grid contains Show/Hide, Glance, Pin, Settings, Head, World, Left, Right, and Close. Large cells accept OpenVR overlay laser/mouse clicks. The grid texture remains static while pointing to avoid repeated raw-texture submissions and the flicker observed during physical testing. Gaze selection is intentionally unsupported.
+The OpenVR backend now creates a best-effort dashboard overlay alongside the regular phone overlays. When the receiver starts successfully, `CreateDashboardOverlay` supplies a PhoneCast dashboard panel and thumbnail/icon. The panel provides large laser-selectable Show/Hide, Glance, Pin, Settings, Head, World, Left, and Right controls and routes them through the same portable actions as the phone-shaped control grid.
 
-The long-press path retains its configurable 0.6-second default if SteamVR actions become available. The pose-only wrist path is the current fallback. Layout, scale, placement, and gesture threshold remain provisional pending physical review.
+Dashboard creation is deliberately non-fatal: if a runtime does not expose the tab, normal phone streaming and keyboard controls continue. The icon, panel, and controller-laser interaction are physically approved on the Windows/VRLink path and are now the supported in-headset entry point. Native ARM64 lifecycle remains unvalidated. Native Quick Access injection is not part of this supported OpenVR path, and autostart has not been enabled.
+
+## Deferred phone-shaped control grid
+
+The earlier thumbstick long-press and wrist-pose paths can open a separate portrait OpenVR control overlay without replacing the phone texture. These experimental entry paths are now disabled at runtime because the dashboard provides a reliable supported control surface. Their code is retained only as dormant research and must not be presented as required or active behavior.
 
 ## In-headset settings
 
@@ -39,19 +43,9 @@ The portrait settings panel supports the same controller laser as the control gr
 
 The panel contains Appearance, Placement, independent Left/Right Controller calibration, and Glance and Controls categories. Reset Position and Reset Hand are explicit row actions. Reset All requires a second confirmation click. Glance preview scale and radial-menu long-press duration are persisted with the overlay settings. `Ctrl+Alt+S` is a development fallback for opening the panel.
 
-## Provisional wrist gesture and phone-shaped control grid
+## Gesture decision
 
-Because SteamVR/VRLink still did not deliver controller commands during physical testing, a controller-pose gesture opens the menu without button input:
-
-1. begin with the controller face turned away from the headset so the gesture arms;
-2. raise either controller within approximately 0.18–0.90 m of the headset;
-3. turn its control face toward the headset and hold for 3 seconds;
-4. a small circular indicator fills during the hold, and the world-stable portrait control panel opens only when it is full;
-5. move the wrist freely and use the controller laser to hover and click a large grid cell.
-
-There is deliberately no gaze selection. The panel remains open after the opening pose so the user does not have to maintain a difficult wrist angle while pointing. Its 2×5 grid contains Show/Hide, Glance, Pin, Settings, Head, World, Left, Right, and Close. It uses OpenVR overlay mouse events and normalized panel coordinates, matching the laser/UV interaction model planned for the phone screen.
-
-The opening gesture uses tracked poses, not SteamVR button actions. The three-second dwell and segmented progress indicator respond to feedback that the original 0.45-second gesture activated too easily. Distance, vertical-position, facing-angle, indicator placement, and opening dwell remain provisional and require physical tuning. It must be checked for accidental activation during ordinary gameplay.
+The pose-only wrist gesture, its progress indicator, and thumbstick long-press control-grid entry are disabled. The dashboard is sufficient for the current product direction and avoids gesture false positives, ergonomic tuning, and dependence on experimental overlay-global input. Revisit this work only if extended use demonstrates a need that the dashboard cannot satisfy.
 
 ## Physical validation result and remaining work
 
@@ -61,11 +55,12 @@ The retest established that loading bindings is insufficient for an overlay whil
 
 Keyboard-driven transitions and live, quick reveal were physically confirmed. Left/right keyboard placement selection now also selects the hand used by the next keyboard-driven Glance preview. This is not placement-mode cycling: only the Glance state temporarily attaches a 55%-scale copy of the live phone panel to the selected hand. The 55% preview size and offsets remain unapproved.
 
-- Confirm whether the replacement action path receives thumbstick clicks from either controller.
-- Physically validate the wrist-flip opening gesture, phone-shaped grid readability, laser hover/click selection, Close action, and false-positive rate.
-- If button input becomes available, confirm short click still cycles and long press reliably opens the control grid without accidental activation.
-- Review control-grid readability, placement, laser selection, cancellation, and the provisional opening dwell.
-- Confirm the button does not conflict unacceptably with active games.
-- Tune the 55% preview scale and controller offsets per hand.
-- Verify all four transitions and immediate reveal with live video.
+- Dashboard icon, panel, and controls are physically approved on Windows/VRLink.
+- Defer extended dashboard close/input-release, game-transition, sleep/wake, and receiver-restart testing to ongoing use.
+- Validate native ARM64 dashboard lifecycle separately when that backend is active.
+- Confirm the disabled wrist and thumbstick gesture paths never activate during ordinary use.
+- Tune the 55% preview scale and controller offsets per hand during later interaction testing.
+- Verify all four transitions and immediate reveal with live video over extended use.
 - Decide whether Expanded should later auto-dismiss and, if so, choose an inactivity interval from headset testing.
+
+Sprint 6's remaining manual UI validation does not block Sprint 7. The project owner chose to gain broader interaction time by proceeding with functional VR-to-phone interaction and recording UI issues as focused follow-up work.
