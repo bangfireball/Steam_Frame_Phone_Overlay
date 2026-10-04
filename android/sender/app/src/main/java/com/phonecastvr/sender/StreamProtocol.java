@@ -1,5 +1,6 @@
 package com.phonecastvr.sender;
 
+import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -14,6 +15,7 @@ final class StreamProtocol {
     static final int TYPE_PONG = 5;
     static final int TYPE_END_STREAM = 6;
     static final int TYPE_REQUEST_KEY_FRAME = 7;
+    static final int TYPE_REMOTE_INPUT = 8;
     static final int FLAG_KEY_FRAME = 1;
     static final int MAX_PAYLOAD_SIZE = 4 * 1024 * 1024;
 
@@ -59,6 +61,25 @@ final class StreamProtocol {
         int width = input.readUnsignedShort();
         int height = input.readUnsignedShort();
         return new Header(type, flags, payloadSize, sequence, timestampMicros, width, height);
+    }
+
+    static RemoteInputEvent parseRemoteInput(byte[] payload, long sequence) throws IOException {
+        if (payload == null || payload.length != 16) {
+            throw new IOException("Remote-input payload must be exactly 16 bytes");
+        }
+        DataInputStream input = new DataInputStream(new ByteArrayInputStream(payload));
+        int type = input.readUnsignedByte();
+        input.skipBytes(3);
+        float x = input.readFloat();
+        float y = input.readFloat();
+        float scroll = input.readFloat();
+        if (type < RemoteInputEvent.DOWN || type > RemoteInputEvent.BACK ||
+                !Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(scroll) ||
+                x < 0.0f || x > 1.0f || y < 0.0f || y > 1.0f ||
+                scroll < -1.0f || scroll > 1.0f) {
+            throw new IOException("Invalid normalized remote-input event");
+        }
+        return new RemoteInputEvent(type, x, y, scroll, sequence);
     }
 
     static boolean validPairCode(String value) {

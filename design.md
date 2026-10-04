@@ -1030,6 +1030,23 @@ This does not change the current dashboard-first direction. If optional hotkeys 
 
 # Sprint 7 — VR Interaction
 
+**Status:** `[x] Complete for the PC-hosted path — controller interaction and game-input coexistence physically approved`
+
+- `[x]` Portable normalized pointer event model and bounded wire encoding
+- `[x]` OpenVR overlay mouse/raycast coordinates mapped to top-left phone UV coordinates
+- `[x]` Trigger tap, hold/drag/release, and runtime scroll event capture
+- `[x]` Dashboard and lower-left overlay Android Back actions
+- `[x]` Dedicated horizontal grab handle below the phone avoids grip-button conflicts and preserves ordinary trigger interaction
+- `[x]` Continued Android accessibility strokes support live held-trigger drag scrolling
+- `[x]` Automated coordinate, handle/back-button inset, orientation, sequence, and protocol tests
+- `[x]` Physical tap, long-press, four-direction swipe, runtime scroll, live held-trigger drag scrolling, and corner-coordinate validation in portrait and landscape
+- `[x]` Dashboard and lower-left Back controls physically validated
+- `[x]` Bottom-handle placement and stable world-lock release physically validated in portrait and landscape
+- `[x]` Reconnect plus both active-stream opt-out/re-enable gates physically validated
+- `[x]` Running-game regression fixed by removing persistent `MakeOverlaysInteractiveIfVisible`; the visible phone keeps updating while the dashboard is closed and game hand input remains active
+- `[x]` Dashboard-open phone interaction works, and closing the dashboard immediately restores priority to the game
+- `[~]` Controller/hand-locked placement can visibly jitter while the overlay is swept across the view; accepted as a non-blocking follow-up rather than characterized as eliminated
+
 ## Objective
 
 Allow interaction with the displayed phone.
@@ -1080,6 +1097,20 @@ The receiver should not care how Android eventually implements these actions.
 ---
 
 # Sprint 8 — Android Remote Control
+
+**Status:** `[x] Complete for the PC-hosted path — Android permissions, gestures, lifecycle, and opt-out physically approved`
+
+- `[x]` Accessibility, ADB, scrcpy-style, device-owner, privileged, and root alternatives investigated
+- `[x]` Optional user-enabled AccessibilityService selected as the public non-root path
+- `[x]` Separate in-app consent toggle, prominent disclosure, and Android Settings enablement flow
+- `[x]` Accessibility service does not retrieve window content or inspect app text
+- `[x]` Tap/long-press, swipe, scroll, and Android Back implementation
+- `[x]` Remote input accepted only over the active phone-initiated streaming connection after its pairing handshake
+- `[x]` Android JVM tests, debug APK, and lint
+- `[!]` Existing transport remains unencrypted; use only on a trusted LAN
+- `[!]` Accessibility use has Google Play policy/declaration implications documented in `docs/remote-control.md`
+- `[x]` Physical phone validation of permissions, gestures, portrait/landscape coordinates, reconnect, and opt-out
+- `[x]` Project owner approved Sprints 7 and 8 after running-game coexistence validation
 
 ## Objective
 
@@ -1746,6 +1777,29 @@ After each sprint:
 5. Document known limitations.
 6. Update architecture documentation if implementation differs from this design.
 7. Update `design.md` sprint status.
+
+## Windows-hosted Linux ARM64 validation
+
+On the current Windows development machine, Linux ARM64 cross-builds run in Docker Desktop, not a separately installed Ubuntu/WSL distribution. A CMake cache created in the container records source paths under `/src` and must not be opened with Windows CMake; a path-mismatch error does not indicate an ARM64 source failure or broken WSL installation.
+
+From Git Bash at the repository root, use a fresh container build directory and disable MSYS argument path conversion so Docker receives `/src` unchanged:
+
+```bash
+MSYS_NO_PATHCONV=1 docker run --rm \
+  -v "$(pwd -W):/src" -w /src debian:12-slim sh -lc '
+    apt-get update &&
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      cmake ninja-build g++-aarch64-linux-gnu git ca-certificates file &&
+    rm -rf out/build/linux-arm64-validation &&
+    cmake -S . -B out/build/linux-arm64-validation -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/linux-arm64-gcc.cmake &&
+    cmake --build out/build/linux-arm64-validation &&
+    file out/build/linux-arm64-validation/bin/phonecast-receiver
+  '
+```
+
+The expected artifact is an `ELF 64-bit ... ARM aarch64` executable. This validates compilation only; it does not validate Steam Frame deployment, compositor behavior, controller input, decoding, or physical interaction. Docker Desktop must be running. Reusing an existing `/src` cache is safe only from a container mounted at the same path.
 
 Use:
 

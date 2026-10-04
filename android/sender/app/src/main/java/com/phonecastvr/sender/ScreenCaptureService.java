@@ -163,6 +163,7 @@ public final class ScreenCaptureService extends Service {
                     pairCode, new NetworkStreamer.Listener() {
                 @Override public void onConnectionChanged(boolean connected, String message) {
                     Log.i(TAG, message);
+                    if (connected) RemoteControlAccessibilityService.resetSession();
                     mainHandler.post(() -> {
                         if (stopping) return;
                         EncoderSession current;
@@ -173,6 +174,12 @@ public final class ScreenCaptureService extends Service {
 
                 @Override public void onKeyFrameNeeded() {
                     requestSyncFrame();
+                }
+
+                @Override public void onRemoteInput(RemoteInputEvent event) {
+                    if (!RemoteControlAccessibilityService.submit(event)) {
+                        Log.w(TAG, "Remote input ignored: enable PhoneCast remote control and its accessibility service");
+                    }
                 }
             });
             networkStreamer.start();

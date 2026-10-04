@@ -1,5 +1,7 @@
 #pragma once
 
+#include "phonecast/core/input/IInputProvider.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -19,6 +21,7 @@ enum class MessageType : std::uint8_t {
     Pong = 5,
     EndStream = 6,
     RequestKeyFrame = 7,
+    RemoteInput = 8,
 };
 
 enum MessageFlags : std::uint16_t {
@@ -40,5 +43,8 @@ std::vector<std::uint8_t> Serialize(const Message& message);
 bool ParseHeader(const std::uint8_t* data, std::size_t size, Message& message,
                  std::uint32_t& payloadSize, std::string& error);
 bool IsValidPairCode(const std::string& code) noexcept;
+std::vector<std::uint8_t> SerializePointerEvent(const phonecast::core::PointerEvent& event);
+bool ParsePointerEvent(const std::uint8_t* data, std::size_t size,
+                       phonecast::core::PointerEvent& event, std::string& error);
 
 }  // namespace phonecast::core::protocol

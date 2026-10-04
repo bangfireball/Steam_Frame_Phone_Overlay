@@ -27,6 +27,23 @@ public final class StreamProtocolTest {
 
     @Test public void keyFrameRequestHasStableWireType() {
         assertEquals(7, StreamProtocol.TYPE_REQUEST_KEY_FRAME);
+        assertEquals(8, StreamProtocol.TYPE_REMOTE_INPUT);
+    }
+
+    @Test public void parsesNormalizedRemoteInput() throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        DataOutputStream output = new DataOutputStream(bytes);
+        output.writeByte(RemoteInputEvent.SCROLL);
+        output.write(new byte[3]);
+        output.writeFloat(0.25f);
+        output.writeFloat(0.75f);
+        output.writeFloat(-0.5f);
+        RemoteInputEvent event = StreamProtocol.parseRemoteInput(bytes.toByteArray(), 91);
+        assertEquals(RemoteInputEvent.SCROLL, event.type);
+        assertEquals(0.25f, event.normalizedX, 0.0001f);
+        assertEquals(0.75f, event.normalizedY, 0.0001f);
+        assertEquals(-0.5f, event.scrollDelta, 0.0001f);
+        assertEquals(91, event.sequence);
     }
 
     @Test public void validatesPairCodes() {

@@ -12,10 +12,12 @@ import android.graphics.Color;
 import android.media.projection.MediaProjectionManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -32,6 +34,8 @@ public final class MainActivity extends Activity {
     private EditText pairCodeView;
     private Button startButton;
     private Button stopButton;
+    private CheckBox remoteControlView;
+    private Button accessibilityButton;
     private boolean captureAfterPermission;
 
     private final BroadcastReceiver statusReceiver = new BroadcastReceiver() {
@@ -59,6 +63,7 @@ public final class MainActivity extends Activity {
     @Override protected void onStart() {
         super.onStart();
         registerStatusReceiver();
+        updateAccessibilityButton();
     }
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
@@ -118,6 +123,31 @@ public final class MainActivity extends Activity {
         pairCodeView.setTextColor(Color.WHITE);
         pairCodeView.setHintTextColor(Color.rgb(130, 145, 160));
         root.addView(pairCodeView, matchWrap());
+
+        TextView remoteDisclosure = new TextView(this);
+        remoteDisclosure.setText(R.string.remote_control_disclosure);
+        remoteDisclosure.setTextColor(Color.rgb(190, 205, 220));
+        remoteDisclosure.setTextSize(14);
+        LinearLayout.LayoutParams disclosureParams = matchWrap();
+        disclosureParams.setMargins(0, dp(16), 0, dp(4));
+        root.addView(remoteDisclosure, disclosureParams);
+
+        remoteControlView = new CheckBox(this);
+        remoteControlView.setText(R.string.enable_remote_control);
+        remoteControlView.setTextColor(Color.WHITE);
+        remoteControlView.setChecked(getSharedPreferences(
+                ScreenCaptureService.PREFERENCES, MODE_PRIVATE)
+                .getBoolean(RemoteControlAccessibilityService.PREFERENCE_REMOTE_CONTROL, false));
+        remoteControlView.setOnCheckedChangeListener((button, checked) ->
+                getSharedPreferences(ScreenCaptureService.PREFERENCES, MODE_PRIVATE).edit()
+                        .putBoolean(RemoteControlAccessibilityService.PREFERENCE_REMOTE_CONTROL,
+                                checked).apply());
+        root.addView(remoteControlView, matchWrap());
+
+        accessibilityButton = new Button(this);
+        accessibilityButton.setOnClickListener(view ->
+                startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        root.addView(accessibilityButton, matchWrap());
 
         statusView = new TextView(this);
         statusView.setTextColor(Color.rgb(42, 188, 251));
@@ -227,6 +257,14 @@ public final class MainActivity extends Activity {
         stopButton.setEnabled(running);
         receiverHostView.setEnabled(!running);
         pairCodeView.setEnabled(!running);
+    }
+
+    private void updateAccessibilityButton() {
+        if (accessibilityButton != null) {
+            accessibilityButton.setText(RemoteControlAccessibilityService.isConnected()
+                    ? R.string.remote_control_service_enabled
+                    : R.string.open_accessibility_settings);
+        }
     }
 
     private LinearLayout.LayoutParams matchWrap() {

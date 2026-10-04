@@ -1,5 +1,6 @@
 #pragma once
 
+#include "phonecast/core/input/IRemoteInputSender.h"
 #include "phonecast/core/protocol/StreamProtocol.h"
 
 #include <chrono>
@@ -19,7 +20,7 @@ struct VideoServerStats {
     std::size_t queueDepth{};
 };
 
-class TcpVideoServer {
+class TcpVideoServer final : public core::IRemoteInputSender {
 public:
     TcpVideoServer(std::string pairCode, std::uint16_t port);
     ~TcpVideoServer();
@@ -29,6 +30,7 @@ public:
     bool Start(std::string& error);
     bool Pop(core::protocol::Message& message,
              std::chrono::microseconds* queueAge = nullptr);
+    bool Send(const core::PointerEvent& event, std::string& error) override;
     void Stop() noexcept;
 
     [[nodiscard]] bool Connected() const noexcept;

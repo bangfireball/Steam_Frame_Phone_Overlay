@@ -1,6 +1,8 @@
 #include "phonecast/core/protocol/StreamProtocol.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstring>
 
 namespace phonecast::core::protocol {
 namespace {
@@ -37,7 +39,26 @@ std::uint64_t Read64(const std::uint8_t* data) {
 }
 bool IsKnownType(std::uint8_t type) {
     return type >= static_cast<std::uint8_t>(MessageType::Hello) &&
-           type <= static_cast<std::uint8_t>(MessageType::RequestKeyFrame);
+           type <= static_cast<std::uint8_t>(MessageType::RemoteInput);
+}
+
+void WriteFloat(std::vector<std::uint8_t>& bytes, std::size_t offset, float value) {
+    std::uint32_t bits{};
+    static_assert(sizeof(bits) == sizeof(value), "32-bit float required");
+    std::memcpy(&bits, &value, sizeof(bits));
+    Write32(bytes, offset, bits);
+}
+
+float ReadFloat(const std::uint8_t* data) {
+    const std::uint32_t bits = Read32(data);
+    float value{};
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+bool IsKnownPointerType(std::uint8_t type) {
+    return type >= static_cast<std::uint8_t>(phonecast::core::PointerEvent::Type::Down) &&
+           type <= static_cast<std::uint8_t>(phonecast::core::PointerEvent::Type::Back);
 }
 }  // namespace
 
@@ -94,6 +115,42 @@ bool ParseHeader(const std::uint8_t* data, std::size_t size, Message& message,
 bool IsValidPairCode(const std::string& code) noexcept {
     return code.size() == 6 &&
            std::all_of(code.begin(), code.end(), [](char value) { return value >= '0' && value <= '9'; });
+}
+
+std::vector<std::uint8_t> SerializePointerEvent(const phonecast::core::PointerEvent& event) {
+    std::vector<std::uint8_t> bytes(16, 0);
+    bytes[0] = static_cast<std::uint8_t>(event.type);
+    WriteFloat(bytes, 4, event.normalizedX);
+    WriteFloat(bytes, 8, event.normalizedY);
+    WriteFloat(bytes, 12, event.scrollDelta);
+    return bytes;
+}
+
+bool ParsePointerEvent(const std::uint8_t* data, std::size_t size,
+                       phonecast::core::PointerEvent& event, std::string& error) {
+    if (data == nullptr || size != 16) {
+        error = "Remote-input payload must be exactly 16 bytes.";
+        return false;
+    }
+    if (!IsKnownPointerType(data[0])) {
+        error = "Unknown remote-input event type.";
+        return false;
+    }
+    const float x = ReadFloat(data + 4);
+    const float y = ReadFloat(data + 8);
+    const float scroll = ReadFloat(data + 12);
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(scroll) ||
+        x < 0.0F || x > 1.0F || y < 0.0F || y > 1.0F ||
+        scroll < -1.0F || scroll > 1.0F) {
+        error = "Remote-input coordinates are outside the normalized range.";
+        return false;
+    }
+    event.type = static_cast<phonecast::core::PointerEvent::Type>(data[0]);
+    event.normalizedX = x;
+    event.normalizedY = y;
+    event.scrollDelta = scroll;
+    error.clear();
+    return true;
 }
 
 }  // namespace phonecast::core::protocol

@@ -34,7 +34,7 @@ SteamVR compositor
 - `IVideoSource` supplies decoded or generated `VideoFrame` objects.
 - `IVideoDecoder` defines the future encoded-packet boundary; Sprint 1 has no codec.
 - `INetworkTransport` defines a future byte transport; Sprint 1 opens no sockets.
-- `IInputProvider` and `IRemoteInputSender` define normalized platform-independent input boundaries.
+- `IInputProvider` and `IRemoteInputSender` define normalized platform-independent input boundaries. The Windows TCP server implements the sender side; renderers publish input without owning the transport.
 - `IOverlayRenderer` owns VR startup, frame submission, event pumping, and shutdown.
 - `ILogger` receives severity, subsystem, and message fields.
 
@@ -95,7 +95,7 @@ The D3D11 device must be created on the DXGI adapter returned by OpenVR's `GetDX
 
 For world placement, the OpenVR backend snapshots the current HMD-relative panel into SteamVR standing space, so switching modes does not move the panel to the room origin. Controller modes use role-based tracked-device poses and independent left/right calibration profiles. Each hand persists distance, height, lateral offset, tilt, yaw, scale, and one of four orientation policies: controller-relative, face-user, world-upright, or wrist-style. Controller-relative and wrist modes inherit controller rotation; face-user aims directly at the HMD; world-upright aims horizontally while preserving standing-space up. If controller tracking is temporarily invalid, the compositor retains the last valid transform and updates resume when tracking returns.
 
-The OpenVR backend provides an in-headset calibration mode: either controller's menu button selects that hand and enters calibration, and the selected button toggles calibration. Axis motion adjusts position, grip plus axis adjusts yaw/tilt, trigger plus axis adjusts scale/distance, pad click cycles orientation, and grip plus pad click resets the active hand. Changes render immediately and are published through `IOverlayRenderer::TakeSettingsUpdate` for portable persistence after adjustment ends. OpenVR mouse input also permits a controller laser trigger to grab the visible panel outside calibration mode; release converts its current pose to a world anchor. No OpenVR types enter the portable settings model.
+The OpenVR backend provides an in-headset calibration mode: either controller's menu button selects that hand and enters calibration, and the selected button toggles calibration. Axis motion adjusts position, grip plus axis adjusts yaw/tilt, trigger plus axis adjusts scale/distance, pad click cycles orientation, and grip plus pad click resets the active hand. Changes render immediately and are published through `IOverlayRenderer::TakeSettingsUpdate` for portable persistence after adjustment ends. OpenVR mouse input also exposes a horizontal handle below the phone image. Trigger-dragging that handle repositions the panel, and release converts its current pose to a world anchor without claiming the controller grip button. No OpenVR types enter the portable settings model.
 
 The Windows-hosted overlay disappears when a headset-native standalone game takes over; this is a compositor/backend boundary rather than a placement-model failure and remains native Sprint 11 work. Sprint 5.1 controller calibration is implemented, covered by automated tests, and closed for its implemented scope. Extended ergonomic tuning remains explicitly deferred to ongoing headset use rather than being represented as physically complete.
 
@@ -108,6 +108,21 @@ The OpenVR backend also creates a best-effort dashboard main/thumbnail pair. Its
 Media Foundation may report an aligned coded width that exceeds the phone's visible width. The decoder now allocates using coded dimensions while converting and exposing only the original visible dimensions. This is intended to remove the previously observed right-edge green padding and requires physical revalidation.
 
 The current path still performs decoder NV12 → CPU RGBA → D3D11 upload. Direct Media Foundation/DXGI surface conversion and synchronization remain performance work; platform handles have not been added to Core merely to anticipate that optimization.
+
+## Sprints 7–8 interaction path
+
+```text
+OpenVR overlay mouse/scroll events
+    → OverlayInteractionController (normalized top-left coordinates)
+    → IOverlayRenderer::TakePointerEvent
+    → IRemoteInputSender / TcpVideoServer
+    → REMOTE_INPUT protocol message
+    → Android NetworkStreamer
+    → opt-in RemoteControlAccessibilityService
+    → dispatchGesture / Android Back
+```
+
+The renderer, protocol, and Android injector remain separate. OpenVR coordinates and Android framework classes do not enter Core. While the SteamVR dashboard is open, trigger controls the phone, trigger-dragging the separate bottom handle provides direct overlay placement without an ambiguous grip chord, and a lower-left `<` target emits Android Back. The persistent phone overlay deliberately omits `MakeOverlaysInteractiveIfVisible`: that OpenVR flag activates system-wide laser mode and was physically observed to withhold hand input from the running game whenever the phone was visible. The phone is therefore view-only while the dashboard is closed. Android uses one complete gesture for taps and stationary long presses, then switches moving pointers to serialized `StrokeDescription.continueStroke` segments so held-trigger drag scrolling updates before release. The service is separately user-enabled, does not retrieve window content, and can be disabled while capture remains active. See `docs/remote-control.md`.
 
 ## Deferred work
 

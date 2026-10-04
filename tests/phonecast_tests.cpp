@@ -2,6 +2,7 @@
 #include "phonecast/core/config/AppConfig.h"
 #include "phonecast/core/protocol/StreamProtocol.h"
 #include "phonecast/core/streaming/GeneratedVideoSource.h"
+#include "phonecast/vr/interaction/OverlayInteractionController.h"
 #include "phonecast/vr/overlay/GlanceController.h"
 #include "phonecast/vr/overlay/OverlayController.h"
 #include "phonecast/vr/overlay/OverlaySettingsStore.h"
@@ -130,6 +131,55 @@ void TestStreamProtocol() {
           "key-frame recovery request round trips");
     Check(IsValidPairCode("123456") && !IsValidPairCode("12345x"),
           "pair codes require six digits");
+
+    phonecast::core::PointerEvent pointer;
+    pointer.type = phonecast::core::PointerEvent::Type::Scroll;
+    pointer.normalizedX = 0.25F;
+    pointer.normalizedY = 0.75F;
+    pointer.scrollDelta = -0.5F;
+    const auto pointerBytes = SerializePointerEvent(pointer);
+    phonecast::core::PointerEvent parsedPointer;
+    Check(ParsePointerEvent(pointerBytes.data(), pointerBytes.size(), parsedPointer, error) &&
+              parsedPointer.type == phonecast::core::PointerEvent::Type::Scroll &&
+              parsedPointer.normalizedX == 0.25F && parsedPointer.normalizedY == 0.75F &&
+              parsedPointer.scrollDelta == -0.5F,
+          "normalized remote input round trips");
+    auto invalidPointer = pointerBytes;
+    invalidPointer[4] = 0x7f;
+    invalidPointer[5] = 0x80;
+    invalidPointer[6] = 0x00;
+    invalidPointer[7] = 0x00;
+    Check(!ParsePointerEvent(invalidPointer.data(), invalidPointer.size(), parsedPointer, error),
+          "non-finite remote input is rejected");
+}
+
+void TestOverlayInteraction() {
+    phonecast::vr::OverlayInteractionController interaction;
+    interaction.SetSurfaceSize(1000, 2000);
+    const auto down = interaction.PointerDown(250.0F, 500.0F);
+    const auto move = interaction.PointerMove(750.0F, 1500.0F);
+    const auto back = interaction.Back();
+    Check(down.type == phonecast::core::PointerEvent::Type::Down &&
+              down.normalizedX == 0.25F && down.normalizedY == 0.75F,
+          "OpenVR coordinates map to normalized top-left phone coordinates");
+    Check(move.sequence == down.sequence + 1 && move.normalizedX == 0.75F &&
+              move.normalizedY == 0.25F,
+          "pointer motion retains ordering and coordinate orientation");
+    Check(back.type == phonecast::core::PointerEvent::Type::Back &&
+              back.sequence == move.sequence + 1,
+          "Android Back is represented independently of renderer APIs");
+
+    interaction.SetSurfaceSize(1000, 2000, 100);
+    const auto top = interaction.PointerDown(250.0F, 2100.0F);
+    const auto bottom = interaction.PointerUp(250.0F, 100.0F);
+    Check(interaction.IsGrabHandle(50.0F) && !interaction.IsGrabHandle(100.0F),
+          "the bottom inset is reserved for the overlay grab handle");
+    Check(interaction.IsBackButton(50.0F, 50.0F) &&
+              !interaction.IsBackButton(100.0F, 50.0F) &&
+              !interaction.IsBackButton(50.0F, 100.0F),
+          "the lower-left handle corner is reserved for Android Back");
+    Check(top.normalizedY == 0.0F && bottom.normalizedY == 1.0F,
+          "the grab handle inset does not offset phone touch coordinates");
 }
 
 void TestOverlayControls() {
@@ -397,6 +447,7 @@ int main() {
     TestConfig();
     TestGeneratedFrames();
     TestStreamProtocol();
+    TestOverlayInteraction();
     TestOverlayControls();
     TestGlanceMode();
     TestOverlaySettingsPersistence();

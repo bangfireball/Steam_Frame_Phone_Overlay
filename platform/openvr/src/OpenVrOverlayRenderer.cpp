@@ -1,4 +1,5 @@
 #include "phonecast/platform/openvr/OpenVrOverlayRenderer.h"
+#include "phonecast/vr/interaction/OverlayInteractionController.h"
 #include "phonecast/vr/overlay/WristMenuGesture.h"
 
 #include <openvr.h>
@@ -7,6 +8,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <deque>
 #include <filesystem>
 #include <string>
 #include <unordered_map>
@@ -48,8 +50,9 @@ constexpr std::uint32_t kSettingsTextureHeight = 896;
 constexpr std::uint32_t kDashboardTextureWidth = 1024;
 constexpr std::uint32_t kDashboardTextureHeight = 512;
 constexpr std::uint32_t kDashboardThumbnailSize = 256;
-constexpr int kDashboardColumns = 4;
-constexpr int kDashboardRows = 2;
+constexpr std::uint32_t kGrabHandleHeightPixels = 48;
+constexpr int kDashboardColumns = 3;
+constexpr int kDashboardRows = 3;
 // The dashboard is the approved in-headset entry point. Keep the earlier pose,
 // thumbstick-menu, and overlay-global input experiments dormant until product
 // direction changes. An active overlay-global set can suppress game bindings
@@ -67,8 +70,8 @@ constexpr std::array<phonecast::vr::RadialMenuAction, 8> kMenuActions{
     phonecast::vr::RadialMenuAction::WorldLocked,
     phonecast::vr::RadialMenuAction::LeftControllerLocked,
     phonecast::vr::RadialMenuAction::RightControllerLocked};
-constexpr std::array<const char*, 8> kDashboardLabels{
-    "SHOW", "GLANCE", "PIN", "SETTINGS", "HEAD", "WORLD", "LEFT", "RIGHT"};
+constexpr std::array<const char*, 9> kDashboardLabels{
+    "SHOW", "GLANCE", "PIN", "SETTINGS", "HEAD", "WORLD", "LEFT", "RIGHT", "BACK"};
 
 bool IsQuitEvent(std::uint32_t type) {
     // VREvent_ProcessQuit reports that some VR process exited; it is not a request
@@ -393,6 +396,51 @@ void DrawImageLabel(std::vector<std::uint8_t>& image, std::uint32_t width,
     }
 }
 
+void AddGrabHandle(const phonecast::core::VideoFrame& frame,
+                   phonecast::core::VideoFrame& composite) {
+    composite.width = frame.width;
+    composite.height = frame.height + kGrabHandleHeightPixels;
+    composite.format = frame.format;
+    composite.sequence = frame.sequence;
+    composite.pixels.resize(static_cast<std::size_t>(composite.width) * composite.height * 4U);
+    std::copy(frame.pixels.begin(), frame.pixels.end(), composite.pixels.begin());
+
+    constexpr std::array<std::uint8_t, 4> background{8, 14, 24, 190};
+    constexpr std::array<std::uint8_t, 4> separator{31, 147, 220, 220};
+    constexpr std::array<std::uint8_t, 4> handle{210, 230, 242, 235};
+    constexpr std::array<std::uint8_t, 4> backButton{18, 35, 52, 205};
+    constexpr std::array<std::uint8_t, 4> backIcon{245, 249, 255, 245};
+    const int phoneHeight = static_cast<int>(frame.height);
+    FillImageRect(composite.pixels, composite.width, composite.height, 0, phoneHeight,
+                  static_cast<int>(composite.width),
+                  static_cast<int>(kGrabHandleHeightPixels), background);
+    FillImageRect(composite.pixels, composite.width, composite.height, 0, phoneHeight,
+                  static_cast<int>(composite.width), 2, separator);
+    const int handleWidth = std::max(64, std::min(220,
+        static_cast<int>(composite.width * 3U / 10U)));
+    constexpr int handleHeight = 10;
+    FillImageRect(composite.pixels, composite.width, composite.height,
+                  (static_cast<int>(composite.width) - handleWidth) / 2,
+                  phoneHeight + (static_cast<int>(kGrabHandleHeightPixels) - handleHeight) / 2,
+                  handleWidth, handleHeight, handle);
+
+    // The lower-left 48x48 region is a separate Android Back target. Keep the
+    // icon translucent so it remains recognizable without dominating the video.
+    FillImageRect(composite.pixels, composite.width, composite.height, 0, phoneHeight,
+                  static_cast<int>(kGrabHandleHeightPixels),
+                  static_cast<int>(kGrabHandleHeightPixels), backButton);
+    const int centerX = static_cast<int>(kGrabHandleHeightPixels / 2U);
+    const int centerY = phoneHeight + static_cast<int>(kGrabHandleHeightPixels / 2U);
+    for (int step = 0; step < 10; ++step) {
+        for (int thickness = -2; thickness <= 2; ++thickness) {
+            SetImagePixel(composite.pixels, composite.width, composite.height,
+                          centerX - 5 + step + thickness, centerY - step, backIcon);
+            SetImagePixel(composite.pixels, composite.width, composite.height,
+                          centerX - 5 + step + thickness, centerY + step, backIcon);
+        }
+    }
+}
+
 std::vector<std::uint8_t> MakeDashboardTexture(bool currentlyVisible) {
     constexpr std::array<std::uint8_t, 4> background{8, 14, 24, 255};
     constexpr std::array<std::uint8_t, 4> header{15, 31, 50, 255};
@@ -406,7 +454,7 @@ std::vector<std::uint8_t> MakeDashboardTexture(bool currentlyVisible) {
     const int cellWidth = (static_cast<int>(kDashboardTextureWidth) - margin * 2 -
                            gap * (kDashboardColumns - 1)) / kDashboardColumns;
     const int cellHeight = (static_cast<int>(kDashboardTextureHeight) - headerHeight -
-                            margin - gap) / kDashboardRows;
+                            margin - gap * (kDashboardRows - 1)) / kDashboardRows;
     std::vector<std::uint8_t> image(
         static_cast<std::size_t>(kDashboardTextureWidth) * kDashboardTextureHeight * 4U, 0);
     FillImageRect(image, kDashboardTextureWidth, kDashboardTextureHeight, 0, 0,
@@ -468,7 +516,7 @@ int DashboardCell(float mouseX, float mouseY) {
     const int cellWidth = (static_cast<int>(kDashboardTextureWidth) - margin * 2 -
                            gap * (kDashboardColumns - 1)) / kDashboardColumns;
     const int cellHeight = (static_cast<int>(kDashboardTextureHeight) - headerHeight -
-                            margin - gap) / kDashboardRows;
+                            margin - gap * (kDashboardRows - 1)) / kDashboardRows;
     for (int row = 0; row < kDashboardRows; ++row) {
         for (int column = 0; column < kDashboardColumns; ++column) {
             const int left = margin + column * (cellWidth + gap);
@@ -622,6 +670,12 @@ public:
     }
 
     void QueueDashboardCell(int cell) {
+        if (cell == 8) {
+            pendingPointerEvents.push_back(interaction.Back());
+            logger.Log(core::LogLevel::Info, "openvr-dashboard",
+                       "Android Back requested from the dashboard.");
+            return;
+        }
         if (cell < 0 || cell >= static_cast<int>(kMenuActions.size())) return;
         pendingRadialMenuSelection.action = kMenuActions[static_cast<std::size_t>(cell)];
         pendingRadialMenuSelection.hand =
@@ -1281,6 +1335,19 @@ public:
         ApplySettings(currentSettings, ignored);
     }
 
+    void QueuePointer(core::PointerEvent event) {
+        // Keep input bounded if the application stalls; preserve down/up and drop
+        // only old motion samples.
+        if (pendingPointerEvents.size() >= 64 && event.type == core::PointerEvent::Type::Move) {
+            auto found = std::find_if(pendingPointerEvents.begin(), pendingPointerEvents.end(),
+                [](const core::PointerEvent& queued) {
+                    return queued.type == core::PointerEvent::Type::Move;
+                });
+            if (found != pendingPointerEvents.end()) pendingPointerEvents.erase(found);
+        }
+        if (pendingPointerEvents.size() < 64) pendingPointerEvents.push_back(event);
+    }
+
     void BeginGrab(vr::TrackedDeviceIndex_t device) {
         vr::HmdMatrix34_t controllerPose{};
         vr::HmdMatrix34_t overlayPose{};
@@ -1423,6 +1490,13 @@ public:
     std::chrono::steady_clock::time_point lastCalibrationAdjustment{};
     vr::TrackedDeviceIndex_t grabbedDevice{vr::k_unTrackedDeviceIndexInvalid};
     vr::HmdMatrix34_t grabRelative{};
+    phonecast::vr::OverlayInteractionController interaction{};
+    phonecast::core::VideoFrame compositeFrame{};
+    std::deque<core::PointerEvent> pendingPointerEvents;
+    bool pointerDown{false};
+    bool backButtonDown{false};
+    float lastPointerX{};
+    float lastPointerY{};
 #ifdef _WIN32
     ID3D11Device* device{nullptr};
     ID3D11DeviceContext* context{nullptr};
@@ -1540,16 +1614,25 @@ bool OpenVrOverlayRenderer::Start(const phonecast::vr::OverlaySettings& settings
         !impl_->OverlayCall(impl_->overlayApi->SetOverlayInputMethod(
                                 impl_->overlay, vr::VROverlayInputMethod_Mouse),
                             "SetOverlayInputMethod", error) ||
+        // Do not set MakeOverlaysInteractiveIfVisible on the persistent phone
+        // surface. OpenVR documents that flag as activating system-wide laser
+        // mouse mode, which suppresses controller poses/input in the running
+        // game for as long as the phone remains visible. The phone receives
+        // mouse events while the user has intentionally opened the dashboard;
+        // with the dashboard closed it is view-only and leaves game input alone.
         !impl_->OverlayCall(impl_->overlayApi->SetOverlayFlag(
-                                impl_->overlay, vr::VROverlayFlags_MakeOverlaysInteractiveIfVisible, true),
-                            "SetOverlayFlag", error) ||
+                                impl_->overlay, vr::VROverlayFlags_SendVRDiscreteScrollEvents, true),
+                            "Enable discrete overlay scroll events", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayFlag(
+                                impl_->overlay, vr::VROverlayFlags_SendVRSmoothScrollEvents, true),
+                            "Enable smooth overlay scroll events", error) ||
         !impl_->ApplySettings(settings, error)) {
         Stop();
         return false;
     }
     impl_->InitializeDashboard();
     impl_->logger.Log(core::LogLevel::Info, "openvr",
-                      "Overlay created; point and hold trigger on it to grab and place it.");
+                      "Overlay created; dashboard laser interacts with the phone and bottom handle without claiming game input while the dashboard is closed.");
     error.clear();
     return true;
 }
@@ -1563,24 +1646,29 @@ bool OpenVrOverlayRenderer::SubmitFrame(const core::VideoFrame& frame, std::stri
         error = "Cannot submit an invalid RGBA frame.";
         return false;
     }
+    AddGrabHandle(frame, impl_->compositeFrame);
+    const auto& composite = impl_->compositeFrame;
 #ifdef _WIN32
-    if (!impl_->EnsureTexture(frame.width, frame.height, error)) return false;
-    impl_->context->UpdateSubresource(impl_->texture, 0, nullptr, frame.pixels.data(),
-                                     frame.width * 4U, 0);
+    if (!impl_->EnsureTexture(composite.width, composite.height, error)) return false;
+    impl_->context->UpdateSubresource(impl_->texture, 0, nullptr, composite.pixels.data(),
+                                     composite.width * 4U, 0);
     impl_->context->Flush();
     vr::Texture_t texture{impl_->texture, vr::TextureType_DirectX, vr::ColorSpace_Auto};
     if (!impl_->OverlayCall(impl_->overlayApi->SetOverlayTexture(impl_->overlay, &texture),
                             "SetOverlayTexture", error)) return false;
 #else
     if (!impl_->OverlayCall(impl_->overlayApi->SetOverlayRaw(
-                                impl_->overlay, const_cast<std::uint8_t*>(frame.pixels.data()),
-                                frame.width, frame.height, 4),
+                                impl_->overlay,
+                                const_cast<std::uint8_t*>(composite.pixels.data()),
+                                composite.width, composite.height, 4),
                             "SetOverlayRaw", error)) return false;
 #endif
-    const vr::HmdVector2_t mouseScale{{static_cast<float>(frame.width),
-                                      static_cast<float>(frame.height)}};
+    const vr::HmdVector2_t mouseScale{{static_cast<float>(composite.width),
+                                      static_cast<float>(composite.height)}};
     if (!impl_->OverlayCall(impl_->overlayApi->SetOverlayMouseScale(impl_->overlay, &mouseScale),
                             "SetOverlayMouseScale", error)) return false;
+    impl_->interaction.SetSurfaceSize(frame.width, frame.height,
+                                      kGrabHandleHeightPixels);
     impl_->hasFrame = true;
     if (impl_->desiredVisible && !impl_->shown) {
         if (!SetVisible(true, error)) return false;
@@ -1672,10 +1760,44 @@ bool OpenVrOverlayRenderer::PumpEvents() {
     while (impl_->overlayApi->PollNextOverlayEvent(impl_->overlay, &event, sizeof(event))) {
         if (!impl_->calibrationActive && event.eventType == vr::VREvent_MouseButtonDown &&
             (event.data.mouse.button & vr::VRMouseButton_Left) != 0) {
-            impl_->BeginGrab(event.trackedDeviceIndex);
+            if (impl_->interaction.IsBackButton(event.data.mouse.x, event.data.mouse.y)) {
+                impl_->backButtonDown = true;
+                impl_->QueuePointer(impl_->interaction.Back());
+                impl_->logger.Log(core::LogLevel::Info, "openvr-input",
+                                  "Android Back requested from the overlay button.");
+            } else if (impl_->interaction.IsGrabHandle(event.data.mouse.y)) {
+                impl_->BeginGrab(event.trackedDeviceIndex);
+            } else {
+                impl_->pointerDown = true;
+                impl_->lastPointerX = event.data.mouse.x;
+                impl_->lastPointerY = event.data.mouse.y;
+                impl_->QueuePointer(impl_->interaction.PointerDown(
+                    event.data.mouse.x, event.data.mouse.y));
+            }
+        } else if (!impl_->calibrationActive && event.eventType == vr::VREvent_MouseMove) {
+            impl_->lastPointerX = event.data.mouse.x;
+            impl_->lastPointerY = event.data.mouse.y;
+            if (impl_->pointerDown) {
+                impl_->QueuePointer(impl_->interaction.PointerMove(
+                    event.data.mouse.x, event.data.mouse.y));
+            }
         } else if (!impl_->calibrationActive && event.eventType == vr::VREvent_MouseButtonUp &&
                    (event.data.mouse.button & vr::VRMouseButton_Left) != 0) {
-            impl_->EndGrab(event.trackedDeviceIndex);
+            if (impl_->backButtonDown) {
+                impl_->backButtonDown = false;
+            } else if (impl_->grabbedDevice != vr::k_unTrackedDeviceIndexInvalid) {
+                impl_->EndGrab(event.trackedDeviceIndex);
+            } else if (impl_->pointerDown) {
+                impl_->QueuePointer(impl_->interaction.PointerUp(
+                    event.data.mouse.x, event.data.mouse.y));
+            }
+            impl_->pointerDown = false;
+        } else if (!impl_->calibrationActive &&
+                   !impl_->interaction.IsGrabHandle(impl_->lastPointerY) &&
+                   (event.eventType == vr::VREvent_ScrollDiscrete ||
+                    event.eventType == vr::VREvent_ScrollSmooth)) {
+            impl_->QueuePointer(impl_->interaction.Scroll(
+                impl_->lastPointerX, impl_->lastPointerY, event.data.scroll.ydelta));
         }
         if (IsQuitEvent(event.eventType)) {
             impl_->logger.Log(core::LogLevel::Info, "openvr", "Runtime requested overlay shutdown.");
@@ -1778,6 +1900,13 @@ bool OpenVrOverlayRenderer::TakeSettingsMenuInput(
     return true;
 }
 
+bool OpenVrOverlayRenderer::TakePointerEvent(core::PointerEvent& event) {
+    if (impl_->pendingPointerEvents.empty()) return false;
+    event = impl_->pendingPointerEvents.front();
+    impl_->pendingPointerEvents.pop_front();
+    return true;
+}
+
 void OpenVrOverlayRenderer::Stop() noexcept {
     impl_->DestroyDashboard();
     if (impl_->overlayApi != nullptr && impl_->gestureOverlay != vr::k_ulOverlayHandleInvalid) {
@@ -1832,6 +1961,9 @@ void OpenVrOverlayRenderer::Stop() noexcept {
     impl_->previousLeftControllerButtons = 0;
     impl_->previousRightControllerButtons = 0;
     impl_->grabbedDevice = vr::k_unTrackedDeviceIndexInvalid;
+    impl_->pendingPointerEvents.clear();
+    impl_->pointerDown = false;
+    impl_->backButtonDown = false;
 #ifdef _WIN32
     if (impl_->texture != nullptr) impl_->texture->Release();
     if (impl_->context != nullptr) impl_->context->Release();

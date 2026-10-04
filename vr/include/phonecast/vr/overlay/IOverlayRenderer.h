@@ -1,5 +1,6 @@
 #pragma once
 
+#include "phonecast/core/input/IInputProvider.h"
 #include "phonecast/core/streaming/VideoFrame.h"
 
 #include <array>
@@ -116,6 +117,11 @@ public:
     virtual bool HideSettingsMenu(std::string& error) { error.clear(); return true; }
     virtual bool TakeSettingsMenuInput(SettingsMenuCommand& command) {
         (void)command;
+        return false;
+    }
+    // Reports normalized phone interaction without exposing renderer-specific coordinates.
+    virtual bool TakePointerEvent(core::PointerEvent& event) {
+        (void)event;
         return false;
     }
     virtual void Stop() noexcept = 0;
