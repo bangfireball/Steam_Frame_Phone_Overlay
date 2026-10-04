@@ -1771,6 +1771,29 @@ After each sprint:
 6. Update architecture documentation if implementation differs from this design.
 7. Update `design.md` sprint status.
 
+## Windows-hosted Linux ARM64 validation
+
+On the current Windows development machine, Linux ARM64 cross-builds run in Docker Desktop, not a separately installed Ubuntu/WSL distribution. A CMake cache created in the container records source paths under `/src` and must not be opened with Windows CMake; a path-mismatch error does not indicate an ARM64 source failure or broken WSL installation.
+
+From Git Bash at the repository root, use a fresh container build directory and disable MSYS argument path conversion so Docker receives `/src` unchanged:
+
+```bash
+MSYS_NO_PATHCONV=1 docker run --rm \
+  -v "$(pwd -W):/src" -w /src debian:12-slim sh -lc '
+    apt-get update &&
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      cmake ninja-build g++-aarch64-linux-gnu git ca-certificates file &&
+    rm -rf out/build/linux-arm64-validation &&
+    cmake -S . -B out/build/linux-arm64-validation -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/linux-arm64-gcc.cmake &&
+    cmake --build out/build/linux-arm64-validation &&
+    file out/build/linux-arm64-validation/bin/phonecast-receiver
+  '
+```
+
+The expected artifact is an `ELF 64-bit ... ARM aarch64` executable. This validates compilation only; it does not validate Steam Frame deployment, compositor behavior, controller input, decoding, or physical interaction. Docker Desktop must be running. Reusing an existing `/src` cache is safe only from a container mounted at the same path.
+
 Use:
 
 ```text
