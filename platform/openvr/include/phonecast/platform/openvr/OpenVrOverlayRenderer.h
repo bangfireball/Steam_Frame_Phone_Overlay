@@ -35,6 +35,7 @@ public:
     bool HideNotification(std::string& error) override;
     bool TakeNotificationOpenRequest(std::uint64_t& actionToken) override;
     bool TakeHideRequest() override;
+    bool GetPerformanceStats(vr::VrPerformanceStats& stats) override;
     void Stop() noexcept override;
 
 private:

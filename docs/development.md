@@ -81,6 +81,8 @@ The Windows receiver's overlay disappears when the user switches to a headset-na
 
 The Android sender connects to the PC's LAN IPv4 address on TCP port `49321`. Windows Firewall must permit inbound private-network TCP traffic for the receiver. The pairing code must contain exactly six digits. The current protocol is not encrypted; use only a trusted development LAN.
 
+Android Settings → Streaming quality selects a persisted profile for the next capture session: Battery Saver (960-pixel long edge/20 FPS), Standard (1280/30), or Quality (1920/30). Standard retains the physically accepted baseline. The other profiles remain measurement candidates until Sprint 10 physical validation; Quality may affect game performance.
+
 The Android app's main screen retains the receiver address and pairing code for a short repeat-start flow. Remote-control and notification options are under the menu button. If Android revokes projection (including supported screen-lock behavior), returning to the app refreshes the action to **Start casting** automatically instead of requiring a manual Stop first.
 
 ### Important: do not start SteamVR through Windows RDP
@@ -102,7 +104,7 @@ Current physical-test result: after enabling Media Foundation low-latency mode, 
 
 OpenVR's `VREvent_ProcessQuit` may refer to an unrelated scene application. It must not terminate the receiver; only explicit runtime/driver quit events should do so. Treating it as a shutdown request caused the overlay process to exit during the first VR-game transition test.
 
-Useful overlay receiver options:
+Useful generated-overlay receiver options:
 
 ```text
 --width N
@@ -114,7 +116,7 @@ Useful overlay receiver options:
 --duration-seconds N
 ```
 
-Use `--help` for ranges and defaults.
+The Windows VR stream receiver additionally accepts `--performance-log PATH`. It writes a flushed one-second CSV containing startup, stream, queue, process CPU/memory, and OpenVR compositor frame-timing samples. See [`performance.md`](performance.md) for the physical-console baseline and glass-to-glass procedure. Use `--help` for current options.
 
 ### RDP / VRLink diagnostic comparison (2026-10-03)
 

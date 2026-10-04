@@ -139,6 +139,12 @@ Notification access, filtering, and redaction stay on Android. Content is hidden
 
 See `docs/notifications.md` for privacy, security, PC-hosted physical approval, and native ARM64 validation still pending.
 
+## Sprint 10 measurement path
+
+The Windows VR receiver can write one-second CSV samples without adding Windows APIs to Core. A Windows process sampler reports PhoneCast CPU and memory; the OpenVR adapter translates `Compositor_FrameTiming` into a portable `VrPerformanceStats` snapshot; and the application combines those values with existing transport, decode, upload, queue, and startup counters. OpenVR values describe the active scene/compositor and are not falsely attributed as PhoneCast-only GPU utilization. External high-speed-camera testing remains required for glass-to-glass latency because Android and Windows timestamps do not share a calibrated clock.
+
+Android capture profiles remain entirely sender-side. Battery Saver, Standard, and Quality select encoder dimensions, FPS, and bitrate bounds before MediaCodec configuration; no Windows or OpenVR type enters that model. Standard preserves the accepted 1280/30 baseline, while the other values remain subject to physical measurement.
+
 ## Deferred work
 
-Encrypted pairing, automatic discovery, extended ergonomic tuning of controller-placement defaults, standalone native-overlay validation, and native decoder-to-GPU surface sharing remain deferred. The custom TCP transport is subject to head-of-line blocking and must be measured on real Wi-Fi before it is treated as a long-term choice.
+Encrypted pairing, automatic discovery, extended ergonomic tuning of controller-placement defaults, standalone native-overlay validation, native decoder-to-GPU surface sharing, and process-attributed GPU utilization remain deferred. The custom TCP transport is subject to head-of-line blocking and must be measured on real Wi-Fi before it is treated as a long-term choice.

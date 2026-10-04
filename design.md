@@ -1282,6 +1282,18 @@ Do not expose sensitive notification content unless explicitly enabled.
 
 # Sprint 10 — Performance Pass
 
+**Status:** `[~] Instrumentation and configurable sender profiles implemented; physical performance characterization pending`
+
+- `[x]` Flushed one-second CSV logging for startup, sustained FPS, bitrate, decode/render cost, queue age/depth, drops, and resyncs
+- `[x]` Windows receiver process CPU, working-set, and private-memory sampling
+- `[x]` Portable OpenVR compositor frame-timing snapshot including GPU/CPU time, dropped/mispresented frames, and reprojection flags
+- `[x]` Persisted Android Battery Saver, Standard, and Quality encoder profiles
+- `[x]` Repeatable no-PhoneCast/profile comparison and external glass-to-glass measurement procedure
+- `[ ]` Physical profile measurements and final tuning
+- `[ ]` Instrumented startup and glass-to-glass latency distributions
+- `[ ]` Physical CPU/GPU/memory/bandwidth and VR-frametime acceptance during representative games
+- `[ ]` Direct decoder-to-GPU texture path, if measurements justify its complexity
+
 ## Objective
 
 Minimize impact on VR gaming.
