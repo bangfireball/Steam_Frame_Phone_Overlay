@@ -302,6 +302,26 @@ A clean Debian 12 AArch64 cross-build produced an `ELF 64-bit ... ARM aarch64` s
 
 Public Valve documentation identifies Linux ARM64 as a supported target but does not document an application-facing hardware decoder API. The implementation therefore treats stateful V4L2 as a tested-on-hardware hypothesis, exposes `--video-device`, and reports device/negotiation failures rather than silently falling back to CPU decode. Record the selected node, driver, formats, timing, and errors during deployment. GPU/dma-buf compositor sharing remains unknown and is not claimed complete.
 
+### Sprint 11 installation and native startup — 2026-10-04
+
+The ARM64 streaming bundle was installed over SSH at `/home/steamos/phonecast`; the previous Sprint 1 receiver directory was retained as a timestamped backup. No credential or `.env` content was copied into the repository or installation.
+
+Observed system details:
+
+- hostname `frame`, AArch64 Linux, SteamOS;
+- kernel `6.18.0-gfbdbca41fd45`;
+- native SteamVR under `/opt/steamvr`;
+- Qualcomm `iris_driver` stateful decoder, card `iris_decoder`;
+- decoder alias `/dev/video-dec0` targeting `/dev/video22`;
+- decoder capabilities include multi-planar video memory-to-memory and streaming;
+- compressed output/input-queue formats advertised by the decoder are H.264, HEVC, and VP9;
+- capture formats advertised are Qualcomm compressed 8-bit, NV12, NV21, RGBA, and another Qualcomm format;
+- the current default capture format reported by `v4l2-ctl` is single-plane NV12.
+
+An eight-second native receiver smoke test passed the non-video startup gate: OpenVR registered and identified `com.phonecastvr.receiver`, created the regular overlay and PhoneCast dashboard tab/icon, listened on TCP port 49321, emitted process/OpenVR diagnostics, and shut down through `SIGTERM`. Working set was approximately 17.5 MiB, sampled process CPU was 0–0.25%, and OpenVR reported zero dropped or mispresented frames during the short idle run. The installed receiver was then left running with `/dev/video-dec0` selected.
+
+This does **not** yet validate decoder queueing or displayed phone video because no Android stream was connected during the smoke test. It also does not validate notification/input behavior, sleep/wake, or coexistence with a standalone VR scene. The headset's DHCP address is intentionally not recorded here because it can change; obtain the current `wlan0` address when configuring Android.
+
 ## Current conclusion
 
 Native Linux ARM64 OpenVR overlays are no longer merely theoretical: Hello Frame successfully initialized, created a regular overlay, loaded its generated image, registered a stable application manifest, and remained visibly head-locked while the user played a locally running 2D game on Steam Frame.
