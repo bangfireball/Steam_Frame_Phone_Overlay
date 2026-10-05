@@ -40,6 +40,7 @@ public final class ScreenCaptureService extends Service {
     static final String EXTRA_RESULT_DATA = "result_data";
     static final String EXTRA_RECEIVER_HOST = "receiver_host";
     static final String EXTRA_PAIR_CODE = "pair_code";
+    static final String EXTRA_STREAM_PROFILE = "stream_profile";
     static final String EXTRA_RUNNING = "running";
     static final String EXTRA_MESSAGE = "message";
     static final String EXTRA_FRAMES = "frames";
@@ -88,6 +89,7 @@ public final class ScreenCaptureService extends Service {
     private EncoderSession encoderSession;
     private NetworkStreamer networkStreamer;
     private int densityDpi;
+    private CaptureConfig.StreamProfile streamProfile = CaptureConfig.StreamProfile.STANDARD;
     private long lastStatusNanos;
     private boolean stopping;
 
@@ -149,7 +151,9 @@ public final class ScreenCaptureService extends Service {
             stopCapture("Receiver address or pairing code is invalid");
             return START_NOT_STICKY;
         }
-        startCapture(resultCode, resultData, receiverHost.trim(), pairCode);
+        CaptureConfig.StreamProfile profile = CaptureConfig.StreamProfile.fromStoredName(
+                intent.getStringExtra(EXTRA_STREAM_PROFILE));
+        startCapture(resultCode, resultData, receiverHost.trim(), pairCode, profile);
         return START_NOT_STICKY;
     }
 
@@ -168,11 +172,12 @@ public final class ScreenCaptureService extends Service {
     }
 
     private void startCapture(int resultCode, Intent resultData, String receiverHost,
-                              String pairCode) {
+                              String pairCode, CaptureConfig.StreamProfile profile) {
         stopCaptureResources(true);
         stopping = false;
         encodedFrames.set(0);
         encodedBytes.set(0);
+        streamProfile = profile == null ? CaptureConfig.StreamProfile.STANDARD : profile;
         lastStatusNanos = 0;
 
         try {
@@ -216,7 +221,8 @@ public final class ScreenCaptureService extends Service {
 
             DisplayMetrics metrics = currentDisplayMetrics();
             densityDpi = metrics.densityDpi;
-            CaptureConfig.Size size = CaptureConfig.fitWithinLimit(metrics.widthPixels, metrics.heightPixels);
+            CaptureConfig.Size size = CaptureConfig.fitWithinLimit(
+                    metrics.widthPixels, metrics.heightPixels, streamProfile);
             encoderSession = createEncoder(size);
             virtualDisplay = projection.createVirtualDisplay(
                     "PhoneCast screen capture", size.width, size.height, densityDpi,
@@ -225,7 +231,8 @@ public final class ScreenCaptureService extends Service {
             if (virtualDisplay == null) throw new IllegalStateException("Virtual display creation failed");
 
             setRunningPreference(true);
-            String message = "Capturing and encoding H.264 at " + CaptureConfig.FRAME_RATE + " FPS";
+            String message = "Casting with " + streamProfile.label + " at " +
+                    streamProfile.frameRate + " FPS";
             updateNotification(message);
             broadcastStatus(true, message, size);
             Log.i(TAG, message + " (" + size.width + "x" + size.height + ")");
@@ -240,11 +247,12 @@ public final class ScreenCaptureService extends Service {
                 size.width, size.height);
         format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
                 MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-        format.setInteger(MediaFormat.KEY_BIT_RATE, CaptureConfig.bitrateFor(size));
-        format.setInteger(MediaFormat.KEY_FRAME_RATE, CaptureConfig.FRAME_RATE);
+        format.setInteger(MediaFormat.KEY_BIT_RATE,
+                CaptureConfig.bitrateFor(size, streamProfile));
+        format.setInteger(MediaFormat.KEY_FRAME_RATE, streamProfile.frameRate);
         // Surface producers may run at the display refresh rate despite KEY_FRAME_RATE.
         // This encoder-side cap drops excess input before H.264 dependencies are created.
-        format.setFloat(MediaFormat.KEY_MAX_FPS_TO_ENCODER, CaptureConfig.FRAME_RATE);
+        format.setFloat(MediaFormat.KEY_MAX_FPS_TO_ENCODER, streamProfile.frameRate);
         format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL,
                 CaptureConfig.I_FRAME_INTERVAL_SECONDS);
         format.setInteger(MediaFormat.KEY_PRIORITY, 0);
@@ -344,7 +352,8 @@ public final class ScreenCaptureService extends Service {
             lastStatusNanos = now;
             synchronized (encoderLock) {
                 if (encoderSession == session) {
-                    broadcastStatus(true, "Capturing and encoding H.264", session.size);
+                    broadcastStatus(true, streamProfile.label + " · capturing and encoding H.264",
+                            session.size);
                 }
             }
         }
@@ -368,7 +377,8 @@ public final class ScreenCaptureService extends Service {
     private void reconfigureForSize(int sourceWidth, int sourceHeight) {
         if (stopping || projection == null || virtualDisplay == null ||
                 sourceWidth <= 0 || sourceHeight <= 0) return;
-        CaptureConfig.Size requested = CaptureConfig.fitWithinLimit(sourceWidth, sourceHeight);
+        CaptureConfig.Size requested = CaptureConfig.fitWithinLimit(
+                sourceWidth, sourceHeight, streamProfile);
         synchronized (encoderLock) {
             if (encoderSession != null && encoderSession.size.equals(requested)) return;
         }

@@ -31,8 +31,8 @@ The Sprint 2 sender:
 2. Starts `ScreenCaptureService` from the user action.
 3. Enters the foreground with the `mediaProjection` service type.
 4. Obtains and registers the approved projection.
-5. Selects dimensions preserving aspect ratio; the current latency-oriented streaming profile caps the long edge at 1280 pixels.
-6. Configures a 30 FPS surface-input AVC encoder.
+5. Selects dimensions preserving aspect ratio using the persisted streaming profile: Battery Saver caps the long edge at 960 pixels, Standard at 1280, and Quality at 1920.
+6. Configures a surface-input AVC encoder at 20 FPS for Battery Saver or 30 FPS for Standard/Quality, with profile-specific bitrate bounds.
 7. Creates one virtual display targeting the encoder surface.
 8. Drains H.264 output, counts frames and bytes, and discards payloads.
 9. On resize, detaches the old surface, replaces the encoder, resizes the same virtual display, and attaches the replacement surface.
@@ -53,4 +53,4 @@ The app logs no screen content, encoded payloads, or sensitive text.
 - Portrait/landscape rotation continued working.
 - Stop, start, and restart behavior worked.
 
-The exact device model, Android version, encoder identity, sustained FPS, and bitrate were not recorded, so compatibility and performance across other devices remain unmeasured. Those are not Sprint 2 blockers and should be captured during streaming/performance validation.
+The exact device model, Android version, encoder identity, sustained FPS, and bitrate were not recorded, so compatibility and performance across other devices remain unmeasured. Standard preserves the physically accepted Sprint 4 path. Battery Saver and Quality are Sprint 10 measurement candidates and must not be represented as physically approved until the procedure in `docs/performance.md` is completed.

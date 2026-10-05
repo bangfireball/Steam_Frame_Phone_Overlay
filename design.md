@@ -1282,6 +1282,28 @@ Do not expose sensitive notification content unless explicitly enabled.
 
 # Sprint 10 — Performance Pass
 
+**Status:** `[x] Complete — Standard profile performance physically measured and project-owner approved`
+
+- `[x]` Flushed one-second CSV logging for startup, sustained FPS, bitrate, decode/render cost, queue age/depth, drops, and resyncs
+- `[x]` Windows receiver process CPU, working-set, and private-memory sampling
+- `[x]` Portable OpenVR compositor frame-timing snapshot including GPU/CPU time, dropped/mispresented frames, and reprojection flags
+- `[x]` Persisted Android Battery Saver, Standard, and Quality encoder profiles
+- `[x]` Repeatable no-PhoneCast/profile comparison and external glass-to-glass measurement procedure
+- `[x]` Standard profile physically measured over a roughly 253-second connected run and accepted by the project owner
+- `[x]` Instrumented Standard startup: configuration 340.6 ms, first keyframe 372.2 ms, decoder initialization 4.25 ms, and first submitted frame 381.8 ms
+- `[x]` Dynamic Standard averages: 29.93 receive/decode FPS, 28.40 render FPS, 2.00 Mbps, 3.78 ms decode, 0.37 ms submission, and 8.83 ms queue age
+- `[x]` Dynamic Standard resource evidence: 1.13% process CPU average, approximately 69 MiB working set, and zero OpenVR-reported dropped or mispresented VR frames
+- `[~]` Battery Saver and Quality remain available measurement candidates; project-owner approval did not require separate physical characterization before closure
+- `[~]` External-camera glass-to-glass distributions remain deferred; the approved run measured first submission rather than photon-level latency
+- `[~]` Occasional render coalescing dips were logged without transport drops; no user-visible defect was reported as part of approval
+- `[!]` Direct decoder-to-GPU texture sharing was not justified by the measured CPU/decode/submission cost and remains possible future optimization
+
+### Sprint 10 closure evidence — 2026-10-04
+
+The project owner approved Sprint 10 after a physical Standard-profile headset run. The receiver used a 590 × 1280 stream for approximately 253 connected seconds. During dynamic periods it sustained 29.93 received and decoded FPS, averaged 28.40 submitted updates per second, approximately 2.00 Mbps, 3.78 ms decode time, 0.37 ms D3D/OpenVR submission time, and 8.83 ms queue age. Dynamic transport drops and resynchronizations were zero. The process averaged 1.13% host CPU and approximately 69 MiB working set; OpenVR reported no dropped or mispresented VR frames.
+
+The connection reached first submitted video in 381.8 ms. This is not a photon-level glass-to-glass measurement. The run also does not separately approve Battery Saver or Quality. Those limitations are explicitly accepted for progression and must remain documented rather than being described as tested.
+
 ## Objective
 
 Minimize impact on VR gaming.

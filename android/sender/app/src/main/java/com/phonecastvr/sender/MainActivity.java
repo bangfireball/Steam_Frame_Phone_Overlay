@@ -20,11 +20,13 @@ import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Spinner;
 import android.widget.TextView;
 
 import java.util.Locale;
@@ -50,6 +52,7 @@ public final class MainActivity extends Activity {
     private EditText pairCodeView;
     private Button primaryButton;
     private Button menuButton;
+    private Spinner streamProfileView;
     private CheckBox remoteControlView;
     private Button accessibilityButton;
     private CheckBox notificationForwardingView;
@@ -234,6 +237,33 @@ public final class MainActivity extends Activity {
         settingsContent.addView(intro, introParams);
 
         SharedPreferences preferences = senderPreferences();
+
+        LinearLayout performanceCard = card();
+        performanceCard.addView(sectionTitle("Streaming quality"), matchWrap());
+        performanceCard.addView(text(
+                "Battery Saver reduces resolution and frame rate. Standard keeps the validated baseline. Quality increases resolution and may affect the VR game.",
+                13, COLOR_SECONDARY, Gravity.START), spaced(0, dp(6), 0, dp(10)));
+        streamProfileView = new Spinner(this);
+        ArrayAdapter<CaptureConfig.StreamProfile> profileAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, CaptureConfig.StreamProfile.values());
+        profileAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        streamProfileView.setAdapter(profileAdapter);
+        CaptureConfig.StreamProfile storedProfile = CaptureConfig.StreamProfile.fromStoredName(
+                preferences.getString("stream_profile", CaptureConfig.StreamProfile.STANDARD.name()));
+        streamProfileView.setSelection(storedProfile.ordinal());
+        streamProfileView.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view,
+                                                  int position, long id) {
+                CaptureConfig.StreamProfile selected =
+                        (CaptureConfig.StreamProfile) parent.getItemAtPosition(position);
+                senderPreferences().edit().putString("stream_profile", selected.name()).apply();
+            }
+
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+        });
+        performanceCard.addView(streamProfileView, fieldParams());
+        settingsContent.addView(performanceCard, cardParams());
+
         LinearLayout remoteCard = card();
         remoteCard.addView(sectionTitle("VR remote control"), matchWrap());
         remoteCard.addView(text(getString(R.string.remote_control_disclosure), 13,
@@ -329,9 +359,11 @@ public final class MainActivity extends Activity {
             updateState(false, "Check the receiver IP and 6-digit code", 0, 0, 0, 0, 0, -1);
             return;
         }
+        CaptureConfig.StreamProfile profile = selectedStreamProfile();
         senderPreferences().edit()
                 .putString("receiver_host", receiverHost)
                 .putString("pair_code", pairCode)
+                .putString("stream_profile", profile.name())
                 .apply();
         if (Build.VERSION.SDK_INT >= 33 &&
                 checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
@@ -377,7 +409,9 @@ public final class MainActivity extends Activity {
                 .putExtra(ScreenCaptureService.EXTRA_RESULT_CODE, resultCode)
                 .putExtra(ScreenCaptureService.EXTRA_RESULT_DATA, data)
                 .putExtra(ScreenCaptureService.EXTRA_RECEIVER_HOST, receiverHost)
-                .putExtra(ScreenCaptureService.EXTRA_PAIR_CODE, pairCode);
+                .putExtra(ScreenCaptureService.EXTRA_PAIR_CODE, pairCode)
+                .putExtra(ScreenCaptureService.EXTRA_STREAM_PROFILE,
+                        selectedStreamProfile().name());
         startForegroundService(service);
         updateState(true, "Starting secure screen permission session…",
                 0, 0, 0, 0, 0, -1);
@@ -409,8 +443,18 @@ public final class MainActivity extends Activity {
                 isRunning ? Color.rgb(242, 103, 112) : COLOR_PRIMARY));
         receiverHostView.setEnabled(!isRunning);
         pairCodeView.setEnabled(!isRunning);
+        if (streamProfileView != null) streamProfileView.setEnabled(!isRunning);
         connectionHintView.setText(isRunning ? "Connection details are locked while casting."
                 : "Saved details make the next cast a two-step start.");
+    }
+
+    private CaptureConfig.StreamProfile selectedStreamProfile() {
+        if (streamProfileView != null &&
+                streamProfileView.getSelectedItem() instanceof CaptureConfig.StreamProfile) {
+            return (CaptureConfig.StreamProfile) streamProfileView.getSelectedItem();
+        }
+        return CaptureConfig.StreamProfile.fromStoredName(senderPreferences().getString(
+                "stream_profile", CaptureConfig.StreamProfile.STANDARD.name()));
     }
 
     private void updateAccessibilityButton() {

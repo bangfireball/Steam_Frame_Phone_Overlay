@@ -2298,6 +2298,28 @@ bool OpenVrOverlayRenderer::TakeHideRequest() {
     return true;
 }
 
+bool OpenVrOverlayRenderer::GetPerformanceStats(phonecast::vr::VrPerformanceStats& stats) {
+    stats = {};
+    vr::IVRCompositor* compositor = vr::VRCompositor();
+    if (impl_->system == nullptr || compositor == nullptr) return false;
+
+    vr::Compositor_FrameTiming timing{};
+    timing.m_nSize = sizeof(timing);
+    if (!compositor->GetFrameTiming(&timing, 0)) return false;
+
+    stats.available = true;
+    stats.frameIndex = timing.m_nFrameIndex;
+    stats.framePresents = timing.m_nNumFramePresents;
+    stats.misPresentedFrames = timing.m_nNumMisPresented;
+    stats.droppedFrames = timing.m_nNumDroppedFrames;
+    stats.reprojectionFlags = timing.m_nReprojectionFlags;
+    stats.totalRenderGpuMilliseconds = timing.m_flTotalRenderGpuMs;
+    stats.compositorGpuMilliseconds = timing.m_flCompositorRenderGpuMs;
+    stats.compositorCpuMilliseconds = timing.m_flCompositorRenderCpuMs;
+    stats.clientFrameIntervalMilliseconds = timing.m_flClientFrameIntervalMs;
+    return true;
+}
+
 void OpenVrOverlayRenderer::Stop() noexcept {
     impl_->DestroyDashboard();
     if (impl_->overlayApi != nullptr && impl_->gestureOverlay != vr::k_ulOverlayHandleInvalid) {

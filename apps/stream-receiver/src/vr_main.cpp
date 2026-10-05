@@ -2,6 +2,7 @@
 #include "phonecast/core/protocol/StreamProtocol.h"
 #include "phonecast/platform/openvr/OpenVrOverlayRenderer.h"
 #include "phonecast/platform/windows/MfH264Decoder.h"
+#include "phonecast/platform/windows/ProcessPerformanceSampler.h"
 #include "phonecast/platform/windows/TcpVideoServer.h"
 #include "phonecast/vr/overlay/GlanceController.h"
 #include "phonecast/vr/overlay/OverlayController.h"
@@ -16,6 +17,8 @@
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -28,7 +31,9 @@ using phonecast::core::protocol::MessageType;
 using phonecast::vr::OverlayAction;
 
 void PrintUsage() {
-    std::cout << "Usage: phonecast-vr-stream-receiver --pair-code NNNNNN [--port N] [--settings PATH] [--diagnostic-visible]\n\n"
+    std::cout << "Usage: phonecast-vr-stream-receiver --pair-code NNNNNN [--port N] [--settings PATH] [--performance-log PATH] [--diagnostic-visible]\n\n"
+              << "Performance measurement:\n"
+              << "  --performance-log PATH  Write one-second receiver/process/VR samples as CSV\n\n"
               << "Global controls (hold Ctrl+Alt):\n"
               << "  P          Quick show/hide expanded view\n"
               << "  G          Cycle Hidden/Glance/Expanded/Pinned\n"
@@ -138,6 +143,7 @@ int main(int argc, char** argv) {
     std::uint16_t port = 49321;
     bool diagnosticVisible = false;
     std::filesystem::path settingsPath = DefaultSettingsPath();
+    std::filesystem::path performanceLogPath;
     for (int index = 1; index < argc; ++index) {
         const std::string option = argv[index];
         if (option == "--help" || option == "-h") {
@@ -155,6 +161,7 @@ int main(int argc, char** argv) {
         const std::string value = argv[++index];
         if (option == "--pair-code") pairCode = value;
         else if (option == "--settings") settingsPath = value;
+        else if (option == "--performance-log") performanceLogPath = value;
         else if (option == "--port") {
             try {
                 const unsigned long parsed = std::stoul(value);
@@ -173,6 +180,32 @@ int main(int argc, char** argv) {
         std::cerr << "A six-digit --pair-code is required.\n";
         PrintUsage();
         return EXIT_FAILURE;
+    }
+
+    std::ofstream performanceLog;
+    if (!performanceLogPath.empty()) {
+        std::error_code directoryError;
+        const auto parent = performanceLogPath.parent_path();
+        if (!parent.empty()) std::filesystem::create_directories(parent, directoryError);
+        if (directoryError) {
+            std::cerr << "Could not create performance-log directory: "
+                      << directoryError.message() << '\n';
+            return EXIT_FAILURE;
+        }
+        performanceLog.open(performanceLogPath, std::ios::out | std::ios::trunc);
+        if (!performanceLog) {
+            std::cerr << "Could not open performance log: "
+                      << performanceLogPath.string() << '\n';
+            return EXIT_FAILURE;
+        }
+        performanceLog << "elapsed_s,connected,width,height,rx_fps,decode_fps,render_fps,"
+                          "bitrate_mbps,decode_ms,render_ms,queue_ms,queue_max_ms,queue_depth,"
+                          "dropped,resyncs,process_cpu_percent,working_set_mb,private_mb,"
+                          "vr_frame_index,vr_frame_presents,vr_mispresented,vr_dropped,"
+                          "vr_reprojection_flags,vr_total_gpu_ms,vr_compositor_gpu_ms,"
+                          "vr_compositor_cpu_ms,vr_client_interval_ms,first_config_ms,"
+                          "first_keyframe_ms,decoder_start_ms,first_submitted_ms\n";
+        std::cout << "Writing performance samples to " << performanceLogPath.string() << ".\n";
     }
 
     phonecast::core::ConsoleLogger logger;
@@ -232,6 +265,9 @@ int main(int argc, char** argv) {
               << ". Pairing code: " << pairCode << '\n';
 
     phonecast::platform::windows::MfH264Decoder decoder;
+    phonecast::platform::windows::ProcessPerformanceSampler processSampler;
+    processSampler.Sample();
+    const auto sessionStarted = std::chrono::steady_clock::now();
     bool decoderStarted = false;
     bool running = true;
     std::vector<std::uint8_t> codecConfig;
@@ -249,6 +285,10 @@ int main(int argc, char** argv) {
     bool configReported = false;
     bool keyFrameReported = false;
     bool firstFrameReported = false;
+    double firstConfigMillis = -1.0;
+    double firstKeyFrameMillis = -1.0;
+    double decoderStartMillis = -1.0;
+    double firstSubmittedMillis = -1.0;
     std::uint32_t streamWidth = 0;
     std::uint32_t streamHeight = 0;
     bool notificationShowing = false;
@@ -461,6 +501,10 @@ int main(int argc, char** argv) {
             configReported = false;
             keyFrameReported = false;
             firstFrameReported = false;
+            firstConfigMillis = -1.0;
+            firstKeyFrameMillis = -1.0;
+            decoderStartMillis = -1.0;
+            firstSubmittedMillis = -1.0;
         }
         wasConnected = connected;
 
@@ -502,15 +546,15 @@ int main(int argc, char** argv) {
                           << 'x' << message.height
                           << " overlay-width-m=" << displayedSettings.widthMeters << '\n';
                 if (!configReported) {
-                    const double configMillis = std::chrono::duration<double, std::milli>(
+                    firstConfigMillis = std::chrono::duration<double, std::milli>(
                         std::chrono::steady_clock::now() - connectionStarted).count();
-                    std::cout << "[diagnostics] first-config-ms=" << configMillis
+                    std::cout << "[diagnostics] first-config-ms=" << firstConfigMillis
                               << " dimensions=" << message.width << 'x' << message.height << '\n';
                     configReported = true;
                 }
                 const auto decoderStartBegan = std::chrono::steady_clock::now();
                 decoderStarted = decoder.Start(message.width, message.height, error);
-                const double decoderStartMillis = std::chrono::duration<double, std::milli>(
+                decoderStartMillis = std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now() - decoderStartBegan).count();
                 std::cout << "[diagnostics] decoder-start-ms=" << decoderStartMillis << '\n';
                 if (!decoderStarted) std::cerr << error << '\n';
@@ -520,9 +564,9 @@ int main(int argc, char** argv) {
             std::vector<std::uint8_t> accessUnit;
             if ((message.flags & phonecast::core::protocol::MessageFlags::KeyFrame) != 0) {
                 if (!keyFrameReported) {
-                    const double keyFrameMillis = std::chrono::duration<double, std::milli>(
+                    firstKeyFrameMillis = std::chrono::duration<double, std::milli>(
                         std::chrono::steady_clock::now() - connectionStarted).count();
-                    std::cout << "[diagnostics] first-keyframe-ms=" << keyFrameMillis << '\n';
+                    std::cout << "[diagnostics] first-keyframe-ms=" << firstKeyFrameMillis << '\n';
                     keyFrameReported = true;
                 }
                 accessUnit.reserve(codecConfig.size() + message.payload.size());
@@ -555,9 +599,9 @@ int main(int argc, char** argv) {
                 std::chrono::steady_clock::now() - renderStarted).count();
             ++windowRenderedFrames;
             if (!firstFrameReported) {
-                const double startupMillis = std::chrono::duration<double, std::milli>(
+                firstSubmittedMillis = std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now() - connectionStarted).count();
-                std::cout << "[diagnostics] first-submitted-frame-ms=" << startupMillis << '\n';
+                std::cout << "[diagnostics] first-submitted-frame-ms=" << firstSubmittedMillis << '\n';
                 firstFrameReported = true;
             }
         }
@@ -576,19 +620,70 @@ int main(int argc, char** argv) {
             const auto keyFrames = serverStats.keyFrames - previousServerStats.keyFrames;
             const auto dropped = serverStats.droppedFrames - previousServerStats.droppedFrames;
             const auto resyncs = serverStats.resyncRequests - previousServerStats.resyncRequests;
+            const double receiveFps = received / seconds;
+            const double decodeFps = windowDecodedFrames / seconds;
+            const double renderFps = windowRenderedFrames / seconds;
+            const double bitrateMbps = bytes * 8.0 / seconds / 1'000'000.0;
+            const double decodeMillis = windowDecodedFrames > 0
+                ? windowDecodeMillis / windowDecodedFrames : 0.0;
+            const double renderMillis = windowRenderedFrames > 0
+                ? windowRenderMillis / windowRenderedFrames : 0.0;
+            const double queueMillis = windowMessages > 0
+                ? windowQueueMillis / windowMessages : 0.0;
+            const auto processStats = processSampler.Sample();
+            phonecast::vr::VrPerformanceStats vrStats;
+            const bool haveVrStats = renderer.GetPerformanceStats(vrStats);
+
             std::cout << "[diagnostics] connected=" << (connected ? "yes" : "no")
-                      << " rx-fps=" << received / seconds
-                      << " decode-fps=" << windowDecodedFrames / seconds
-                      << " render-fps=" << windowRenderedFrames / seconds
-                      << " bitrate-mbps=" << bytes * 8.0 / seconds / 1'000'000.0
-                      << " decode-ms=" << (windowDecodedFrames > 0 ? windowDecodeMillis / windowDecodedFrames : 0.0)
-                      << " render-ms=" << (windowRenderedFrames > 0 ? windowRenderMillis / windowRenderedFrames : 0.0)
-                      << " queue-ms=" << (windowMessages > 0 ? windowQueueMillis / windowMessages : 0.0)
+                      << " rx-fps=" << receiveFps
+                      << " decode-fps=" << decodeFps
+                      << " render-fps=" << renderFps
+                      << " bitrate-mbps=" << bitrateMbps
+                      << " decode-ms=" << decodeMillis
+                      << " render-ms=" << renderMillis
+                      << " queue-ms=" << queueMillis
                       << " queue-max-ms=" << maximumQueueMillis
                       << " queue-depth=" << serverStats.queueDepth
                       << " keyframes=" << keyFrames
                       << " dropped=" << dropped
-                      << " resyncs=" << resyncs << '\n';
+                      << " resyncs=" << resyncs
+                      << " process-cpu-percent=" << processStats.cpuPercent
+                      << " working-set-mb=" << processStats.workingSetMegabytes;
+            if (haveVrStats) {
+                std::cout << " vr-total-gpu-ms=" << vrStats.totalRenderGpuMilliseconds
+                          << " vr-compositor-gpu-ms=" << vrStats.compositorGpuMilliseconds
+                          << " vr-compositor-cpu-ms=" << vrStats.compositorCpuMilliseconds
+                          << " vr-dropped=" << vrStats.droppedFrames
+                          << " vr-mispresented=" << vrStats.misPresentedFrames;
+            }
+            std::cout << '\n';
+
+            if (performanceLog) {
+                const double elapsed = std::chrono::duration<double>(now - sessionStarted).count();
+                performanceLog << std::fixed << std::setprecision(3)
+                    << elapsed << ',' << (connected ? 1 : 0) << ','
+                    << streamWidth << ',' << streamHeight << ','
+                    << receiveFps << ',' << decodeFps << ',' << renderFps << ','
+                    << bitrateMbps << ',' << decodeMillis << ',' << renderMillis << ','
+                    << queueMillis << ',' << maximumQueueMillis << ',' << serverStats.queueDepth << ','
+                    << dropped << ',' << resyncs << ','
+                    << (processStats.available ? processStats.cpuPercent : -1.0) << ','
+                    << (processStats.available ? processStats.workingSetMegabytes : -1.0) << ','
+                    << (processStats.available ? processStats.privateMegabytes : -1.0) << ','
+                    << (haveVrStats ? static_cast<double>(vrStats.frameIndex) : -1.0) << ','
+                    << (haveVrStats ? static_cast<double>(vrStats.framePresents) : -1.0) << ','
+                    << (haveVrStats ? static_cast<double>(vrStats.misPresentedFrames) : -1.0) << ','
+                    << (haveVrStats ? static_cast<double>(vrStats.droppedFrames) : -1.0) << ','
+                    << (haveVrStats ? static_cast<double>(vrStats.reprojectionFlags) : -1.0) << ','
+                    << (haveVrStats ? vrStats.totalRenderGpuMilliseconds : -1.0F) << ','
+                    << (haveVrStats ? vrStats.compositorGpuMilliseconds : -1.0F) << ','
+                    << (haveVrStats ? vrStats.compositorCpuMilliseconds : -1.0F) << ','
+                    << (haveVrStats ? vrStats.clientFrameIntervalMilliseconds : -1.0F) << ','
+                    << firstConfigMillis << ',' << firstKeyFrameMillis << ','
+                    << decoderStartMillis << ',' << firstSubmittedMillis << '\n';
+                performanceLog.flush();
+            }
+
             previousServerStats = serverStats;
             windowDecodedFrames = 0;
             windowRenderedFrames = 0;

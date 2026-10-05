@@ -82,6 +82,19 @@ struct ControllerCalibration {
     ControllerOrientation orientation{ControllerOrientation::FaceUser};
 };
 
+struct VrPerformanceStats {
+    bool available{false};
+    std::uint32_t frameIndex{};
+    std::uint32_t framePresents{};
+    std::uint32_t misPresentedFrames{};
+    std::uint32_t droppedFrames{};
+    std::uint32_t reprojectionFlags{};
+    float totalRenderGpuMilliseconds{};
+    float compositorGpuMilliseconds{};
+    float compositorCpuMilliseconds{};
+    float clientFrameIntervalMilliseconds{};
+};
+
 struct OverlaySettings {
     float widthMeters{0.65F};
     float distanceMeters{1.0F};
@@ -164,6 +177,13 @@ public:
     }
     // Reports the phone footer's local close action without sending it to Android.
     virtual bool TakeHideRequest() { return false; }
+    // Samples scene/compositor timing where the active VR backend exposes it.
+    // These values describe the VR compositor's latest frame, not PhoneCast's
+    // own D3D upload in isolation.
+    virtual bool GetPerformanceStats(VrPerformanceStats& stats) {
+        stats = {};
+        return false;
+    }
     virtual void Stop() noexcept = 0;
 };
 
