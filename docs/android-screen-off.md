@@ -171,6 +171,35 @@ For the initial PhoneCast release:
 
 Track an optional **Advanced panel-off mode** as a separate experiment using ADB/Shizuku. Do not make it part of the normal architecture until it is physically validated and its permission, recovery, and security implications are acceptable.
 
+## Backlog UX: automatic dim and temporary wake
+
+Sprint 15 tracks an opt-in **Dim phone while casting** mode. The intended user
+experience is:
+
+1. casting begins and PhoneCast records the current manual/adaptive brightness
+   state;
+2. after an idle delay, the physical panel moves to its lowest safe brightness;
+3. physical interaction temporarily restores the previous brightness;
+4. the panel dims again after the configured delay while casting continues;
+5. stopping or losing projection restores the original brightness behavior.
+
+Implementing the physical-interaction trigger requires a focused experiment.
+A touchable full-screen application overlay receives the touch instead of
+passing that same event to the underlying app, while an untouchable overlay
+cannot observe the tap. Accessibility-dispatched remote gestures may also hit a
+touch guard. The implementation must not enable touch exploration, consume
+ordinary input unexpectedly, or block VR remote control merely to detect idle
+activity. If a dependable public signal is unavailable, provide explicit
+wake/dim controls and safe timed behavior rather than overclaiming automatic tap
+recognition.
+
+The stronger requested privacy mode would blank the local view and discourage
+physical interaction without altering the stream. It remains research. A real
+Android lock is prohibited because it terminates projection on current Android;
+a capture-visible black overlay is also not useful. Dimming is the accepted
+fallback if an excluded local-only surface and safe physical-input guard cannot
+be implemented with supported APIs.
+
 ## Suggested validation matrix
 
 Test at least:

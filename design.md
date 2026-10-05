@@ -1773,6 +1773,89 @@ Candidate shortcuts include show/hide, glance, pin/unpin, and opening PhoneCast 
 
 ---
 
+# Sprint 15 — Android Privacy Display Mode
+
+**Status:** `[ ] Backlog`
+
+## Objective
+
+Reduce battery use and protect the locally visible phone while PhoneCast is
+streaming, without dimming or obscuring the VR stream.
+
+## Supported baseline
+
+Implement an explicit, optional **Dim phone while casting** mode using public
+Android APIs where device behavior permits it:
+
+1. Save the user's brightness and adaptive-brightness state before changing it.
+2. After casting starts, wait for a configurable idle delay and reduce physical
+   display brightness to the lowest safe, usable level.
+3. A physical screen interaction temporarily restores the prior brightness.
+4. After the user-configurable delay, dim again while casting remains active.
+5. Stopping casting, projection revocation, service failure, reboot recovery, or
+   disabling the feature restores the prior settings on a best-effort basis.
+6. Provide a persistent notification action and an obvious in-app recovery path
+   that immediately restores brightness.
+
+The feature must be separately opt-in and explain any required Android
+**Modify system settings** access. It must not silently disable adaptive
+brightness, leave the display unreadable after a crash, or log brightness and
+interaction history unnecessarily.
+
+Brightness is normally applied after display composition and therefore may dim
+the physical panel without affecting MediaProjection output, but this must be
+validated across supported Android versions and devices before approval.
+
+## Privacy-screen investigation
+
+Investigate a stronger **Privacy display** state that resembles a local lock or
+black screen while leaving the captured stream and VR remote control available.
+The ordinary Android lock screen is not acceptable: Android 15 QPR1 and newer
+stop MediaProjection when the device locks, and that projection cannot be
+resumed without a new capture session.
+
+A normal application must not claim Samsung Phone Link-style local blanking
+unless it is physically demonstrated through a supported API. Evaluate:
+
+- whether a transparent or accessibility overlay can intercept physical touches
+  without appearing in MediaProjection or blocking PhoneCast's injected remote
+  gestures;
+- whether public display/brightness APIs can provide a black-looking local panel
+  while the encoded stream remains normal;
+- OEM-supported APIs where available;
+- an explicitly advanced ADB/Shizuku panel-power mode, kept separate from the
+  consumer default and accompanied by reliable recovery controls.
+
+A touch-blocking overlay cannot be assumed to pass the same touch through to the
+underlying application, and injected Accessibility gestures may target that
+same overlay. If physical-input blocking cannot coexist safely with VR remote
+control, ship dimming only and document the limitation.
+
+## Acceptance Criteria
+
+- Dimming is opt-in and active only during an authorized casting session.
+- The VR stream retains normal brightness and content while the physical panel
+  is dimmed.
+- Physical interaction restores the exact prior brightness behavior promptly,
+  then the display dims again after the configured idle delay.
+- Stop, projection revocation, permission removal, crash recovery, and device
+  restart have tested restoration behavior and cannot strand the display at
+  minimum brightness.
+- Automatic and manual brightness modes are restored correctly.
+- Locking the phone continues to follow Android privacy rules and is never
+  represented as resumable projection.
+- Any privacy-screen/touch-guard mode is separately opt-in, has an emergency
+  escape, does not appear in the stream, and does not block VR-originated input.
+- If those privacy-screen criteria cannot be met with supported APIs, the
+  delivered feature is explicitly limited to safe brightness dimming.
+- Physical validation covers the target phone, screen rotation, reconnect,
+  notification shade use, casting stop/restart, and at least one failure path.
+
+Detailed existing research and the validation matrix are in
+[`docs/android-screen-off.md`](docs/android-screen-off.md).
+
+---
+
 # 6. Networking & Security
 
 PhoneCast should assume that phone content is sensitive.
