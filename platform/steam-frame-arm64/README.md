@@ -6,14 +6,17 @@ Sprint 11 adds a native Linux ARM64 streaming receiver. It reuses the portable p
 
 ```text
 Android MediaCodec H.264 -> paired TCP -> stateful V4L2 M2M decoder
-    -> NV12/NV12M -> CPU RGBA -> OpenVR SetOverlayRaw
+    -> NV12/NV12M -> CPU RGBA -> Vulkan staging upload
+    -> reusable double-buffered images -> OpenVR SetOverlayTexture
 ```
 
 The decoder searches `/dev/video0` through `/dev/video63` for a streaming, multi-planar M2M device that advertises H.264 compressed input. `--video-device /dev/videoN` overrides discovery. It subscribes to source-change events, negotiates linear NV12/NV12M capture, uses MMAP queues, and preserves the Android-visible dimensions when the decoder reports coded padding.
 
 The V4L2 path targets the native Qualcomm/iris stateful decoder expected on Steam Frame. Public Valve documentation does not currently specify an application-facing decoder API, so device discovery, accepted formats, and performance remain hardware-test requirements rather than documented guarantees.
 
-Decoded frames currently use a CPU color conversion and OpenVR's raw upload path. This is the smallest dependency-free native implementation and lets the complete product behavior be validated first. It is not represented as the final zero-copy path: dma-buf import or another compositor-compatible GPU texture path should be implemented only after on-device API/format/timing evidence establishes the correct route.
+Decoded frames retain the CPU color conversion, but repeated `SetOverlayRaw` has been replaced by a Steam Frame Vulkan resource inside `platform/openvr`. It loads `libvulkan.so.1` at runtime, creates the instance/device with OpenVR's required extensions on the compositor GPU, persistently maps one staging buffer, alternates between two reusable device-local RGBA images, and submits `TextureType_Vulkan` with `SetOverlayTexture`. A synchronous upload fence isolates correctness before zero-copy optimization. Stream-size changes clear the compositor texture before recreation, and shutdown keeps Vulkan resources alive until overlays are destroyed and `VR_Shutdown` returns.
+
+The Vulkan path is physically approved as smooth and flicker-free for the measured 590 × 1280 stream and local Hades coexistence run. During the 63-second game window it sustained 30.00 receive/decode FPS and 29.92 submitted FPS with 1.52 ms average Vulkan submission, 1.52% process CPU, stable 102.33 MiB working set, and no transport or OpenVR frame drops. It does not claim dma-buf import or zero-copy decoder sharing; those remain optional later optimizations. Portrait/landscape texture recreation, clean shutdown, and actual standalone-VR-scene coexistence still require physical validation.
 
 ## Build
 
@@ -57,4 +60,4 @@ Do not mark Sprint 11 complete from the cross-build alone. Record:
 4. dashboard, settings, placement, remote touch, Back, notification cards/actions, and reconnect;
 5. behavior across dashboard transitions, headset sleep/wake, and app switching;
 6. overlay coexistence with a native standalone VR scene in both launch orders;
-7. any visible flicker or compositor cost from repeated `SetOverlayRaw` uploads.
+7. absence of prior raw-upload flicker and `VROverlayError_RequestFailed`, stable working-set memory, Vulkan upload cost, and clean texture teardown.

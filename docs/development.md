@@ -227,7 +227,7 @@ Deploy `phonecast-vr-stream-receiver` and its adjacent manifest/input JSON files
 
 The native receiver automatically searches `/dev/video0` through `/dev/video63` for a stateful streaming H.264 V4L2 M2M decoder. Use `--video-device /dev/videoN` to select one explicitly and `--performance-log PATH` for the same one-second receiver/OpenVR CSV diagnostics used by the Windows path. Settings default to the XDG configuration directory. `SIGINT` and `SIGTERM` request clean shutdown.
 
-This cross-build validates compilation only. Steam Frame deployment must still confirm the Qualcomm/iris device, NV12/NV12M negotiation, video output, lifecycle, dashboard/input behavior, and standalone-VR-scene coexistence. Linux currently converts decoded NV12 to CPU RGBA and uses `SetOverlayRaw`; do not describe dma-buf/GPU texture sharing or flicker-free streaming as complete. See `platform/steam-frame-arm64/README.md` and `docs/steam-frame.md`.
+This cross-build validates compilation only. Qualcomm/iris V4L2 decoding, visible output, and the Vulkan `SetOverlayTexture` renderer are physically established on Steam Frame. Linux converts decoded NV12 to CPU RGBA, uploads through a persistently mapped Vulkan staging buffer, and submits reusable double-buffered images. The Vulkan loader is opened at runtime from `libvulkan.so.1`, so no cross-build Vulkan development package is required. The measured local-game run was project-owner approved as smooth and flicker-free with stable memory; orientation changes, clean shutdown, longer lifecycle cases, and actual standalone-VR-scene coexistence remain pending. Do not describe dma-buf/zero-copy sharing as implemented. See `platform/steam-frame-arm64/README.md` and `docs/steam-frame.md`.
 
 ## Android sender
 

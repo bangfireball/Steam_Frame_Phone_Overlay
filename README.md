@@ -14,7 +14,7 @@ Moving to another development machine or starting a fresh Pi agent? Follow [`doc
 - `[x]` Sprint 9 is complete for the PC-hosted path: notification cards, revised placement, dashboard-open/closed visibility, and open-phone selection are physically approved; native ARM64 remains Sprint 11 work
 - `[x]` Sprint 10 is complete: Standard-profile startup, sustained streaming, resources, and OpenVR frametime were physically measured and owner-approved; alternate-profile and external-camera latency evidence remains deferred
 - `[~]` Sprint 11 native receiver is physically functional: Qualcomm/iris H.264 decoding, visible Android video, controls, and approximately 30 FPS steady streaming are confirmed
-- `[!]` Sustained native use is blocked: Linux `SetOverlayRaw` visibly flickers, grows memory, and eventually fails; reusable GPU texture submission and standalone-VR-scene validation remain required
+- `[x]` Reusable Linux Vulkan texture submission is physically approved as smooth and flicker-free with stable memory during a measured local-game run; rotation and clean-shutdown checks remain
 - `[!]` The current LAN transport is paired but not encrypted
 
 ## Sprint 11 native Steam Frame receiver
@@ -27,7 +27,7 @@ Cross-build with the documented Docker command in [`docs/development.md`](docs/d
 ./phonecast-vr-stream-receiver --pair-code 123456
 ```
 
-Use `--video-device /dev/videoN` only when automatic H.264 decoder discovery chooses incorrectly. The implementation is compile-validated but not yet physically validated. Linux still uses `SetOverlayRaw`; direct dma-buf/GPU texture sharing remains a measured follow-up rather than a completed claim. See [`platform/steam-frame-arm64/README.md`](platform/steam-frame-arm64/README.md).
+Use `--video-device /dev/videoN` only when automatic H.264 decoder discovery chooses incorrectly. Native decoding and the earlier raw-upload path were physically validated. Linux now stages the CPU RGBA frame into reusable double-buffered Vulkan images and submits them with `SetOverlayTexture`. The replacement is installed on Steam Frame and is physically approved as smooth and flicker-free on its Turnip Adreno 750 Vulkan device during a measured Hades run; rotation, clean shutdown, and actual standalone-VR-scene coexistence remain pending. Direct dma-buf/GPU texture sharing remains a measured follow-up rather than a completed claim. See [`platform/steam-frame-arm64/README.md`](platform/steam-frame-arm64/README.md).
 
 ## Sprint 4 VR streaming validation
 

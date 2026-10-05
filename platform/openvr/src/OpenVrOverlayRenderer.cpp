@@ -20,6 +20,8 @@
 #include <d3d11.h>
 #include <dxgi1_2.h>
 #else
+#include "SteamFrameVulkanTexture.h"
+
 #include <unistd.h>
 #endif
 
@@ -1770,6 +1772,8 @@ public:
     ID3D11Texture2D* texture{nullptr};
     std::uint32_t textureWidth{};
     std::uint32_t textureHeight{};
+#else
+    std::unique_ptr<SteamFrameVulkanTexture> vulkanTexture;
 #endif
 };
 
@@ -1807,6 +1811,13 @@ bool OpenVrOverlayRenderer::Start(const phonecast::vr::OverlaySettings& settings
         Stop();
         return false;
     }
+#ifndef _WIN32
+    impl_->vulkanTexture = std::make_unique<SteamFrameVulkanTexture>(impl_->logger);
+    if (!impl_->vulkanTexture->Initialize(impl_->system, vr::VRCompositor(), error)) {
+        Stop();
+        return false;
+    }
+#endif
     if (!impl_->OverlayCall(impl_->overlayApi->CreateOverlay(kOverlayKey, kOverlayName, &impl_->overlay),
                             "CreateOverlay", error) ||
         !impl_->OverlayCall(impl_->overlayApi->CreateOverlay(
@@ -1950,11 +1961,10 @@ bool OpenVrOverlayRenderer::SubmitFrame(const core::VideoFrame& frame, std::stri
     if (!impl_->OverlayCall(impl_->overlayApi->SetOverlayTexture(impl_->overlay, &texture),
                             "SetOverlayTexture", error)) return false;
 #else
-    if (!impl_->OverlayCall(impl_->overlayApi->SetOverlayRaw(
-                                impl_->overlay,
-                                const_cast<std::uint8_t*>(composite.pixels.data()),
-                                composite.width, composite.height, 4),
-                            "SetOverlayRaw", error)) return false;
+    if (impl_->vulkanTexture == nullptr ||
+        !impl_->vulkanTexture->Update(impl_->overlayApi, impl_->overlay,
+                                      composite.pixels.data(), composite.width,
+                                      composite.height, error)) return false;
 #endif
     const vr::HmdVector2_t mouseScale{{static_cast<float>(composite.width),
                                       static_cast<float>(composite.height)}};
@@ -2321,6 +2331,13 @@ bool OpenVrOverlayRenderer::GetPerformanceStats(phonecast::vr::VrPerformanceStat
 }
 
 void OpenVrOverlayRenderer::Stop() noexcept {
+#ifndef _WIN32
+    // Detach compositor ownership before destroying the overlay. Vulkan images
+    // remain alive until after VR_Shutdown below.
+    if (impl_->vulkanTexture != nullptr && impl_->overlayApi != nullptr &&
+        impl_->overlay != vr::k_ulOverlayHandleInvalid)
+        impl_->overlayApi->ClearOverlayTexture(impl_->overlay);
+#endif
     impl_->DestroyDashboard();
     if (impl_->overlayApi != nullptr && impl_->gestureOverlay != vr::k_ulOverlayHandleInvalid) {
         impl_->overlayApi->HideOverlay(impl_->gestureOverlay);
@@ -2405,6 +2422,10 @@ void OpenVrOverlayRenderer::Stop() noexcept {
 #endif
     if (impl_->system != nullptr) vr::VR_Shutdown();
     impl_->system = nullptr;
+#ifndef _WIN32
+    if (impl_->vulkanTexture != nullptr) impl_->vulkanTexture->Shutdown();
+    impl_->vulkanTexture.reset();
+#endif
 }
 
 }  // namespace phonecast::platform::openvr

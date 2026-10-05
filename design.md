@@ -1378,7 +1378,7 @@ Reduce initial appearance delay where measurements show avoidable receiver, deco
 
 # Sprint 11 — Steam Frame Native Backend
 
-**Status:** `[~] Native stream and controls physically functional — blocked on flicker and eventual `SetOverlayRaw` failure`
+**Status:** `[~] Reusable Vulkan renderer physically approved — remaining native lifecycle and VR-scene validation pending`
 
 - `[x]` Shared paired TCP server moved out of the Windows platform boundary and built for Linux ARM64
 - `[x]` Native stateful V4L2 M2M H.264 decoder with automatic device discovery and explicit device override
@@ -1391,8 +1391,10 @@ Reduce initial appearance delay where measurements show avoidable receiver, deco
 - `[x]` Native Android video is visible and sustains approximately 30 received/decoded/rendered FPS in steady periods; the user reported functional controls
 - `[~]` Dashboard, placement, and interaction are operational in initial use; detailed notifications, reconnect, sleep/wake, and lifecycle cases remain to be exercised
 - `[x]` Native first-use width changed to the physically preferred 0.20 m without overwriting persisted settings
+- `[x]` Reusable double-buffered Vulkan `SetOverlayTexture` path implemented behind the OpenVR platform boundary and Linux ARM64 cross-built
+- `[x]` Vulkan path physically approved by the project owner on 2026-10-04 as smooth and flicker-free during phone interaction and a locally running Hades session; memory remained stable and no texture submission failure occurred
+- `[~]` Rotation and clean shutdown of the Vulkan path remain separate physical checks
 - `[ ]` Validate coexistence over a standalone VR scene application, including both launch orders
-- `[!]` Repeated Linux `SetOverlayRaw` updates visibly flicker, grow working-set memory, and eventually fail with `VROverlayError_RequestFailed`; a reusable native GPU texture path is required
 
 ## Session Handoff Snapshot — 2026-10-04
 
@@ -1414,41 +1416,56 @@ Physically confirmed on Steam Frame:
 - the preferred overlay width is 0.20 m and is persisted on the headset;
 - steady dynamic periods commonly reached approximately 30 receive/decode/render FPS, 1.7–2.4 Mbps, 4–5 ms decode, 1.5–1.8 ms render submission, about 2–2.5% sampled process CPU, no transport drops/resyncs, and no OpenVR-reported dropped frames.
 
-Blocking result:
+Prior blocking result:
 
-- repeated `SetOverlayRaw` calls visibly flicker;
+- repeated `SetOverlayRaw` calls visibly flickered;
 - working set rose from roughly 88 MiB into the hundreds of MiB during sustained streaming;
 - OpenVR eventually returned `VROverlayError_RequestFailed (23)` and the receiver exited;
-- the installed receiver is currently stopped and should not be represented as suitable for sustained use;
-- do not paper over this with a lower frame rate or periodic restart. Implement a reusable native GPU texture submission path, then repeat the sustained test.
+- the installed raw-upload receiver is stopped and must not be represented as suitable for sustained use.
 
-Recommended next implementation:
+Renderer implementation update:
 
-1. Add a Linux renderer resource that owns one reusable GPU texture for each stream size and updates it in place.
-2. Prefer an on-device-proven OpenVR texture type. The headset exposes `libEGL.so`, `libGL.so`, `libGLESv2.so`, and Vulkan; investigate EGL/OpenGL `TextureType_OpenGL` versus Vulkan/dma-buf import before choosing.
-3. Keep graphics handles and synchronization inside `platform/openvr` or `platform/steam-frame-arm64`; do not put them in Core or the portable `VideoFrame` model merely to make the first path compile.
-4. Preserve the current V4L2 decoder and CPU NV12 → RGBA conversion initially if needed to isolate compositor texture reuse. Zero-copy dma-buf import can follow after the stable reusable-texture path is physically proven.
-5. Log texture creation/recreation and failures, then verify stable memory, no flicker, 30 FPS, orientation changes, dashboard interaction, and clean shutdown over a sustained run.
-6. Only after the renderer blocker is fixed, resume standalone-VR-scene coexistence, reconnect, sleep/wake, notification, and lifecycle validation.
+- Linux now loads `libvulkan.so.1` at runtime and requests OpenVR's required Vulkan instance/device extensions on the compositor GPU;
+- one persistently mapped staging buffer feeds two reusable device-local RGBA images;
+- images are synchronized with an upload fence and submitted through `SetOverlayTexture` as `TextureType_Vulkan`;
+- stream-size changes clear the old compositor texture before recreating resources;
+- graphics handles remain inside `platform/openvr`, while the V4L2 decoder and portable CPU `VideoFrame` remain unchanged;
+- teardown clears the compositor texture, destroys overlays, calls `VR_Shutdown`, and then releases Vulkan resources;
+- Windows x64 still uses its established reusable D3D11 path.
+- The Vulkan build was installed on Steam Frame and started successfully: OpenVR selected `Turnip Adreno (TM) 750`, enabled five instance and eight device extensions, and created one reusable 590 × 1328 double-buffered texture set.
+- The project owner physically reported perfectly smooth, flicker-free rendering with scrolling and other gestures working.
+- A 243-second connected capture included approximately 63 seconds while Hades (Steam AppID `1145360`) ran locally. During that game window PhoneCast averaged 30.00 receive/decode FPS, 29.92 render FPS, 2.10 Mbps, 4.26 ms decode, 1.52 ms Vulkan submission, 1.06 ms queue age, 1.52% process CPU, and 102.33 MiB working set. Queue depth, transport drops/resyncs, and OpenVR-reported dropped/mispresented frames were all zero.
+- Across the full active stream, dynamic periods averaged 29.11 receive/decode FPS and 28.36 render FPS. Working set stayed near 102.33 MiB rather than growing into the hundreds of MiB, and no Vulkan upload, `SetOverlayTexture`, or `VROverlayError_RequestFailed` error occurred.
+- Hades is a locally running flat game. Steam briefly created an OpenXR test instance during launch, but it disconnected after about two seconds; this does not satisfy the pending standalone VR-scene coexistence test.
+
+Recommended next validation:
+
+1. Exercise portrait/landscape texture recreation and clean shutdown.
+2. Validate coexistence with an actual standalone VR scene in both launch orders; the Hades run is flat-game evidence only.
+3. Exercise reconnect, sleep/wake, notification, and longer lifecycle cases.
+4. Treat dma-buf/zero-copy import as a later measured optimization; the measured CPU-RGBA/Vulkan staging path is already within the accepted performance envelope.
 
 Deployment state:
 
 - headset architecture/OS: AArch64 SteamOS, kernel `6.18.0-gfbdbca41fd45`;
-- installed directory: `/home/steamos/phonecast` with the prior install retained as a timestamped backup;
-- logs: `/home/steamos/phonecast/receiver.log` and `receiver.pre-v4l2-fix.log`;
+- installed directory: `/home/steamos/phonecast`; the replaced raw-upload install is retained at `/home/steamos/phonecast.backup-20261004-222435`;
+- Vulkan receiver process was started as PID `17725` after installation; PIDs are ephemeral and must be rechecked;
+- logs: `/home/steamos/phonecast/receiver.log`; performance CSV: `/home/steamos/phonecast-performance-vulkan.csv`;
 - SSH credential remains only in ignored local `.env` as `STEAM_FRAME_SSH_PASSWORD` and must never be logged or committed;
 - use host alias `frame`; if connecting by the current DHCP address, `-o HostKeyAlias=frame` avoids stale-IP host-key ambiguity;
-- local package: ignored `out/packages/phonecast-steam-frame-arm64.tar.gz`, SHA-256 `ce60d5d6d6964c2aadd873964885b6e15139a7eacc2d55a3c640e07d63627c2a`;
-- the Node page on port 8080 serves that bundle at `/phonecast-steam-frame-arm64.tar.gz`;
-- the current package contains branch-head code, including the 0.20 m first-use native default, but it still has the raw-upload blocker.
+- local Vulkan package: ignored `out/packages/phonecast-steam-frame-arm64-vulkan.tar.gz`, SHA-256 `803cd0f0afd7df87d91dc3b1d30864b2d853d34f62d8068c0d8327ae2202603e`;
+- installed receiver binary SHA-256: `b9b12e77c0b2262a9d3e33b3d3ae7c2034d798a7e8294766971495fadcaa46df`;
+- the older Node-served raw-upload bundle is stale and must not be used for Vulkan validation.
 
 Validation at handoff:
 
 - Windows x64 build passes;
 - all 11 Windows CTest tests pass;
-- Linux ARM64 target cross-builds successfully;
-- physical V4L2 decoding and visible native streaming pass;
-- sustained native rendering fails as documented above.
+- Linux ARM64 target cross-builds successfully and ARM64 portable tests pass under QEMU;
+- physical V4L2 decoding and visible native streaming pass from the earlier raw-upload run;
+- the Vulkan receiver initializes on the compositor GPU and is physically approved as smooth and flicker-free during phone interaction and the measured Hades window;
+- the raw-upload flicker, memory-growth, and eventual submission-failure blocker is resolved for the measured run;
+- rotation, clean shutdown, longer lifecycle cases, and actual standalone VR-scene coexistence remain pending.
 
 ## Objective
 
