@@ -1378,7 +1378,7 @@ Reduce initial appearance delay where measurements show avoidable receiver, deco
 
 # Sprint 11 — Steam Frame Native Backend
 
-**Status:** `[~] Native implementation complete for review — cross-build passes; Steam Frame deployment and physical validation pending`
+**Status:** `[~] Native stream and controls physically functional — blocked on flicker and eventual `SetOverlayRaw` failure`
 
 - `[x]` Shared paired TCP server moved out of the Windows platform boundary and built for Linux ARM64
 - `[x]` Native stateful V4L2 M2M H.264 decoder with automatic device discovery and explicit device override
@@ -1393,6 +1393,62 @@ Reduce initial appearance delay where measurements show avoidable receiver, deco
 - `[x]` Native first-use width changed to the physically preferred 0.20 m without overwriting persisted settings
 - `[ ]` Validate coexistence over a standalone VR scene application, including both launch orders
 - `[!]` Repeated Linux `SetOverlayRaw` updates visibly flicker, grow working-set memory, and eventually fail with `VROverlayError_RequestFailed`; a reusable native GPU texture path is required
+
+## Session Handoff Snapshot — 2026-10-04
+
+Branch and commits:
+
+- branch: `review/sprint-11-steam-frame-native`;
+- `cf02bdc` — portable TCP server and native V4L2 streaming receiver;
+- `d69429e` — Steam Frame bundle on the local Node download page;
+- `27b4663` — native installation evidence;
+- `95cef15` / `370705c` — corrected waiting-panel geometry and Qualcomm empty-event handling;
+- `ebf53c4` — recorded physical validation and selected 0.20 m native default.
+
+Physically confirmed on Steam Frame:
+
+- Android authenticated directly to the headset and sent a 590 × 1280 H.264 stream;
+- Qualcomm `iris_driver` at `/dev/video-dec0` decoded to NV12;
+- live phone video became visible after treating both `EAGAIN` and Qualcomm's `ENOENT` as an empty V4L2 event queue;
+- the user reported all exercised functions operational;
+- the preferred overlay width is 0.20 m and is persisted on the headset;
+- steady dynamic periods commonly reached approximately 30 receive/decode/render FPS, 1.7–2.4 Mbps, 4–5 ms decode, 1.5–1.8 ms render submission, about 2–2.5% sampled process CPU, no transport drops/resyncs, and no OpenVR-reported dropped frames.
+
+Blocking result:
+
+- repeated `SetOverlayRaw` calls visibly flicker;
+- working set rose from roughly 88 MiB into the hundreds of MiB during sustained streaming;
+- OpenVR eventually returned `VROverlayError_RequestFailed (23)` and the receiver exited;
+- the installed receiver is currently stopped and should not be represented as suitable for sustained use;
+- do not paper over this with a lower frame rate or periodic restart. Implement a reusable native GPU texture submission path, then repeat the sustained test.
+
+Recommended next implementation:
+
+1. Add a Linux renderer resource that owns one reusable GPU texture for each stream size and updates it in place.
+2. Prefer an on-device-proven OpenVR texture type. The headset exposes `libEGL.so`, `libGL.so`, `libGLESv2.so`, and Vulkan; investigate EGL/OpenGL `TextureType_OpenGL` versus Vulkan/dma-buf import before choosing.
+3. Keep graphics handles and synchronization inside `platform/openvr` or `platform/steam-frame-arm64`; do not put them in Core or the portable `VideoFrame` model merely to make the first path compile.
+4. Preserve the current V4L2 decoder and CPU NV12 → RGBA conversion initially if needed to isolate compositor texture reuse. Zero-copy dma-buf import can follow after the stable reusable-texture path is physically proven.
+5. Log texture creation/recreation and failures, then verify stable memory, no flicker, 30 FPS, orientation changes, dashboard interaction, and clean shutdown over a sustained run.
+6. Only after the renderer blocker is fixed, resume standalone-VR-scene coexistence, reconnect, sleep/wake, notification, and lifecycle validation.
+
+Deployment state:
+
+- headset architecture/OS: AArch64 SteamOS, kernel `6.18.0-gfbdbca41fd45`;
+- installed directory: `/home/steamos/phonecast` with the prior install retained as a timestamped backup;
+- logs: `/home/steamos/phonecast/receiver.log` and `receiver.pre-v4l2-fix.log`;
+- SSH credential remains only in ignored local `.env` as `STEAM_FRAME_SSH_PASSWORD` and must never be logged or committed;
+- use host alias `frame`; if connecting by the current DHCP address, `-o HostKeyAlias=frame` avoids stale-IP host-key ambiguity;
+- local package: ignored `out/packages/phonecast-steam-frame-arm64.tar.gz`, SHA-256 `ce60d5d6d6964c2aadd873964885b6e15139a7eacc2d55a3c640e07d63627c2a`;
+- the Node page on port 8080 serves that bundle at `/phonecast-steam-frame-arm64.tar.gz`;
+- the current package contains branch-head code, including the 0.20 m first-use native default, but it still has the raw-upload blocker.
+
+Validation at handoff:
+
+- Windows x64 build passes;
+- all 11 Windows CTest tests pass;
+- Linux ARM64 target cross-builds successfully;
+- physical V4L2 decoding and visible native streaming pass;
+- sustained native rendering fails as documented above.
 
 ## Objective
 

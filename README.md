@@ -13,8 +13,8 @@ Moving to another development machine or starting a fresh Pi agent? Follow [`doc
 - `[x]` Sprints 7–8 are complete and physically approved for the PC-hosted path: gestures, scrolling, Back controls, placement handle, rotation, reconnect, opt-out, and running-game input coexistence are validated
 - `[x]` Sprint 9 is complete for the PC-hosted path: notification cards, revised placement, dashboard-open/closed visibility, and open-phone selection are physically approved; native ARM64 remains Sprint 11 work
 - `[x]` Sprint 10 is complete: Standard-profile startup, sustained streaming, resources, and OpenVR frametime were physically measured and owner-approved; alternate-profile and external-camera latency evidence remains deferred
-- `[~]` Sprint 11 native receiver implementation is ready for review: shared Linux TCP transport, stateful V4L2 H.264 decode, ARM64 build, OpenVR integration, and native diagnostics compile successfully
-- `[!]` Steam Frame deployment, Qualcomm/iris decoder negotiation, native streaming behavior, and coexistence over a standalone VR scene still require physical validation
+- `[~]` Sprint 11 native receiver is physically functional: Qualcomm/iris H.264 decoding, visible Android video, controls, and approximately 30 FPS steady streaming are confirmed
+- `[!]` Sustained native use is blocked: Linux `SetOverlayRaw` visibly flickers, grows memory, and eventually fails; reusable GPU texture submission and standalone-VR-scene validation remain required
 - `[!]` The current LAN transport is paired but not encrypted
 
 ## Sprint 11 native Steam Frame receiver
