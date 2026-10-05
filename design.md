@@ -1555,6 +1555,44 @@ The PC should no longer be involved.
 - `[ ]` Optional autostart control, only after the manual launcher is physically approved
 - `[ ]` Automatic LAN discovery and cryptographic device identity/revocation
 
+## Session Handoff Snapshot — 2026-10-05
+
+Branch and recent commits:
+
+- branch: `review/sprint-12-standalone-ux`;
+- `32859b8` — Android privacy display mode added to the backlog;
+- `900c69d` — Sprint 12 Steam Frame bundle served by the local package page;
+- `e157251` — Sprint 12 manual launcher baseline, single-instance IPC, dashboard recovery, and persistent pairing.
+
+Research documentation added in this handoff:
+
+- [`docs/frametop-research.md`](docs/frametop-research.md) records a source review of [`DeeJanuz/frametop`](https://github.com/DeeJanuz/frametop) at commit `ca9492be000a24f8e539607a02ee5d12f41801a6`;
+- no PhoneCast source code, build configuration, package, or hardware state was changed by that research;
+- the research repository was inspected but not installed or physically run by PhoneCast.
+
+Most useful Frametop findings:
+
+1. Frametop imports Linux DMA-BUFs into SteamVR with `IVRIPCResourceManagerClient::ImportDmabuf` and submits `TextureType_SharedTextureHandle`. This is a credible future experiment for removing PhoneCast's remaining V4L2 NV12 → CPU RGBA → Vulkan staging copies, but Frametop proves XRGB/ARGB compositor buffers rather than Qualcomm decoder NV12. Format/modifier compatibility, V4L2 export, buffer ownership, synchronization, orientation, and teardown remain unknown.
+2. Frametop avoids a permanent game-controller claim by predicting when a controller's render-model laser tip intersects a panel and enabling `MakeOverlaysInteractiveIfVisible` only while aimed, pressed, or in a short linger interval. This is a promising Sprint 14 experiment, not a validated replacement for PhoneCast's dashboard-only interaction.
+3. Its separate move bar, drag-depth adjustment, click stabilization, release catcher, device-loss cleanup, wrist/head placement, custom keyboard fallback, and attention-based scheduling are useful interaction references.
+4. Frametop's local KDE/wlroots desktop, gaze/hand systems, virtual controller, input relay, and undocumented vrserver WebSocket are not appropriate dependencies for PhoneCast.
+5. Frametop is MIT-licensed and compatible with PhoneCast's MIT license; substantial copied code would still require retaining DeeJanuz's copyright and license notice.
+
+Decisions at handoff:
+
+- do not alter the approved native Vulkan renderer or dashboard-first UX based only on source review;
+- do not pull DMA-BUF work into Sprint 12 or treat it as required for v0.1—the measured Vulkan path is already physically accepted;
+- finish the existing Sprint 12 physical validation matrix before optional optimization or Sprint 14 interaction experiments;
+- keep any later DMA-BUF/shared-handle path behind the Steam Frame/OpenVR platform boundary with runtime capability checks and the Vulkan renderer as fallback;
+- keep standalone VR-scene coexistence in both launch orders explicitly unvalidated until PhoneCast itself is physically tested.
+
+Next work:
+
+1. Install the current Sprint 12 bundle on Steam Frame and validate dashboard `+` discovery, first launch, and second-launch focus.
+2. Exercise rotation, clean shutdown, reconnect, notifications, sleep/wake, crash recovery, and SteamVR restart.
+3. Test a real standalone VR scene in both PhoneCast-first and game-first launch orders.
+4. Only after that baseline is accepted, consider a bounded DMA-BUF capability probe and the Sprint 14 aim-gated interaction experiment described in the research document.
+
 Once standalone operation works, optimize PhoneCast specifically for Steam Frame.
 
 ## Approved launch model

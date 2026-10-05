@@ -84,3 +84,19 @@ when the phone should be forgotten.
 
 Autostart must remain off until the manual dashboard `+` launch and recovery
 path has passed physical testing.
+
+## Related Frametop research
+
+A source review of the native Steam Frame desktop project Frametop is recorded
+in [`frametop-research.md`](frametop-research.md). It reinforces the rule that a
+helper must not accidentally start `vrserver`: Frametop probes first as an
+OpenVR background application and couples relevant services to
+`steamvr.service` before initializing as an overlay. PhoneCast's launcher
+already refuses to start while SteamVR is intentionally stopped; the two-stage
+probe is optional future defense-in-depth, not a Sprint 12 acceptance item.
+
+Frametop's DMA-BUF import path and aim-gated dashboard-closed interaction are
+follow-up optimization and Sprint 14 research leads. They do not replace the
+current Vulkan renderer, dashboard-first controls, application manifest,
+single-instance IPC, pairing persistence, or any physical lifecycle test in
+this document.
