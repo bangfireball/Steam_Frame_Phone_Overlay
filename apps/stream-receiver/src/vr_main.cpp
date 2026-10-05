@@ -106,13 +106,16 @@ bool Pressed(int key) {
 
 phonecast::core::VideoFrame MakeWaitingFrame() {
     phonecast::core::VideoFrame frame;
-    frame.width = 320;
-    frame.height = 180;
+    // Match the sender's normal portrait aspect ratio before the first video
+    // configuration arrives. A landscape placeholder made the fixed footer
+    // consume a quarter of the surface and looked like a distorted phone.
+    frame.width = 270;
+    frame.height = 576;
     frame.format = phonecast::core::PixelFormat::Rgba8;
     frame.pixels.resize(static_cast<std::size_t>(frame.width) * frame.height * 4U);
     for (std::uint32_t y = 0; y < frame.height; ++y) {
         for (std::uint32_t x = 0; x < frame.width; ++x) {
-            const bool border = x < 6 || y < 6 || x >= frame.width - 6 || y >= frame.height - 6;
+            const bool border = x < 3 || y < 3 || x >= frame.width - 3 || y >= frame.height - 3;
             const std::size_t offset = (static_cast<std::size_t>(y) * frame.width + x) * 4U;
             frame.pixels[offset] = border ? 35 : 12;
             frame.pixels[offset + 1] = border ? 125 : 18;
