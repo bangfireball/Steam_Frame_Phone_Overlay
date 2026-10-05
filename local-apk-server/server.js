@@ -8,9 +8,10 @@ const apkPath = path.resolve(
   __dirname,
   "../android/sender/app/build/outputs/apk/debug/app-debug.apk",
 );
+const steamFrameFileName = "phonecast-steam-frame-arm64-sprint12.tar.gz";
 const steamFramePath = path.resolve(
   __dirname,
-  "../out/packages/phonecast-steam-frame-arm64.tar.gz",
+  `../out/packages/${steamFrameFileName}`,
 );
 
 function serveDownload(response, filePath, contentType, fileName, missingMessage) {
@@ -57,7 +58,7 @@ ${apkAvailable
   : "<p>The debug APK has not been built yet.</p>"}
 <h2>Steam Frame</h2>
 ${steamFrameAvailable
-  ? '<p><a href="/phonecast-steam-frame-arm64.tar.gz">Download the ARM64 Linux bundle</a></p><p>The archive is for SteamOS/Arch Linux on AArch64. It must be extracted and launched through SSH or SteamOS Devkit Client; it is not an APK.</p>'
+  ? `<p><a href="/${steamFrameFileName}">Download the Sprint 12 ARM64 Linux bundle</a></p><p>Extract it on Steam Frame and run <code>sh steam-frame-installer/install-phonecast.sh</code>. PhoneCast will then appear in the SteamVR dashboard <strong>+</strong> launcher. It is not an APK.</p>`
   : "<p>The Steam Frame ARM64 bundle has not been packaged yet.</p>"}
 </body>
 </html>`);
@@ -70,9 +71,10 @@ ${steamFrameAvailable
     return;
   }
 
-  if (url.pathname === "/phonecast-steam-frame-arm64.tar.gz") {
+  if (url.pathname === `/${steamFrameFileName}` ||
+      url.pathname === "/phonecast-steam-frame-arm64.tar.gz") {
     serveDownload(response, steamFramePath, "application/gzip",
-      "phonecast-steam-frame-arm64.tar.gz", "Steam Frame bundle not found");
+      steamFrameFileName, "Steam Frame bundle not found");
     return;
   }
 
