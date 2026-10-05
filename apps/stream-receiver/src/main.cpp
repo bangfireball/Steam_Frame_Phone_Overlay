@@ -2,7 +2,7 @@
 #include "phonecast/core/streaming/VideoFrame.h"
 #include "phonecast/platform/windows/DesktopPreview.h"
 #include "phonecast/platform/windows/MfH264Decoder.h"
-#include "phonecast/platform/windows/TcpVideoServer.h"
+#include "phonecast/platform/network/TcpVideoServer.h"
 
 #include <chrono>
 #include <cstdint>
@@ -63,7 +63,7 @@ int main(int argc, char** argv) {
         std::cerr << error << '\n';
         return EXIT_FAILURE;
     }
-    phonecast::platform::windows::TcpVideoServer server(pairCode, port);
+    phonecast::platform::network::TcpVideoServer server(pairCode, port);
     if (!server.Start(error)) {
         std::cerr << error << '\n';
         return EXIT_FAILURE;
@@ -80,7 +80,7 @@ int main(int argc, char** argv) {
     double windowDecodeMillis = 0.0;
     double windowQueueMillis = 0.0;
     std::uint64_t windowMessages = 0;
-    phonecast::platform::windows::VideoServerStats previousServerStats{};
+    phonecast::platform::network::VideoServerStats previousServerStats{};
     auto lastTitle = std::chrono::steady_clock::now();
     auto connectionStarted = lastTitle;
     bool wasConnected = false;

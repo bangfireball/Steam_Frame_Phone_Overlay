@@ -1,16 +1,26 @@
 #include "phonecast/core/logging/ConsoleLogger.h"
 #include "phonecast/core/protocol/StreamProtocol.h"
 #include "phonecast/platform/openvr/OpenVrOverlayRenderer.h"
+#include "phonecast/platform/network/TcpVideoServer.h"
+#ifdef _WIN32
 #include "phonecast/platform/windows/MfH264Decoder.h"
 #include "phonecast/platform/windows/ProcessPerformanceSampler.h"
-#include "phonecast/platform/windows/TcpVideoServer.h"
+#else
+#include "phonecast/platform/steamframe/ProcessPerformanceSampler.h"
+#include "phonecast/platform/steamframe/V4l2H264Decoder.h"
+#endif
 #include "phonecast/vr/overlay/GlanceController.h"
 #include "phonecast/vr/overlay/OverlayController.h"
 #include "phonecast/vr/overlay/OverlaySettingsStore.h"
 #include "phonecast/vr/overlay/SettingsMenuController.h"
 
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#else
+#include <atomic>
+#include <csignal>
+#endif
 
 #include <algorithm>
 #include <chrono>
@@ -30,10 +40,21 @@ using phonecast::core::protocol::Message;
 using phonecast::core::protocol::MessageType;
 using phonecast::vr::OverlayAction;
 
+#ifdef _WIN32
+using PlatformDecoder = phonecast::platform::windows::MfH264Decoder;
+using PlatformProcessSampler = phonecast::platform::windows::ProcessPerformanceSampler;
+#else
+using PlatformDecoder = phonecast::platform::steamframe::V4l2H264Decoder;
+using PlatformProcessSampler = phonecast::platform::steamframe::ProcessPerformanceSampler;
+std::atomic_bool signalRequested{};
+void HandleSignal(int) { signalRequested.store(true); }
+#endif
+
 void PrintUsage() {
-    std::cout << "Usage: phonecast-vr-stream-receiver --pair-code NNNNNN [--port N] [--settings PATH] [--performance-log PATH] [--diagnostic-visible]\n\n"
+    std::cout << "Usage: phonecast-vr-stream-receiver --pair-code NNNNNN [--port N] [--settings PATH] [--performance-log PATH] [--video-device PATH] [--diagnostic-visible]\n\n"
               << "Performance measurement:\n"
-              << "  --performance-log PATH  Write one-second receiver/process/VR samples as CSV\n\n"
+              << "  --performance-log PATH  Write one-second receiver/process/VR samples as CSV\n"
+              << "  --video-device PATH     Linux: select a stateful V4L2 H.264 decoder\n\n"
               << "Global controls (hold Ctrl+Alt):\n"
               << "  P          Quick show/hide expanded view\n"
               << "  G          Cycle Hidden/Glance/Expanded/Pinned\n"
@@ -58,12 +79,22 @@ void PrintUsage() {
 }
 
 std::filesystem::path DefaultSettingsPath() {
+#ifdef _WIN32
     const char* localAppData = std::getenv("LOCALAPPDATA");
     if (localAppData != nullptr && *localAppData != '\0')
         return std::filesystem::path(localAppData) / "PhoneCastVR" / "overlay-settings.ini";
+#else
+    const char* configHome = std::getenv("XDG_CONFIG_HOME");
+    if (configHome != nullptr && *configHome != '\0')
+        return std::filesystem::path(configHome) / "phonecast-vr" / "overlay-settings.ini";
+    const char* home = std::getenv("HOME");
+    if (home != nullptr && *home != '\0')
+        return std::filesystem::path(home) / ".config" / "phonecast-vr" / "overlay-settings.ini";
+#endif
     return "phonecast-overlay-settings.ini";
 }
 
+#ifdef _WIN32
 bool Pressed(int key) {
     static bool previous[256]{};
     const bool down = (GetAsyncKeyState(key) & 0x8000) != 0;
@@ -71,16 +102,20 @@ bool Pressed(int key) {
     previous[key] = down;
     return pressed;
 }
+#endif
 
 phonecast::core::VideoFrame MakeWaitingFrame() {
     phonecast::core::VideoFrame frame;
-    frame.width = 320;
-    frame.height = 180;
+    // Match the sender's normal portrait aspect ratio before the first video
+    // configuration arrives. A landscape placeholder made the fixed footer
+    // consume a quarter of the surface and looked like a distorted phone.
+    frame.width = 590;
+    frame.height = 1280;
     frame.format = phonecast::core::PixelFormat::Rgba8;
     frame.pixels.resize(static_cast<std::size_t>(frame.width) * frame.height * 4U);
     for (std::uint32_t y = 0; y < frame.height; ++y) {
         for (std::uint32_t x = 0; x < frame.width; ++x) {
-            const bool border = x < 6 || y < 6 || x >= frame.width - 6 || y >= frame.height - 6;
+            const bool border = x < 3 || y < 3 || x >= frame.width - 3 || y >= frame.height - 3;
             const std::size_t offset = (static_cast<std::size_t>(y) * frame.width + x) * 4U;
             frame.pixels[offset] = border ? 35 : 12;
             frame.pixels[offset + 1] = border ? 125 : 18;
@@ -109,6 +144,7 @@ bool PollControl(OverlayAction& action, bool& glanceCycle, bool& quickToggle,
     glanceCycle = false;
     quickToggle = false;
     openSettings = false;
+#ifdef _WIN32
     quit = false;
     const bool modified = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 &&
                           (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
@@ -135,6 +171,11 @@ bool PollControl(OverlayAction& action, bool& glanceCycle, bool& quickToggle,
     if (Pressed('S') && modified) openSettings = true;
     if (Pressed(VK_END) && modified) quit = true;
     return found;
+#else
+    (void)action;
+    quit = signalRequested.load();
+    return false;
+#endif
 }
 }  // namespace
 
@@ -144,6 +185,7 @@ int main(int argc, char** argv) {
     bool diagnosticVisible = false;
     std::filesystem::path settingsPath = DefaultSettingsPath();
     std::filesystem::path performanceLogPath;
+    std::string videoDevice;
     for (int index = 1; index < argc; ++index) {
         const std::string option = argv[index];
         if (option == "--help" || option == "-h") {
@@ -162,6 +204,7 @@ int main(int argc, char** argv) {
         if (option == "--pair-code") pairCode = value;
         else if (option == "--settings") settingsPath = value;
         else if (option == "--performance-log") performanceLogPath = value;
+        else if (option == "--video-device") videoDevice = value;
         else if (option == "--port") {
             try {
                 const unsigned long parsed = std::stoul(value);
@@ -181,6 +224,15 @@ int main(int argc, char** argv) {
         PrintUsage();
         return EXIT_FAILURE;
     }
+#ifdef _WIN32
+    if (!videoDevice.empty()) {
+        std::cerr << "--video-device is available only on the native Linux receiver.\n";
+        return EXIT_FAILURE;
+    }
+#else
+    std::signal(SIGINT, HandleSignal);
+    std::signal(SIGTERM, HandleSignal);
+#endif
 
     std::ofstream performanceLog;
     if (!performanceLogPath.empty()) {
@@ -222,6 +274,13 @@ int main(int argc, char** argv) {
     } else if (settingsFound) {
         std::cout << "Loaded overlay placement from " << settingsPath.string() << ".\n";
     }
+#ifndef _WIN32
+    if (!diagnosticVisible && !settingsFound) {
+        // The physically preferred Steam Frame default is intentionally smaller
+        // than the PC-hosted panel. Existing persisted choices remain untouched.
+        initialSettings.widthMeters = 0.20F;
+    }
+#endif
     phonecast::vr::OverlayController controls;
     controls.ReplaceSettings(initialSettings);
     phonecast::vr::GlanceController glance(initialSettings.glancePreviewScale);
@@ -254,7 +313,7 @@ int main(int argc, char** argv) {
         renderer.Stop();
         return EXIT_FAILURE;
     }
-    phonecast::platform::windows::TcpVideoServer server(pairCode, port);
+    phonecast::platform::network::TcpVideoServer server(pairCode, port);
     if (!server.Start(error)) {
         std::cerr << error << '\n';
         renderer.Stop();
@@ -264,8 +323,12 @@ int main(int argc, char** argv) {
     std::cout << "\nPhoneCast VR receiver listening on port " << port
               << ". Pairing code: " << pairCode << '\n';
 
-    phonecast::platform::windows::MfH264Decoder decoder;
-    phonecast::platform::windows::ProcessPerformanceSampler processSampler;
+#ifdef _WIN32
+    PlatformDecoder decoder;
+#else
+    PlatformDecoder decoder(videoDevice);
+#endif
+    PlatformProcessSampler processSampler;
     processSampler.Sample();
     const auto sessionStarted = std::chrono::steady_clock::now();
     bool decoderStarted = false;
@@ -278,7 +341,7 @@ int main(int argc, char** argv) {
     double windowQueueMillis = 0.0;
     double maximumQueueMillis = 0.0;
     std::uint64_t windowMessages = 0;
-    phonecast::platform::windows::VideoServerStats previousServerStats{};
+    phonecast::platform::network::VideoServerStats previousServerStats{};
     auto lastStats = std::chrono::steady_clock::now();
     auto connectionStarted = lastStats;
     bool wasConnected = false;
@@ -557,7 +620,14 @@ int main(int argc, char** argv) {
                 decoderStartMillis = std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now() - decoderStartBegan).count();
                 std::cout << "[diagnostics] decoder-start-ms=" << decoderStartMillis << '\n';
-                if (!decoderStarted) std::cerr << error << '\n';
+                if (!decoderStarted) {
+                    std::cerr << error << '\n';
+#ifndef _WIN32
+                } else {
+                    std::cout << "[decoder] Using native V4L2 device "
+                              << decoder.DevicePath() << ".\n";
+#endif
+                }
                 continue;
             }
             if (!decoderStarted) continue;

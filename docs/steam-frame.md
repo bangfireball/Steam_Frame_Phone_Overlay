@@ -294,6 +294,48 @@ Use when a required environment, particularly Steam Frame hardware/runtime acces
 
 ---
 
+## Sprint 11 native receiver implementation
+
+The review branch now builds the complete `phonecast-vr-stream-receiver` for Linux ARM64. The transport was moved from the Windows platform directory to a shared WinSock/POSIX implementation without moving socket details into Core. Linux selects a stateful V4L2 H.264 M2M decoder, handles source-change capture setup, negotiates linear NV12/NV12M, converts visible pixels to RGBA, and feeds the existing OpenVR renderer. The same application retains dashboard controls, placement, remote input, notification cards/actions, settings, and CSV/OpenVR diagnostics.
+
+A clean Debian 12 AArch64 cross-build produced an `ELF 64-bit ... ARM aarch64` streaming receiver. This is build evidence only. It does not establish that Steam Frame exposes a compatible `/dev/videoN`, that the Qualcomm/iris driver accepts this queue sequence, that `SetOverlayRaw` is acceptable at video cadence, or that the overlay coexists with a native VR scene.
+
+Public Valve documentation identifies Linux ARM64 as a supported target but does not document an application-facing hardware decoder API. The implementation therefore treats stateful V4L2 as a tested-on-hardware hypothesis, exposes `--video-device`, and reports device/negotiation failures rather than silently falling back to CPU decode. Record the selected node, driver, formats, timing, and errors during deployment. GPU/dma-buf compositor sharing remains unknown and is not claimed complete.
+
+### Sprint 11 installation and native startup — 2026-10-04
+
+The ARM64 streaming bundle was installed over SSH at `/home/steamos/phonecast`; the previous Sprint 1 receiver directory was retained as a timestamped backup. No credential or `.env` content was copied into the repository or installation.
+
+Observed system details:
+
+- hostname `frame`, AArch64 Linux, SteamOS;
+- kernel `6.18.0-gfbdbca41fd45`;
+- native SteamVR under `/opt/steamvr`;
+- Qualcomm `iris_driver` stateful decoder, card `iris_decoder`;
+- decoder alias `/dev/video-dec0` targeting `/dev/video22`;
+- decoder capabilities include multi-planar video memory-to-memory and streaming;
+- compressed output/input-queue formats advertised by the decoder are H.264, HEVC, and VP9;
+- capture formats advertised are Qualcomm compressed 8-bit, NV12, NV21, RGBA, and another Qualcomm format;
+- the current default capture format reported by `v4l2-ctl` is single-plane NV12.
+
+An eight-second native receiver smoke test passed the non-video startup gate: OpenVR registered and identified `com.phonecastvr.receiver`, created the regular overlay and PhoneCast dashboard tab/icon, listened on TCP port 49321, emitted process/OpenVR diagnostics, and shut down through `SIGTERM`. Working set was approximately 17.5 MiB, sampled process CPU was 0–0.25%, and OpenVR reported zero dropped or mispresented frames during the short idle run. The installed receiver was then left running with `/dev/video-dec0` selected.
+
+A subsequent physical Android test validated authenticated transport, the Qualcomm/iris H.264 queue, NV12 conversion, and visible phone video. During ordinary dynamic content the native path commonly sustained approximately 30 received/decoded/rendered FPS, roughly 1.7–2.4 Mbps, 4–5 ms decode, 1.5–1.8 ms raw-overlay submission, about 2–2.5% sampled process CPU, zero transport drops/resyncs, and zero OpenVR-reported dropped frames. The user reported the phone display and functional controls working. A width of **0.20 m** was physically preferred, so new native installations use that width while preserving any saved setting.
+
+The test also exposed a blocking renderer defect: repeated Linux `SetOverlayRaw` submissions visibly flickered, working-set growth was observed into the hundreds of MiB, and the compositor eventually returned `VROverlayError_RequestFailed`, terminating the receiver.
+
+A replacement Vulkan renderer is now implemented and ARM64 cross-built. It loads `libvulkan.so.1` at runtime, uses OpenVR's required extensions and compositor-selected physical device, uploads CPU RGBA through a persistently mapped staging buffer into two reusable device-local images, and submits them with `SetOverlayTexture`/`TextureType_Vulkan`. Texture-size changes clear the compositor texture before recreation; shutdown releases Vulkan resources only after overlay destruction and `VR_Shutdown`. This removes repeated raw submission from the video path without putting Vulkan handles into Core or changing the validated V4L2 decoder.
+
+The replacement was installed at `/home/steamos/phonecast` on 2026-10-04, with the prior raw-upload build retained at `/home/steamos/phonecast.backup-20261004-222435`. Native startup selected `Turnip Adreno (TM) 750`, enabled five required instance and eight device extensions, and created a reusable 590 × 1328 double-buffered texture set.
+
+On 2026-10-04, the project owner physically approved the renderer as perfectly smooth and reported that scrolling and other remote gestures worked. The captured session contained 243 connected seconds and a 63-second locally running Hades window. During that game window, the 590 × 1280 phone stream averaged 30.00 receive/decode FPS, 29.92 submitted FPS, 2.10 Mbps, 4.26 ms decode, 1.52 ms Vulkan submission, 1.06 ms queue age, 1.52% PhoneCast process CPU, and 102.33 MiB working set. Queue depth, transport drops/resyncs, and OpenVR-reported dropped/mispresented frames were zero. Across all dynamic connected samples, receive/decode averaged 29.11 FPS and render averaged 28.36 FPS. Startup reached configuration at 291.45 ms, the first keyframe at 322.09 ms, decoder startup took 7.72 ms, and the first frame was submitted at 466.77 ms.
+
+The process remained at approximately 102.33 MiB RSS after streaming rather than continuing the prior raw-upload growth into hundreds of MiB. Only one texture set was created, and no Vulkan upload, `SetOverlayTexture`, or `VROverlayError_RequestFailed` error occurred. The single transport drop/resync was confined to the initial partial startup second; steady dynamic streaming and the Hades window had none.
+
+Hades is a locally running flat game, not the pending standalone VR scene. Steam marked it for VR presentation and briefly created an OpenXR test instance, but that instance disconnected after about two seconds. This provides strong local-game coexistence evidence without satisfying the stricter VR-scene acceptance criterion.
+
+The prior raw-upload renderer blocker is resolved for this measured run. Sprint 11 remains incomplete pending portrait/landscape texture recreation, clean shutdown, detailed notification/reconnect/sleep-wake lifecycle cases, and coexistence with an actual standalone VR scene in both launch orders. The headset's DHCP address is intentionally not recorded here because it can change; obtain the current `wlan0` address when configuring Android.
+
 ## Current conclusion
 
 Native Linux ARM64 OpenVR overlays are no longer merely theoretical: Hello Frame successfully initialized, created a regular overlay, loaded its generated image, registered a stable application manifest, and remained visibly head-locked while the user played a locally running 2D game on Steam Frame.

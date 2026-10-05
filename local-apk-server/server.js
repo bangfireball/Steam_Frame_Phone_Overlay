@@ -8,6 +8,27 @@ const apkPath = path.resolve(
   __dirname,
   "../android/sender/app/build/outputs/apk/debug/app-debug.apk",
 );
+const steamFramePath = path.resolve(
+  __dirname,
+  "../out/packages/phonecast-steam-frame-arm64.tar.gz",
+);
+
+function serveDownload(response, filePath, contentType, fileName, missingMessage) {
+  fs.stat(filePath, (error, stats) => {
+    if (error || !stats.isFile()) {
+      response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      response.end(`${missingMessage}\n`);
+      return;
+    }
+    response.writeHead(200, {
+      "Content-Type": contentType,
+      "Content-Length": stats.size,
+      "Content-Disposition": `attachment; filename="${fileName}"`,
+      "Cache-Control": "no-store",
+    });
+    fs.createReadStream(filePath).pipe(response);
+  });
+}
 
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
@@ -19,39 +40,39 @@ const server = http.createServer((request, response) => {
   }
 
   if (url.pathname === "/") {
-    const available = fs.existsSync(apkPath);
-    response.writeHead(available ? 200 : 503, {
+    const apkAvailable = fs.existsSync(apkPath);
+    const steamFrameAvailable = fs.existsSync(steamFramePath);
+    response.writeHead(apkAvailable || steamFrameAvailable ? 200 : 503, {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
     });
     response.end(`<!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PhoneCast APK</title></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PhoneCast Downloads</title></head>
 <body style="font-family:sans-serif;max-width:40rem;margin:4rem auto;padding:0 1rem">
-<h1>PhoneCast Sender</h1>
-${available
+<h1>PhoneCast Downloads</h1>
+<h2>Android phone</h2>
+${apkAvailable
   ? '<p><a href="/phonecast-sender.apk">Download the Android APK</a></p>'
   : "<p>The debug APK has not been built yet.</p>"}
+<h2>Steam Frame</h2>
+${steamFrameAvailable
+  ? '<p><a href="/phonecast-steam-frame-arm64.tar.gz">Download the ARM64 Linux bundle</a></p><p>The archive is for SteamOS/Arch Linux on AArch64. It must be extracted and launched through SSH or SteamOS Devkit Client; it is not an APK.</p>'
+  : "<p>The Steam Frame ARM64 bundle has not been packaged yet.</p>"}
 </body>
 </html>`);
     return;
   }
 
   if (url.pathname === "/phonecast-sender.apk") {
-    fs.stat(apkPath, (error, stats) => {
-      if (error || !stats.isFile()) {
-        response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-        response.end("APK not found\n");
-        return;
-      }
-      response.writeHead(200, {
-        "Content-Type": "application/vnd.android.package-archive",
-        "Content-Length": stats.size,
-        "Content-Disposition": 'attachment; filename="phonecast-sender-debug.apk"',
-        "Cache-Control": "no-store",
-      });
-      fs.createReadStream(apkPath).pipe(response);
-    });
+    serveDownload(response, apkPath, "application/vnd.android.package-archive",
+      "phonecast-sender-debug.apk", "APK not found");
+    return;
+  }
+
+  if (url.pathname === "/phonecast-steam-frame-arm64.tar.gz") {
+    serveDownload(response, steamFramePath, "application/gzip",
+      "phonecast-steam-frame-arm64.tar.gz", "Steam Frame bundle not found");
     return;
   }
 
@@ -61,5 +82,6 @@ ${available
 
 server.listen(port, host, () => {
   console.log(`PhoneCast APK server listening on http://${host}:${port}`);
-  console.log(`Serving ${apkPath}`);
+  console.log(`Android APK: ${apkPath}`);
+  console.log(`Steam Frame bundle: ${steamFramePath}`);
 });

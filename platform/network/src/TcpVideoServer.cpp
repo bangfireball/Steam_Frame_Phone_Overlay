@@ -1,8 +1,23 @@
-#include "phonecast/platform/windows/TcpVideoServer.h"
+#include "phonecast/platform/network/TcpVideoServer.h"
 
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#include <cerrno>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+using SOCKET = int;
+constexpr SOCKET INVALID_SOCKET = -1;
+constexpr int SOCKET_ERROR = -1;
+using BOOL = int;
+inline int closesocket(SOCKET socket) { return close(socket); }
+#endif
 
 #include <algorithm>
 #include <array>
@@ -15,7 +30,7 @@
 #include <utility>
 #include <vector>
 
-namespace phonecast::platform::windows {
+namespace phonecast::platform::network {
 namespace {
 using core::protocol::Message;
 using core::protocol::MessageType;
@@ -35,7 +50,13 @@ bool SendExact(SOCKET socket, const std::vector<std::uint8_t>& bytes) {
     std::size_t sent = 0;
     while (sent < bytes.size()) {
         const int amount = send(socket, reinterpret_cast<const char*>(bytes.data() + sent),
-                                static_cast<int>(bytes.size() - sent), 0);
+                                static_cast<int>(bytes.size() - sent),
+#ifdef _WIN32
+                                0
+#else
+                                MSG_NOSIGNAL
+#endif
+        );
         if (amount <= 0) return false;
         sent += static_cast<std::size_t>(amount);
     }
@@ -217,9 +238,14 @@ struct TcpVideoServer::Implementation {
             SetStatus("Could not create listening socket");
             return;
         }
+#ifdef _WIN32
         BOOL exclusive = TRUE;
         setsockopt(server, SOL_SOCKET, SO_EXCLUSIVEADDRUSE,
                    reinterpret_cast<const char*>(&exclusive), sizeof(exclusive));
+#else
+        int reuseAddress = 1;
+        setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &reuseAddress, sizeof(reuseAddress));
+#endif
         sockaddr_in address{};
         address.sin_family = AF_INET;
         address.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -237,9 +263,14 @@ struct TcpVideoServer::Implementation {
             if (accepted == INVALID_SOCKET) break;
             clientSocket.store(accepted);
             SetStatus("TCP client connected; waiting for pairing handshake");
-            BOOL noDelay = TRUE;
+            int noDelay = 1;
             setsockopt(accepted, IPPROTO_TCP, TCP_NODELAY,
-                       reinterpret_cast<const char*>(&noDelay), sizeof(noDelay));
+#ifdef _WIN32
+                       reinterpret_cast<const char*>(&noDelay),
+#else
+                       &noDelay,
+#endif
+                       sizeof(noDelay));
             remoteControlStatusKnown.store(false);
             remoteControlAppEnabled.store(false);
             remoteControlAccessibilityEnabled.store(false);
@@ -255,10 +286,14 @@ struct TcpVideoServer::Implementation {
             remoteControlStatusKnown.store(false);
             remoteControlAppEnabled.store(false);
             remoteControlAccessibilityEnabled.store(false);
-            closesocket(accepted);
-            clientSocket.store(INVALID_SOCKET);
+            SOCKET expectedClient = accepted;
+            if (clientSocket.compare_exchange_strong(expectedClient, INVALID_SOCKET))
+                closesocket(accepted);
             if (running.load()) SetStatus("Phone disconnected; waiting for reconnection");
         }
+        SOCKET expectedServer = server;
+        if (listeningSocket.compare_exchange_strong(expectedServer, INVALID_SOCKET))
+            closesocket(server);
     }
 
     std::string pairCode;
@@ -289,7 +324,9 @@ struct TcpVideoServer::Implementation {
     bool waitingForKeyFrame{true};
     bool haveExpectedSequence{};
     bool keyFrameRequestPending{};
+#ifdef _WIN32
     bool winsockStarted{};
+#endif
 };
 
 TcpVideoServer::TcpVideoServer(std::string pairCode, std::uint16_t port)
@@ -302,12 +339,14 @@ bool TcpVideoServer::Start(std::string& error) {
         error = "TCP video server is already running.";
         return false;
     }
+#ifdef _WIN32
     WSADATA data{};
     if (WSAStartup(MAKEWORD(2, 2), &data) != 0) {
         error = "WSAStartup failed.";
         return false;
     }
     state.winsockStarted = true;
+#endif
     state.running.store(true);
     state.thread = std::thread(&Implementation::Run, &state);
     error.clear();
@@ -333,14 +372,30 @@ void TcpVideoServer::Stop() noexcept {
     auto& state = *implementation_;
     state.running.store(false);
     SOCKET listening = state.listeningSocket.exchange(INVALID_SOCKET);
-    if (listening != INVALID_SOCKET) closesocket(listening);
+    if (listening != INVALID_SOCKET) {
+#ifdef _WIN32
+        shutdown(listening, SD_BOTH);
+#else
+        shutdown(listening, SHUT_RDWR);
+#endif
+        closesocket(listening);
+    }
     SOCKET client = state.clientSocket.exchange(INVALID_SOCKET);
-    if (client != INVALID_SOCKET) closesocket(client);
+    if (client != INVALID_SOCKET) {
+#ifdef _WIN32
+        shutdown(client, SD_BOTH);
+#else
+        shutdown(client, SHUT_RDWR);
+#endif
+        closesocket(client);
+    }
     if (state.thread.joinable()) state.thread.join();
+#ifdef _WIN32
     if (state.winsockStarted) {
         WSACleanup();
         state.winsockStarted = false;
     }
+#endif
 }
 
 bool TcpVideoServer::Send(const core::PointerEvent& event, std::string& error) {
@@ -414,4 +469,4 @@ std::uint64_t TcpVideoServer::DroppedMessages() const noexcept {
     return Stats().droppedFrames;
 }
 
-}  // namespace phonecast::platform::windows
+}  // namespace phonecast::platform::network

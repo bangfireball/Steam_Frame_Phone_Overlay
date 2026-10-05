@@ -4,10 +4,10 @@
     {
       "app_key": "com.phonecastvr.receiver",
       "launch_type": "binary",
-      "binary_path": "phonecast-receiver",
-      "binary_path_windows": "phonecast-receiver.exe",
-      "binary_path_linux": "phonecast-receiver",
-      "binary_path_linux_arm": "phonecast-receiver",
+      "binary_path": "phonecast-vr-stream-receiver",
+      "binary_path_windows": "phonecast-vr-stream-receiver.exe",
+      "binary_path_linux": "phonecast-vr-stream-receiver",
+      "binary_path_linux_arm": "phonecast-vr-stream-receiver",
       "action_manifest_path": "phonecast-actions.json",
       "is_dashboard_overlay": true,
       "strings": {

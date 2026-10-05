@@ -213,7 +213,21 @@ cmake --build out/build/linux-arm64
 file out/build/linux-arm64/bin/phonecast-receiver
 ```
 
-The result should identify as an AArch64 ELF. Deploy the executable and adjacent manifest with Steam Linux Runtime 3.0 ARM64 (Sniper). See `docs/steam-frame.md` for established Steam Frame deployment findings.
+The result should identify as an AArch64 ELF. Sprint 11 also builds the native streaming receiver:
+
+```bash
+file out/build/linux-arm64/bin/phonecast-vr-stream-receiver
+```
+
+Deploy `phonecast-vr-stream-receiver` and its adjacent manifest/input JSON files with Steam Linux Runtime 3.0 ARM64 (Sniper), preserve the executable bit, and launch it on Steam Frame with:
+
+```bash
+./phonecast-vr-stream-receiver --pair-code 123456
+```
+
+The native receiver automatically searches `/dev/video0` through `/dev/video63` for a stateful streaming H.264 V4L2 M2M decoder. Use `--video-device /dev/videoN` to select one explicitly and `--performance-log PATH` for the same one-second receiver/OpenVR CSV diagnostics used by the Windows path. Settings default to the XDG configuration directory. `SIGINT` and `SIGTERM` request clean shutdown.
+
+This cross-build validates compilation only. Qualcomm/iris V4L2 decoding, visible output, and the Vulkan `SetOverlayTexture` renderer are physically established on Steam Frame. Linux converts decoded NV12 to CPU RGBA, uploads through a persistently mapped Vulkan staging buffer, and submits reusable double-buffered images. The Vulkan loader is opened at runtime from `libvulkan.so.1`, so no cross-build Vulkan development package is required. The measured local-game run was project-owner approved as smooth and flicker-free with stable memory; orientation changes, clean shutdown, longer lifecycle cases, and actual standalone-VR-scene coexistence remain pending. Do not describe dma-buf/zero-copy sharing as implemented. See `platform/steam-frame-arm64/README.md` and `docs/steam-frame.md`.
 
 ## Android sender
 
