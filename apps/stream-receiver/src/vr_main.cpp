@@ -274,6 +274,13 @@ int main(int argc, char** argv) {
     } else if (settingsFound) {
         std::cout << "Loaded overlay placement from " << settingsPath.string() << ".\n";
     }
+#ifndef _WIN32
+    if (!diagnosticVisible && !settingsFound) {
+        // The physically preferred Steam Frame default is intentionally smaller
+        // than the PC-hosted panel. Existing persisted choices remain untouched.
+        initialSettings.widthMeters = 0.20F;
+    }
+#endif
     phonecast::vr::OverlayController controls;
     controls.ReplaceSettings(initialSettings);
     phonecast::vr::GlanceController glance(initialSettings.glancePreviewScale);

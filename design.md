@@ -1387,10 +1387,12 @@ Reduce initial appearance delay where measurements show avoidable receiver, deco
 - `[x]` Native streaming receiver manifest and ARM64 packaging target
 - `[x]` Windows x64 build and all automated tests remain passing
 - `[x]` Linux ARM64 cross-build produces an AArch64 `phonecast-vr-stream-receiver`
-- `[ ]` Deploy the streaming receiver to Steam Frame and confirm the Qualcomm/iris V4L2 device and negotiated capture format
-- `[ ]` Physically validate Android video, dashboard, placement, interaction, notifications, reconnect, and lifecycle on Steam Frame
+- `[x]` Deployed the streaming receiver to Steam Frame and confirmed Qualcomm `iris_driver`, `/dev/video-dec0`, H.264 input, and NV12 capture
+- `[x]` Native Android video is visible and sustains approximately 30 received/decoded/rendered FPS in steady periods; the user reported functional controls
+- `[~]` Dashboard, placement, and interaction are operational in initial use; detailed notifications, reconnect, sleep/wake, and lifecycle cases remain to be exercised
+- `[x]` Native first-use width changed to the physically preferred 0.20 m without overwriting persisted settings
 - `[ ]` Validate coexistence over a standalone VR scene application, including both launch orders
-- `[!]` Linux currently converts decoded NV12 to CPU RGBA and submits with `SetOverlayRaw`; dma-buf/GPU texture sharing remains dependent on hardware validation and performance evidence
+- `[!]` Repeated Linux `SetOverlayRaw` updates visibly flicker, grow working-set memory, and eventually fail with `VROverlayError_RequestFailed`; a reusable native GPU texture path is required
 
 ## Objective
 
