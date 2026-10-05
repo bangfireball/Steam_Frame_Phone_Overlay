@@ -4,6 +4,16 @@ target_link_libraries(phonecast-tests PRIVATE phonecast-receiver-lib)
 phonecast_enable_warnings(phonecast-tests)
 add_test(NAME phonecast-unit-tests COMMAND phonecast-tests)
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET phonecast-steam-frame)
+    add_executable(phonecast-standalone-runtime-tests standalone_runtime_tests.cpp)
+    target_link_libraries(phonecast-standalone-runtime-tests PRIVATE phonecast-steam-frame)
+    phonecast_enable_warnings(phonecast-standalone-runtime-tests)
+    if(NOT CMAKE_CROSSCOMPILING)
+        add_test(NAME phonecast-standalone-runtime-tests
+            COMMAND phonecast-standalone-runtime-tests)
+    endif()
+endif()
+
 if(WIN32 AND TARGET phonecast-windows-streaming)
     add_executable(phonecast-mf-decoder-tests mf_decoder_tests.cpp)
     target_link_libraries(phonecast-mf-decoder-tests PRIVATE phonecast-windows-streaming)

@@ -58,7 +58,7 @@ constexpr std::uint32_t kDashboardTextureHeight = 512;
 constexpr std::uint32_t kDashboardThumbnailSize = 256;
 constexpr std::uint32_t kGrabHandleHeightPixels = 48;
 constexpr int kDashboardColumns = 3;
-constexpr int kDashboardRows = 3;
+constexpr int kDashboardRows = 4;
 // The dashboard is the approved in-headset entry point. Keep the earlier pose,
 // thumbstick-menu, and overlay-global input experiments dormant until product
 // direction changes. An active overlay-global set can suppress game bindings
@@ -76,8 +76,9 @@ constexpr std::array<phonecast::vr::RadialMenuAction, 8> kMenuActions{
     phonecast::vr::RadialMenuAction::WorldLocked,
     phonecast::vr::RadialMenuAction::LeftControllerLocked,
     phonecast::vr::RadialMenuAction::RightControllerLocked};
-constexpr std::array<const char*, 9> kDashboardLabels{
-    "SHOW", "GLANCE", "PIN", "SETTINGS", "HEAD", "WORLD", "LEFT DOCK", "RIGHT DOCK", "BACK"};
+constexpr std::array<const char*, 12> kDashboardLabels{
+    "SHOW", "GLANCE", "PIN", "SETTINGS", "HEAD", "WORLD",
+    "LEFT DOCK", "RIGHT DOCK", "BACK", "QUIT", "", ""};
 
 bool IsQuitEvent(std::uint32_t type) {
     // VREvent_ProcessQuit reports that some VR process exited; it is not a request
@@ -583,7 +584,8 @@ void AddGrabHandle(const phonecast::core::VideoFrame& frame,
 std::vector<std::uint8_t> MakeDashboardTexture(bool currentlyVisible,
                                                 bool remoteStatusKnown,
                                                 bool remoteAppEnabled,
-                                                bool remoteAccessibilityEnabled) {
+                                                bool remoteAccessibilityEnabled,
+                                                const std::string& pairingCode) {
     constexpr std::array<std::uint8_t, 4> background{8, 14, 24, 255};
     constexpr std::array<std::uint8_t, 4> header{15, 31, 50, 255};
     constexpr std::array<std::uint8_t, 4> cell{25, 52, 78, 255};
@@ -611,7 +613,8 @@ std::vector<std::uint8_t> MakeDashboardTexture(bool currentlyVisible,
     DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
                    currentlyVisible ? "PHONE VISIBLE" : "PHONE HIDDEN",
                    760, 38, 3, accent);
-    std::string remoteStatus = "CONTROL STATUS PENDING";
+    std::string remoteStatus = pairingCode.empty()
+        ? "CONTROL STATUS PENDING" : "PAIR " + pairingCode;
     if (remoteStatusKnown) {
         if (remoteAppEnabled && remoteAccessibilityEnabled)
             remoteStatus = "REMOTE CONTROL READY";
@@ -773,7 +776,8 @@ public:
     void RenderDashboard() {
         if (dashboardOverlay == vr::k_ulOverlayHandleInvalid) return;
         auto image = MakeDashboardTexture(desiredVisible, remoteStatusKnown,
-                                           remoteAppEnabled, remoteAccessibilityEnabled);
+                                           remoteAppEnabled, remoteAccessibilityEnabled,
+                                           pairingCode);
         const auto result = overlayApi->SetOverlayRaw(
             dashboardOverlay, image.data(), kDashboardTextureWidth, kDashboardTextureHeight, 4);
         if (result != vr::VROverlayError_None)
@@ -841,7 +845,8 @@ public:
         const auto panelResult = overlayApi->SetOverlayRaw(
             dashboardOverlay,
             MakeDashboardTexture(desiredVisible, remoteStatusKnown,
-                                 remoteAppEnabled, remoteAccessibilityEnabled).data(),
+                                 remoteAppEnabled, remoteAccessibilityEnabled,
+                                 pairingCode).data(),
             kDashboardTextureWidth, kDashboardTextureHeight, 4);
         const auto thumbnailResult = overlayApi->SetOverlayRaw(
             dashboardThumbnail, thumbnail.data(),
@@ -859,11 +864,41 @@ public:
                    "PhoneCast dashboard tab and launcher icon created.");
     }
 
+    void EnsureDashboardHealthy() {
+        if (overlayApi == nullptr) return;
+        const auto now = std::chrono::steady_clock::now();
+        if (now - lastDashboardHealthCheck < std::chrono::seconds(2)) return;
+        lastDashboardHealthCheck = now;
+        bool healthy = false;
+        if (dashboardOverlay != vr::k_ulOverlayHandleInvalid) {
+            std::array<char, 256> key{};
+            vr::EVROverlayError keyError = vr::VROverlayError_None;
+            overlayApi->GetOverlayKey(dashboardOverlay, key.data(),
+                                      static_cast<std::uint32_t>(key.size()), &keyError);
+            healthy = keyError == vr::VROverlayError_None &&
+                      std::string(key.data()) == kDashboardOverlayKey;
+        }
+        if (healthy) return;
+        logger.Log(core::LogLevel::Warning, "openvr-dashboard",
+                   "Dashboard handle was lost; recreating the PhoneCast tab.");
+        if (dashboardThumbnail != vr::k_ulOverlayHandleInvalid)
+            overlayApi->DestroyOverlay(dashboardThumbnail);
+        dashboardOverlay = vr::k_ulOverlayHandleInvalid;
+        dashboardThumbnail = vr::k_ulOverlayHandleInvalid;
+        InitializeDashboard();
+    }
+
     void QueueDashboardCell(int cell) {
         if (cell == 8) {
             pendingPointerEvents.push_back(interaction.Back());
             logger.Log(core::LogLevel::Info, "openvr-dashboard",
                        "Android Back requested from the dashboard.");
+            return;
+        }
+        if (cell == 9) {
+            quitRequested = true;
+            logger.Log(core::LogLevel::Info, "openvr-dashboard",
+                       "Intentional receiver shutdown requested from the dashboard.");
             return;
         }
         if (cell < 0 || cell >= static_cast<int>(kMenuActions.size())) return;
@@ -1720,6 +1755,7 @@ public:
     std::uint64_t currentNotificationActionToken{};
     std::uint64_t pendingNotificationActionToken{};
     bool hideRequested{false};
+    bool quitRequested{false};
     bool settingsMenuLeft{true};
     phonecast::vr::SettingsMenuView settingsMenuView{};
     int settingsLaserTargetRow{-1};
@@ -1746,6 +1782,8 @@ public:
     bool remoteStatusKnown{false};
     bool remoteAppEnabled{false};
     bool remoteAccessibilityEnabled{false};
+    std::string pairingCode;
+    std::chrono::steady_clock::time_point lastDashboardHealthCheck{};
     bool hasFrame{false};
     phonecast::vr::OverlaySettings currentSettings{};
     phonecast::vr::OverlaySettings pendingSettings{};
@@ -2015,6 +2053,7 @@ bool OpenVrOverlayRenderer::SetVisible(bool visible, std::string& error) {
 
 bool OpenVrOverlayRenderer::PumpEvents() {
     if (impl_->overlayApi == nullptr || impl_->system == nullptr) return false;
+    impl_->EnsureDashboardHealthy();
     impl_->UpdateControllerPlacement();
     impl_->PollControllerCalibration();
     vr::VREvent_t event{};
@@ -2248,6 +2287,28 @@ void OpenVrOverlayRenderer::SetRemoteControlStatus(bool known, bool appEnabled,
     if (changed) impl_->RenderDashboard();
 }
 
+void OpenVrOverlayRenderer::SetPairingCode(const std::string& pairCode) {
+    impl_->pairingCode = pairCode;
+    impl_->RenderDashboard();
+}
+
+bool OpenVrOverlayRenderer::FocusDashboard(std::string& error) {
+    if (impl_->overlayApi == nullptr) {
+        error = "OpenVR is not running; the PhoneCast dashboard cannot be focused.";
+        return false;
+    }
+    impl_->EnsureDashboardHealthy();
+    if (impl_->dashboardOverlay == vr::k_ulOverlayHandleInvalid) {
+        error = "The PhoneCast dashboard overlay is unavailable.";
+        return false;
+    }
+    impl_->overlayApi->ShowDashboard(kDashboardOverlayKey);
+    impl_->logger.Log(core::LogLevel::Info, "openvr-dashboard",
+                      "Opened the SteamVR dashboard with PhoneCast selected.");
+    error.clear();
+    return true;
+}
+
 bool OpenVrOverlayRenderer::TakePointerEvent(core::PointerEvent& event) {
     if (impl_->pendingPointerEvents.empty()) return false;
     event = impl_->pendingPointerEvents.front();
@@ -2305,6 +2366,12 @@ bool OpenVrOverlayRenderer::TakeNotificationOpenRequest(std::uint64_t& actionTok
 bool OpenVrOverlayRenderer::TakeHideRequest() {
     if (!impl_->hideRequested) return false;
     impl_->hideRequested = false;
+    return true;
+}
+
+bool OpenVrOverlayRenderer::TakeQuitRequest() {
+    if (!impl_->quitRequested) return false;
+    impl_->quitRequested = false;
     return true;
 }
 
@@ -2372,6 +2439,8 @@ void OpenVrOverlayRenderer::Stop() noexcept {
     impl_->remoteStatusKnown = false;
     impl_->remoteAppEnabled = false;
     impl_->remoteAccessibilityEnabled = false;
+    impl_->pairingCode.clear();
+    impl_->lastDashboardHealthCheck = {};
     impl_->hasFrame = false;
     impl_->hasPendingSettings = false;
     impl_->hasPendingGlanceInput = false;
@@ -2388,6 +2457,7 @@ void OpenVrOverlayRenderer::Stop() noexcept {
     impl_->currentNotificationActionToken = 0;
     impl_->pendingNotificationActionToken = 0;
     impl_->hideRequested = false;
+    impl_->quitRequested = false;
     impl_->settingsAxisLatched = false;
     impl_->settingsLaserTargetRow = -1;
     impl_->radialMenuVisible = false;

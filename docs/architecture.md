@@ -164,6 +164,26 @@ The native OpenVR backend loads `libvulkan.so.1` at runtime, enables the instanc
 
 The V4L2 decode path and Vulkan renderer are physically established on Steam Frame. A measured local-game run sustained approximately 30 FPS with stable memory and no texture-submission or OpenVR frame-drop errors, and the project owner approved the result as smooth and flicker-free. Orientation-driven texture recreation, clean shutdown, longer lifecycle cases, and actual standalone-VR-scene coexistence remain separate physical checks. A future dma-buf/zero-copy path still belongs in the platform renderer/decoder boundary and is optional unless later measurements justify it.
 
+## Sprint 12 standalone launch baseline
+
+Steam Frame packaging remains in the platform boundary. A user-level desktop
+entry launches an absolute-path shell wrapper, which first verifies that the VR
+runtime is already running and then starts the native composition root. The
+wrapper does not start SteamVR. Linux-only `StandaloneRuntime` owns a per-user
+file lock and private Unix-domain command socket; a second launch sends a
+bounded focus command and exits before creating a decoder, TCP listener, or
+OpenVR client.
+
+The resident composition root translates that command into the concrete OpenVR
+renderer's `ShowDashboard` operation. Dashboard handles remain OpenVR-private;
+the backend periodically validates its main handle and recreates the dashboard
+pair if SteamVR discarded it. Pairing-code persistence is also Linux-platform
+state and feeds only the existing protocol gate and local dashboard display. No
+socket, filesystem-permission, desktop-entry, or OpenVR launcher type enters
+Core or the portable VR models.
+
+See `docs/standalone-ux.md` for packaging and validation boundaries.
+
 ## Deferred work
 
 Encrypted pairing, automatic discovery, extended ergonomic tuning of controller-placement defaults, physical standalone native-overlay validation, native decoder-to-GPU surface sharing, and process-attributed GPU utilization remain deferred. The custom TCP transport is subject to head-of-line blocking and must be measured on real Wi-Fi before it is treated as a long-term choice.

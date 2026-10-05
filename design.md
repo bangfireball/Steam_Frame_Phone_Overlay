@@ -1537,7 +1537,40 @@ The PC should no longer be involved.
 
 # Sprint 12 — Standalone UX
 
+**Status:** `[~] In progress` — manual launcher, single-instance IPC, dashboard recovery, persistent pairing credential, and native packaging implemented; physical Steam Frame validation pending
+
+- `[x]` SteamOS desktop-entry installer with absolute launch path and 48/128/256 pixel icons
+- `[x]` ARM64 manifest/input packaging and executable-bit-preserving install path
+- `[x]` Per-user single-instance lock and owner-only local focus IPC
+- `[x]` Second launch opens/focuses the resident PhoneCast dashboard
+- `[x]` Dashboard-handle health check and recreation while the OpenVR runtime remains available
+- `[x]` Owner-only persistent six-digit pairing credential with in-dashboard display
+- `[x]` Manual LAN-address fallback and existing Android reconnect behavior retained
+- `[x]` Launcher refuses to start SteamVR when the runtime is intentionally stopped
+- `[x]` Uninstall path preserves user settings/pairing unless explicitly removed
+- `[x]` Windows build/tests, Linux ARM64 cross-build, and ARM64 portable/runtime tests
+- `[ ]` Physical dashboard `+` discovery, first launch, and second-launch focus validation
+- `[ ]` Physical rotation, clean shutdown, reconnect, notification, sleep/wake, crash, and SteamVR restart matrix
+- `[ ]` Physical standalone VR-scene coexistence in both launch orders
+- `[ ]` Optional autostart control, only after the manual launcher is physically approved
+- `[ ]` Automatic LAN discovery and cryptographic device identity/revocation
+
 Once standalone operation works, optimize PhoneCast specifically for Steam Frame.
+
+## Approved launch model
+
+PhoneCast should be installed as a user-launchable application in the SteamVR dashboard's **`+` app launcher**. Automatic startup must not be required for normal v0.1 use.
+
+Primary behavior:
+
+1. The user opens the SteamVR dashboard and selects **`+`**.
+2. The user selects PhoneCast.
+3. If PhoneCast is not running, the launcher starts the native receiver.
+4. If PhoneCast is already running, the launch request signals the existing process and opens or focuses its dashboard instead of creating a duplicate receiver.
+5. The user connects or reconnects the trusted phone and uses Show, Glance, Pin, Settings, and placement controls normally.
+6. Closing or hiding the PhoneCast UI must not stop the receiver unless the user explicitly chooses Quit.
+
+Autostart may be offered as an explicit opt-in setting after the manual launcher is reliable. It must default off, remain independently reversible, and must not be necessary to recover PhoneCast.
 
 Desired experience:
 
@@ -1546,59 +1579,78 @@ Put on Frame
 
        ↓
 
-Phone automatically discovered
-
-       ↓
-
-PhoneCast connects
-
-       ↓
-
-Launch VR game
-
-       ↓
-
-Play normally
-
-       ↓
-
 Open SteamVR dashboard
 
        ↓
 
-Select PhoneCast Show / Glance / Pin
+Press + and select PhoneCast
 
        ↓
 
-Phone appears
+PhoneCast starts or focuses its existing instance
 
        ↓
 
-Interact
+Trusted phone reconnects
 
        ↓
 
-Dismiss
+Launch VR game and play normally
+
+       ↓
+
+Open PhoneCast dashboard
+
+       ↓
+
+Select Show / Glance / Pin
+
+       ↓
+
+View, interact, and dismiss
 
        ↓
 
 Continue playing
 ```
 
-The user should not need to manually manage a server every session.
+The user should not need to launch a receiver from SSH, a terminal, or a development computer during ordinary use.
 
-Investigate:
+## Implementation scope
 
-- automatic discovery;
-- trusted-device pairing;
-- reconnect;
-- startup behavior;
-- background operation;
-- Steam Frame application lifecycle;
-- OpenVR overlay autostart using `SetApplicationAutoLaunch`, verifying `GetApplicationAutoLaunch`, and starting a registered process with `LaunchDashboardOverlay` where appropriate;
-- executable-bit and manifest-path validation in native packaging.
+Investigate and implement:
 
-A third-party native Steam Frame utility demonstrates this autostart pattern, but PhoneCast must validate it with its own dashboard, networking, sleep/wake, and application transitions. Optional dashboard-closed hotkeys are not required for standalone UX.
+- native application registration and visibility in the dashboard `+` launcher;
+- a SteamOS `.desktop` launcher using an absolute executable path and suitable 48, 128, and 256 pixel icons;
+- correct ARM64 application manifest and executable-bit packaging;
+- a single-instance lock;
+- a small local signal/IPC path so a second launch focuses or opens the resident PhoneCast dashboard;
+- `LaunchDashboardOverlay` and `ShowDashboard` behavior where appropriate;
+- dashboard-handle health checking and recreation if SteamVR drops the dashboard overlay while the receiver remains alive;
+- trusted-device pairing and credential persistence;
+- automatic discovery where reliable, with a manual LAN-address fallback;
+- reconnect after network interruption;
+- SteamVR restart, dashboard restart, headset sleep/wake, game switching, receiver crash, and intentional-quit behavior;
+- clear logs and an uninstall/disable path;
+- optional autostart using `SetApplicationAutoLaunch`/`GetApplicationAutoLaunch` or a user-level service only after the manual launch flow passes physical testing.
+
+Do not use undocumented SteamVR UI injection. The launcher should use supported application registration and desktop-entry behavior. A third-party native Steam Frame utility demonstrates the dashboard `+`, single-instance, and optional service patterns, but PhoneCast must validate them with its own dashboard, networking, sleep/wake, and application transitions.
+
+## Acceptance Criteria
+
+- A normal user can install PhoneCast and find it through the SteamVR dashboard `+` launcher.
+- Selecting PhoneCast starts the native receiver without SSH or a terminal.
+- Selecting PhoneCast again while it is running does not create a second receiver and instead opens or focuses PhoneCast.
+- The dashboard icon and controls recover if SteamVR recreates or loses the dashboard overlay.
+- Manual address entry remains available if discovery fails.
+- A trusted phone reconnects without repeating first-time pairing during ordinary restarts.
+- SteamVR restart, headset sleep/wake, game switching, network loss, receiver crash, and intentional Quit have documented and physically tested outcomes.
+- Optional autostart defaults off and can be enabled and disabled from a supported PhoneCast control.
+- Launching PhoneCast does not start SteamVR unexpectedly when the runtime is intentionally stopped.
+- Packaging preserves executable permissions, absolute paths, manifests, icons, and user data across an update.
+- The launch flow is physically validated both before and during a standalone VR scene.
+
+Optional dashboard-closed hotkeys are not required for Sprint 12 standalone UX.
 
 ---
 

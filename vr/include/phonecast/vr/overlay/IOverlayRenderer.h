@@ -155,6 +155,9 @@ public:
         (void)appEnabled;
         (void)accessibilityEnabled;
     }
+    // Supplies the receiver's persisted first-use credential for local
+    // in-headset display. Renderers must not write it to logs.
+    virtual void SetPairingCode(const std::string& pairCode) { (void)pairCode; }
     // Reports normalized phone interaction without exposing renderer-specific coordinates.
     virtual bool TakePointerEvent(core::PointerEvent& event) {
         (void)event;
@@ -177,6 +180,8 @@ public:
     }
     // Reports the phone footer's local close action without sending it to Android.
     virtual bool TakeHideRequest() { return false; }
+    // Reports an explicit dashboard Quit selection. Hiding UI does not quit.
+    virtual bool TakeQuitRequest() { return false; }
     // Samples scene/compositor timing where the active VR backend exposes it.
     // These values describe the VR compositor's latest frame, not PhoneCast's
     // own D3D upload in isolation.
