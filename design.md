@@ -1378,6 +1378,20 @@ Reduce initial appearance delay where measurements show avoidable receiver, deco
 
 # Sprint 11 — Steam Frame Native Backend
 
+**Status:** `[~] Native implementation complete for review — cross-build passes; Steam Frame deployment and physical validation pending`
+
+- `[x]` Shared paired TCP server moved out of the Windows platform boundary and built for Linux ARM64
+- `[x]` Native stateful V4L2 M2M H.264 decoder with automatic device discovery and explicit device override
+- `[x]` Native NV12/NV12M-to-RGBA frame path connected to the existing OpenVR overlay, dashboard, interaction, settings, and notification application
+- `[x]` Linux signal shutdown, XDG settings persistence, and process CPU/memory diagnostics
+- `[x]` Native streaming receiver manifest and ARM64 packaging target
+- `[x]` Windows x64 build and all automated tests remain passing
+- `[x]` Linux ARM64 cross-build produces an AArch64 `phonecast-vr-stream-receiver`
+- `[ ]` Deploy the streaming receiver to Steam Frame and confirm the Qualcomm/iris V4L2 device and negotiated capture format
+- `[ ]` Physically validate Android video, dashboard, placement, interaction, notifications, reconnect, and lifecycle on Steam Frame
+- `[ ]` Validate coexistence over a standalone VR scene application, including both launch orders
+- `[!]` Linux currently converts decoded NV12 to CPU RGBA and submits with `SetOverlayRaw`; dma-buf/GPU texture sharing remains dependent on hardware validation and performance evidence
+
 ## Objective
 
 Remove the PC.
@@ -1890,7 +1904,8 @@ MSYS_NO_PATHCONV=1 docker run --rm \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/linux-arm64-gcc.cmake &&
     cmake --build out/build/linux-arm64-validation &&
-    file out/build/linux-arm64-validation/bin/phonecast-receiver
+    file out/build/linux-arm64-validation/bin/phonecast-receiver &&
+    file out/build/linux-arm64-validation/bin/phonecast-vr-stream-receiver
   '
 ```
 

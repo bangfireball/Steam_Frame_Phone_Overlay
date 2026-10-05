@@ -213,7 +213,21 @@ cmake --build out/build/linux-arm64
 file out/build/linux-arm64/bin/phonecast-receiver
 ```
 
-The result should identify as an AArch64 ELF. Deploy the executable and adjacent manifest with Steam Linux Runtime 3.0 ARM64 (Sniper). See `docs/steam-frame.md` for established Steam Frame deployment findings.
+The result should identify as an AArch64 ELF. Sprint 11 also builds the native streaming receiver:
+
+```bash
+file out/build/linux-arm64/bin/phonecast-vr-stream-receiver
+```
+
+Deploy `phonecast-vr-stream-receiver` and its adjacent manifest/input JSON files with Steam Linux Runtime 3.0 ARM64 (Sniper), preserve the executable bit, and launch it on Steam Frame with:
+
+```bash
+./phonecast-vr-stream-receiver --pair-code 123456
+```
+
+The native receiver automatically searches `/dev/video0` through `/dev/video63` for a stateful streaming H.264 V4L2 M2M decoder. Use `--video-device /dev/videoN` to select one explicitly and `--performance-log PATH` for the same one-second receiver/OpenVR CSV diagnostics used by the Windows path. Settings default to the XDG configuration directory. `SIGINT` and `SIGTERM` request clean shutdown.
+
+This cross-build validates compilation only. Steam Frame deployment must still confirm the Qualcomm/iris device, NV12/NV12M negotiation, video output, lifecycle, dashboard/input behavior, and standalone-VR-scene coexistence. Linux currently converts decoded NV12 to CPU RGBA and uses `SetOverlayRaw`; do not describe dma-buf/GPU texture sharing or flicker-free streaming as complete. See `platform/steam-frame-arm64/README.md` and `docs/steam-frame.md`.
 
 ## Android sender
 

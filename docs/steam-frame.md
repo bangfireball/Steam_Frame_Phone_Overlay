@@ -294,6 +294,14 @@ Use when a required environment, particularly Steam Frame hardware/runtime acces
 
 ---
 
+## Sprint 11 native receiver implementation
+
+The review branch now builds the complete `phonecast-vr-stream-receiver` for Linux ARM64. The transport was moved from the Windows platform directory to a shared WinSock/POSIX implementation without moving socket details into Core. Linux selects a stateful V4L2 H.264 M2M decoder, handles source-change capture setup, negotiates linear NV12/NV12M, converts visible pixels to RGBA, and feeds the existing OpenVR renderer. The same application retains dashboard controls, placement, remote input, notification cards/actions, settings, and CSV/OpenVR diagnostics.
+
+A clean Debian 12 AArch64 cross-build produced an `ELF 64-bit ... ARM aarch64` streaming receiver. This is build evidence only. It does not establish that Steam Frame exposes a compatible `/dev/videoN`, that the Qualcomm/iris driver accepts this queue sequence, that `SetOverlayRaw` is acceptable at video cadence, or that the overlay coexists with a native VR scene.
+
+Public Valve documentation identifies Linux ARM64 as a supported target but does not document an application-facing hardware decoder API. The implementation therefore treats stateful V4L2 as a tested-on-hardware hypothesis, exposes `--video-device`, and reports device/negotiation failures rather than silently falling back to CPU decode. Record the selected node, driver, formats, timing, and errors during deployment. GPU/dma-buf compositor sharing remains unknown and is not claimed complete.
+
 ## Current conclusion
 
 Native Linux ARM64 OpenVR overlays are no longer merely theoretical: Hello Frame successfully initialized, created a regular overlay, loaded its generated image, registered a stable application manifest, and remained visibly head-locked while the user played a locally running 2D game on Steam Frame.

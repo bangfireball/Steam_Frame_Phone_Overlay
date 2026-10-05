@@ -145,6 +145,22 @@ The Windows VR receiver can write one-second CSV samples without adding Windows 
 
 Android capture profiles remain entirely sender-side. Battery Saver, Standard, and Quality select encoder dimensions, FPS, and bitrate bounds before MediaCodec configuration; no Windows or OpenVR type enters that model. Standard preserves the accepted 1280/30 baseline, while the other values remain subject to physical measurement.
 
+## Sprint 11 native Steam Frame path
+
+```text
+Android MediaProjection → MediaCodec AVC → framed TCP
+    → shared TcpVideoServer → Linux stateful V4L2 H.264 M2M decoder
+    → NV12/NV12M → CPU RGBA → native OpenVR SetOverlayRaw
+```
+
+`TcpVideoServer` now lives under `platform/network` and supplies WinSock or POSIX socket mechanics behind the same receiver-facing API. Protocol parsing, bounded queue/keyframe recovery, remote input, notification actions, and Android gate status remain shared. This removes the former accidental dependency between transport behavior and `platform/windows-x64`.
+
+The Linux ARM64 composition root is the same `phonecast-vr-stream-receiver` application used on Windows. CMake selects Media Foundation/D3D11/process sampling on Windows and the Steam Frame V4L2/procfs implementation on Linux. The native application therefore reuses the existing OpenVR dashboard, placement, interaction, notification, persistence, and performance models instead of creating a reduced parallel receiver. Linux uses XDG settings paths and signal-driven shutdown.
+
+`V4l2H264Decoder` discovers a streaming multi-planar H.264 M2M device or accepts an explicit `/dev/videoN`. It uses the stateful decoder source-change lifecycle, MMAP input/capture queues, and linear NV12/NV12M capture. The initial implementation converts into the existing portable `VideoFrame` because that enables full native behavior without introducing an unvalidated graphics interop handle into Core.
+
+This is a review-ready implementation, not physical completion. The selected Qualcomm/iris node, capture format, compositor behavior, and native VR-scene coexistence must be established on Steam Frame. Linux still uses repeated raw compositor upload; a future dma-buf/GPU path belongs in the platform renderer/decoder boundary only after on-device evidence identifies a supported synchronization/import route.
+
 ## Deferred work
 
-Encrypted pairing, automatic discovery, extended ergonomic tuning of controller-placement defaults, standalone native-overlay validation, native decoder-to-GPU surface sharing, and process-attributed GPU utilization remain deferred. The custom TCP transport is subject to head-of-line blocking and must be measured on real Wi-Fi before it is treated as a long-term choice.
+Encrypted pairing, automatic discovery, extended ergonomic tuning of controller-placement defaults, physical standalone native-overlay validation, native decoder-to-GPU surface sharing, and process-attributed GPU utilization remain deferred. The custom TCP transport is subject to head-of-line blocking and must be measured on real Wi-Fi before it is treated as a long-term choice.

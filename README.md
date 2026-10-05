@@ -13,8 +13,21 @@ Moving to another development machine or starting a fresh Pi agent? Follow [`doc
 - `[x]` Sprints 7–8 are complete and physically approved for the PC-hosted path: gestures, scrolling, Back controls, placement handle, rotation, reconnect, opt-out, and running-game input coexistence are validated
 - `[x]` Sprint 9 is complete for the PC-hosted path: notification cards, revised placement, dashboard-open/closed visibility, and open-phone selection are physically approved; native ARM64 remains Sprint 11 work
 - `[x]` Sprint 10 is complete: Standard-profile startup, sustained streaming, resources, and OpenVR frametime were physically measured and owner-approved; alternate-profile and external-camera latency evidence remains deferred
-- `[!]` Native coexistence over a standalone VR scene and the Steam Frame decoder/rendering backend remain future validation and Sprint 11 work
+- `[~]` Sprint 11 native receiver implementation is ready for review: shared Linux TCP transport, stateful V4L2 H.264 decode, ARM64 build, OpenVR integration, and native diagnostics compile successfully
+- `[!]` Steam Frame deployment, Qualcomm/iris decoder negotiation, native streaming behavior, and coexistence over a standalone VR scene still require physical validation
 - `[!]` The current LAN transport is paired but not encrypted
+
+## Sprint 11 native Steam Frame receiver
+
+The ARM64 build now includes the full streaming receiver rather than only the generated test source. It reuses the portable protocol, placement, dashboard, interaction, settings, and notification models; listens directly on Steam Frame; decodes H.264 through a stateful V4L2 M2M device; converts NV12/NV12M to RGBA; and submits frames to the native OpenVR compositor.
+
+Cross-build with the documented Docker command in [`docs/development.md`](docs/development.md), deploy the contents of `out/build/linux-arm64-sprint11/bin`, then launch on Steam Frame:
+
+```bash
+./phonecast-vr-stream-receiver --pair-code 123456
+```
+
+Use `--video-device /dev/videoN` only when automatic H.264 decoder discovery chooses incorrectly. The implementation is compile-validated but not yet physically validated. Linux still uses `SetOverlayRaw`; direct dma-buf/GPU texture sharing remains a measured follow-up rather than a completed claim. See [`platform/steam-frame-arm64/README.md`](platform/steam-frame-arm64/README.md).
 
 ## Sprint 4 VR streaming validation
 

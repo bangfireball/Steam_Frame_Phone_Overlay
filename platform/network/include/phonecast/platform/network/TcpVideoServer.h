@@ -9,7 +9,7 @@
 #include <memory>
 #include <string>
 
-namespace phonecast::platform::windows {
+namespace phonecast::platform::network {
 
 struct VideoServerStats {
     std::uint64_t receivedFrames{};
@@ -46,4 +46,4 @@ private:
     std::unique_ptr<Implementation> implementation_;
 };
 
-}  // namespace phonecast::platform::windows
+}  // namespace phonecast::platform::network
