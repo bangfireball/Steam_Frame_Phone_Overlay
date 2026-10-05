@@ -1537,10 +1537,11 @@ The PC should no longer be involved.
 
 # Sprint 12 — Standalone UX
 
-**Status:** `[~] In progress` — manual launcher, single-instance IPC, dashboard recovery, persistent pairing credential, and native packaging implemented; physical Steam Frame validation pending
+**Status:** `[x] Complete for the owner-accepted standalone baseline` — installation, manual dashboard launch, pairing/reconnect, native streaming, and PhoneCast-first VR-game coexistence accepted after physical use and a healthy follow-up log review; extended lifecycle checks and known freeze recovery remain follow-up work
 
 - `[x]` SteamOS desktop-entry installer with absolute launch path and 48/128/256 pixel icons
 - `[x]` ARM64 manifest/input packaging and executable-bit-preserving install path
+- `[x]` Local download page provides copyable extraction/install commands and a short curl download-and-run bootstrap, with Linux/ARM64 and non-root checks, temporary-directory cleanup, and stop-on-failure behavior; automated page/route/shell and harmless bootstrap fixture checks pass, physical use of the improved flow remains pending
 - `[x]` Per-user single-instance lock and owner-only local focus IPC
 - `[x]` Second launch opens/focuses the resident PhoneCast dashboard
 - `[x]` Dashboard-handle health check and recreation while the OpenVR runtime remains available
@@ -1549,11 +1550,63 @@ The PC should no longer be involved.
 - `[x]` Launcher refuses to start SteamVR when the runtime is intentionally stopped
 - `[x]` Uninstall path preserves user settings/pairing unless explicitly removed
 - `[x]` Windows build/tests, Linux ARM64 cross-build, and ARM64 portable/runtime tests
-- `[ ]` Physical dashboard `+` discovery, first launch, and second-launch focus validation
-- `[ ]` Physical rotation, clean shutdown, reconnect, notification, sleep/wake, crash, and SteamVR restart matrix
-- `[ ]` Physical standalone VR-scene coexistence in both launch orders
+- `[x]` Physical dashboard `+` discovery, first launch, and duplicate-launch prevention approved
+- `[x]` Physical rotation, intentional dashboard Quit/relaunch, reconnect, notifications, and phone-lock/new-capture recovery approved
+- `[x]` Follow-up video playback session reported issue-free; log review found no new decoder-busy error or sustained receive-without-decode failure
+- `[ ]` Deferred physical second-launch focus, dashboard recreation, headset sleep/wake, crash, and SteamVR restart checks
+- `[x]` Physical PhoneCast-first coexistence over standalone Cubism; user approved normal gameplay and logs confirm an OpenXR VR scene with concurrent streaming
+- `[ ]` Physical game-first launch/focus validation over a standalone VR scene
 - `[ ]` Optional autostart control, only after the manual launcher is physically approved
 - `[ ]` Automatic LAN discovery and cryptographic device identity/revocation
+
+## Sprint 12 closure — 2026-10-05
+
+The project owner requested closure after another issue-free session including
+phone video playback, conditional on a healthy log review. Read-only SSH review
+found no new decoder-busy, Vulkan submission, or sustained receive-without-decode
+failure in approximately 1,000 newly appended one-second diagnostics samples.
+The 599 dynamic samples (receive FPS at least 20) averaged 29.57 received FPS,
+29.51 decoded FPS, 29.13 submitted FPS, 1.62% process CPU, and 105.54 MiB working
+set (dynamic range 104.53–106.09 MiB). Rotation recreated portrait/landscape
+textures, reconnect succeeded, and an intentional dashboard Quit at 19:41:04
+was followed by a new native receiver at 19:41:09.
+
+The latest overwritten CSV covers 169 seconds, including 167 connected samples.
+Its 164 dynamic samples averaged 29.94 received FPS, 29.90 decoded FPS, and
+29.27 submitted FPS. First submission was 88.47 ms; memory plateaued at
+105.19 MiB in the final minute. Four video drops and two resyncs were confined
+to startup and rotation samples, not sustained streaming. That CSV contains no
+OpenVR dropped/mispresented sample. In the broader appended log, four samples
+reported `vr-mispresented=1` with temporary higher submission cost, but no user
+issue or sustained decode stall; these snapshots are not an isolated game-impact
+benchmark or necessarily four distinct compositor failures.
+
+Closure accepts the implemented manual-launch baseline and observed behavior,
+not every original lifecycle criterion. Second-launch focus, dashboard
+recreation, game-first standalone launch, headset sleep/wake, receiver crash,
+SteamVR restart, and physical use of the new curl bootstrap remain explicitly
+unvalidated. Autostart, discovery, and cryptographic identity remain unimplemented
+follow-ups. The earlier two freeze incidents and logged V4L2 busy failure are
+not fixed or disproved by this successful session; retain decoder recovery as a
+focused reliability follow-up. The resize handle remains Sprint 14 work.
+
+Validation at closure: Windows incremental build succeeded and all 11 CTest
+tests passed; both local download-server/bootstrap tests passed. No receiver,
+SteamVR, or game was restarted by the agent. Raw logs remain ignored under
+`out/diagnostics/frame-feedback/`, with the prior snapshot retained separately.
+This documentation closure introduces no native receiver code change or new
+ARM64 cross-build claim.
+
+## Physical feedback and log review — 2026-10-05
+
+- The project owner reports that extraction required a terminal but installation worked; rerunning the installer caused no observed issue, PhoneCast appeared in the dashboard `+` app launcher, and a second launch did not duplicate the receiver. Explicit dashboard-focus behavior remains a separate check.
+- Rotation, shutdown, reconnect, notifications, and phone-lock followed by a new capture/reconnect worked in physical use. Phone lock is not headset sleep/wake; crash recovery and SteamVR restart remain unvalidated. The newer curl bootstrap remains to be physically tested.
+- The project owner reports that PhoneCast worked perfectly while playing standalone Cubism. Native SteamVR logs confirm PhoneCast started at approximately 19:15:46, followed by Cubism (AppID `804530`) becoming `VRApplication_OpenXRScene` at 19:16:47 and exiting at 19:21:07. This validates the PhoneCast-first launch order, not game-first launch.
+- Approximately 259 one-second CSV samples overlap the Cubism scene. All remained connected, with zero transport drops/resyncs and zero sampled OpenVR dropped/mispresented frames. The 258 samples with receive FPS at least 20 averaged 29.48 received FPS, 29.47 decoded FPS, 28.59 submitted FPS, 1.62% process CPU, 102.61 MiB working set, and 1.29 ms queue age. These are sampled diagnostics, not isolated game-impact or glass-to-glass measurements.
+- Usability feedback: lack of a directly grabbable screen-resize handle is frustrating. Add a bounded trigger-drag resize affordance in Sprint 14 rather than relying only on Settings scale controls.
+- Two distinct freeze incidents were reported: (1) during a download, remote commands still affected the phone while displayed video froze, then video resumed when the download ended; (2) later, while trying to buy something from Steam with no download running, video froze and the project owner restarted the connection/receiver to recover. The second report does not retract the first. Exact incident timing, download device/application, and which restart was sufficient remain to be clarified.
+- Log review found an earlier `Queueing H.264 access unit: Device or resource busy` error followed by 84 consecutive diagnostics samples with roughly 30 received FPS but zero decoded/submitted FPS. This establishes native decoder failure in that session; correlation to either reported incident remains pending, and the incidents must not be assumed to share a cause. The Cubism session contains no such error. Prioritize reproducing and adding bounded decoder-error recovery without requiring a manual receiver restart; retain concurrent-download testing as a separate reproduction case.
+- Logs were inspected over SSH without restarting PhoneCast, SteamVR, or the game. Raw local evidence is ignored under `out/diagnostics/frame-feedback/`; credentials were not printed or added to tracked files.
 
 ## Session Handoff Snapshot — 2026-10-05
 
@@ -1586,7 +1639,8 @@ Decisions at handoff:
 - keep any later DMA-BUF/shared-handle path behind the Steam Frame/OpenVR platform boundary with runtime capability checks and the Vulkan renderer as fallback;
 - keep standalone VR-scene coexistence in both launch orders explicitly unvalidated until PhoneCast itself is physically tested.
 
-Next work:
+Historical next work at this handoff (superseded by the closure decision above;
+unvalidated items remain follow-ups):
 
 1. Install the current Sprint 12 bundle on Steam Frame and validate dashboard `+` discovery, first launch, and second-launch focus.
 2. Exercise rotation, clean shutdown, reconnect, notifications, sleep/wake, crash recovery, and SteamVR restart.
@@ -1737,7 +1791,7 @@ Give every applicable PhoneCast panel a consistent control area below its conten
 The lower control area should expose context-appropriate actions such as:
 
 - move/position;
-- resize or scale;
+- resize or scale, including a directly grabbable screen-resize handle (project-owner feedback: Settings-only resizing is frustrating);
 - pin/unpin;
 - hide/close;
 - settings;
@@ -1785,6 +1839,13 @@ Repair and simplify optional controller shortcuts without restoring the old broa
 - Retain dashboard controls as the reliable recovery path.
 
 Candidate shortcuts include show/hide, glance, pin/unpin, and opening PhoneCast controls. Exact defaults must be chosen only after conflict testing against real games.
+
+### Future research — Framecorder dashboard-closed hotkeys
+
+- `[ ]` Review [`coah80/framecorder`](https://github.com/coah80/framecorder) for its native Steam Frame hotkey implementation, action manifests/bindings, priority, dashboard-focus handling, and game-input coexistence.
+- The project owner physically tested Framecorder and reports that its hotkey is available while the dashboard is closed. This is user-reported Framecorder evidence, not validation of PhoneCast shortcuts; Framecorder source has not yet been reviewed.
+- Compare its approach with the narrow overlay-global action set and binding-layer double/long presses documented in [`docs/frame-passthrough-shortcuts-research.md`](docs/frame-passthrough-shortcuts-research.md).
+- Keep this as Sprint 14 research, not a Sprint 12 dependency. Do not reactivate PhoneCast's dormant broad global action set; any resulting shortcut experiment must be opt-in, narrowly bound, and physically checked for game-input conflicts.
 
 ## UI consistency and feedback
 
@@ -2079,7 +2140,7 @@ Maintain these in `docs/steam-frame.md`.
 
 Can a native ARM64 Steam Frame application create a persistent overlay over another standalone VR application?
 
-**Current answer:** Native ARM64 overlay creation and visible coexistence with an on-device standalone 2D application are confirmed. Coexistence with a standalone VR scene application remains untested. See `docs/steam-frame.md`.
+**Current answer:** Native ARM64 overlay creation and visible coexistence with on-device standalone flat applications are confirmed. PhoneCast-first coexistence with standalone Cubism is now physically confirmed and corroborated by native OpenXR scene logs; the game-first launch order and broader lifecycle matrix remain pending. See `docs/steam-frame.md`.
 
 ### Additional Questions
 

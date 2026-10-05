@@ -19,9 +19,10 @@ Sprint: 0 — Hello Frame
 | Native overlay over a standalone VR game | `[~]` | Native mechanism is promising; a VR scene application test is still pending |
 | Overlay controller input during a game | `[ ]` | Not implemented or tested in Sprint 0 display prototype |
 
-The highest-priority question remains unresolved until tested on Steam Frame hardware:
-
-> Can a native Linux ARM64 process create an overlay that remains visible over another standalone Steam Frame VR application?
+The original Sprint 0 table above is historical. The production receiver now
+has physical and log-corroborated standalone VR-scene coexistence evidence from
+Cubism in the PhoneCast-first launch order (2026-10-05; see the follow-up below).
+The game-first launch order and broader lifecycle matrix remain pending.
 
 ## Terminology and evidence rules
 
@@ -340,9 +341,64 @@ The prior raw-upload renderer blocker is resolved for this measured run. Sprint 
 
 Native Linux ARM64 OpenVR overlays are no longer merely theoretical: Hello Frame successfully initialized, created a regular overlay, loaded its generated image, registered a stable application manifest, and remained visibly head-locked while the user played a locally running 2D game on Steam Frame.
 
-The project owner accepts this as a successful validation of the foundational native-overlay mechanism. Under the design document's stricter original criterion, coexistence with a standalone **VR scene application** remains the final untested case. The result is therefore recorded as **foundational success, with one VR-specific acceptance test pending**.
+The project owner accepts this as a successful validation of the foundational native-overlay mechanism. The production receiver subsequently passed a standalone **VR scene application** test with Cubism on 2026-10-05 in the PhoneCast-first launch order. The game-first launch order and broader lifecycle cases remain pending; see the follow-up below.
 
 ---
+
+## Production receiver standalone Cubism follow-up — 2026-10-05
+
+The project owner reports PhoneCast worked perfectly while playing standalone
+Cubism. Read-only SSH inspection of native SteamVR and receiver diagnostics
+corroborates a real VR scene, not another flat-game test:
+
+- PhoneCast's installed native receiver connected as `VRApplication_Overlay`
+  at 19:15:46, before the game.
+- Cubism (`steam.app.804530`) transitioned to `VRApplication_OpenXRScene`
+  at 19:16:47 and exited at 19:21:07 (approximately 260 seconds).
+- Approximately 259 CSV samples overlap that scene. All remained connected;
+  transport drops/resyncs and sampled OpenVR dropped/mispresented frames were
+  zero.
+- The 258 samples with receive FPS at least 20 averaged 29.48 receive FPS,
+  29.47 decode FPS, 28.59 submitted FPS, 1.62% process CPU, 102.61 MiB working
+  set, and 1.29 ms queue age. CSV elapsed times were approximately aligned to
+  the receiver's SteamVR connection timestamp, not an absolute CSV clock.
+- No decoder busy error was present in this receiver session. SteamVR emitted
+  Cubism action-manifest lookup errors before loading its OpenXR bindings;
+  the user reported no gameplay defect. These are not PhoneCast decoder errors.
+
+**Result:** standalone VR-scene coexistence is physically confirmed for
+PhoneCast-first launch with Cubism. Do not generalize this to the game-first
+launch order, every game, or headset sleep/wake and SteamVR restart.
+
+### Separate video-freeze investigation
+
+The user clarified that there were two distinct incidents, not a retraction:
+
+1. During a download, phone video froze while remote commands still affected
+   the phone; video resumed when the download ended.
+2. Later, while trying to buy something from Steam with no download running,
+   video froze and the user restarted the connection/receiver to recover.
+
+Precise incident timing, the download device/application, and whether reconnect
+alone or receiver restart was necessary remain to be established. Spontaneous
+recovery was not confirmed for the second incident.
+An earlier receiver session logged `Queueing H.264 access unit: Device or
+resource busy`, followed by 84 consecutive one-second diagnostics samples with
+receive FPS above 20 (typically about 30) but zero decoded/submitted FPS.
+This is receiver-side decoder failure evidence, not merely sparse static-screen
+capture or demonstrated LAN congestion. Correlation to either reported incident
+remains pending, and the two incidents must not be assumed to share a cause.
+The logged error did not occur in the Cubism receiver session.
+
+Next investigation: establish approximate incident timing and which restart
+restored video, reproduce the purchase-session freeze and concurrent-download
+case separately, inspect decoder error/recovery behavior, and verify bounded
+recovery without killing the remote-input connection.
+No fix or physical recovery validation is claimed by this log review.
+
+Raw evidence remains ignored under `out/diagnostics/frame-feedback/`. SSH was
+used only for reading logs/system status; no headset process was restarted and
+no credential was printed or added to tracked files.
 
 ## Sprint 1 portability follow-up — 2026-10-02
 

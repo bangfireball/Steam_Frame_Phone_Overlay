@@ -1,6 +1,11 @@
 # Steam Frame standalone launch and lifecycle
 
-## Implemented Sprint 12 baseline
+## Owner-accepted Sprint 12 baseline
+
+Sprint 12 was closed by the project owner on 2026-10-05 after physical use and
+an issue-free video playback session corroborated by a healthy log review.
+Closure accepts the manual-launch baseline, not every extended lifecycle case.
+Known freeze recovery and untested cases remain explicit follow-ups below.
 
 PhoneCast now ships a supported manual-launch package for Steam Frame. The
 manual path intentionally precedes optional autostart.
@@ -23,8 +28,9 @@ that location.
 After installation, open the SteamVR dashboard, choose **+**, and select
 **PhoneCast VR**. The launcher starts the native receiver with
 `--focus-dashboard`. The receiver registers its adjacent OpenVR manifest and
-opens the PhoneCast dashboard. This needs physical confirmation on Steam Frame;
-a successful cross-build does not establish launcher visibility.
+opens the PhoneCast dashboard. The project owner physically confirmed dashboard
+`+` discovery, first launch, and duplicate-launch prevention. Explicit
+second-launch focus and dashboard recreation remain separate physical checks.
 
 ## Single instance and focus
 
@@ -74,16 +80,41 @@ preserves `~/.config/phonecast-vr` so updates and reinstalls do not silently
 forget settings or pairing. Remove that configuration directory separately only
 when the phone should be forgotten.
 
-## Deferred until physical launcher validation
+## Deferred follow-ups after owner-approved closure
 
 - enabling/disabling OpenVR autostart from PhoneCast;
 - automatic LAN discovery;
 - encrypted per-device credentials and revocation;
-- verified outcomes for SteamVR restart, headset sleep/wake, game switching,
-  receiver crash, and both standalone-VR-scene launch orders.
+- explicit second-launch focus and dashboard recreation checks;
+- verified outcomes for SteamVR restart, headset sleep/wake, broader game
+  switching, receiver crash, and game-first standalone-VR-scene launch;
+- physical use of the new curl bootstrap (automated fixture tests pass);
+- investigation/recovery for the earlier video freezes and V4L2 busy failure.
 
-Autostart must remain off until the manual dashboard `+` launch and recovery
-path has passed physical testing.
+PhoneCast-first coexistence with standalone Cubism is physically confirmed.
+Autostart remains unimplemented/off; closure does not authorize enabling it.
+
+## Closure log evidence — 2026-10-05
+
+Read-only SSH review of approximately 1,000 new diagnostics samples found no new
+V4L2 busy error, Vulkan submission error, or sustained incoming-video-without-
+decode failure. The 599 dynamic samples averaged 29.57 receive FPS, 29.51 decode
+FPS, 29.13 submitted FPS, 1.62% process CPU, and 105.54 MiB working set (dynamic
+range 104.53–106.09 MiB). Logs show portrait/landscape texture recreation,
+reconnect, and intentional dashboard Quit/relaunch.
+
+The latest CSV covers 169 seconds and reached first submission in 88.47 ms.
+Its four drops/two resyncs were confined to startup/rotation samples; its final
+minute plateaued at 105.19 MiB memory. Four samples in the broader appended log
+reported a mispresented-frame snapshot with temporary submission-cost spikes;
+the latest CSV had none and the user reported no issue. These snapshots are not
+a complete compositor failure count or controlled performance comparison.
+
+The earlier download-associated and Steam-purchase-session freezes remain open;
+this successful session does not establish a fix. See `design.md` and
+[`steam-frame.md`](steam-frame.md) for their separate evidence and limitations.
+Windows build/all 11 CTest tests and both download-server/bootstrap tests passed
+at closure. No native code changed or new ARM64 build was claimed by this review.
 
 ## Related Frametop research
 

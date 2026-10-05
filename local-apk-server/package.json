@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "description": "Disposable local APK download server",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test server.test.js"
   }
 }

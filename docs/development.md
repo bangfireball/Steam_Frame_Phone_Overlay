@@ -255,9 +255,13 @@ logs and performance CSV output are under
 Run `~/.local/opt/phonecast-vr/uninstall-phonecast.sh` after quitting PhoneCast
 to remove the application, desktop entry, and icons. User settings and pairing
 are deliberately retained. See [`standalone-ux.md`](standalone-ux.md) for the
-security boundary, recovery behavior, and physical-test checklist. Launcher
-visibility, sleep/wake, SteamVR restart, and standalone VR-scene behavior remain
-physical validation requirements; cross-building does not complete Sprint 12.
+security boundary, recovery behavior, and physical-test checklist. Sprint 12's
+manual-launch baseline was owner-approved on 2026-10-05 after physical launch,
+reconnect, rotation, shutdown, standalone Cubism coexistence, and an issue-free
+video session. Second-launch focus, dashboard recreation, sleep/wake, SteamVR
+restart, crash recovery, and game-first VR-scene launch remain unvalidated
+follow-ups; closure does not imply those cases passed or the earlier decoder
+freeze is fixed.
 
 ## Android sender
 
