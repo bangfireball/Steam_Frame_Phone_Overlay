@@ -1630,6 +1630,97 @@ Do not capture microphone input or protected audio, and do not imply that every 
 
 ---
 
+# Sprint 14 — Gestures and UI
+
+**Status:** `[ ] Not started`
+
+## Objective
+
+Make PhoneCast controls feel consistent with native Steam Frame application and window behavior, and turn the currently disabled or unreliable convenience controls into deliberate, safe, physically validated interactions.
+
+This sprint should improve the existing UI rather than create a second settings or placement model. Dashboard, scene-panel, gesture, hotkey, and button actions must all dispatch the same portable commands and persist through the existing settings model.
+
+## Native-style panel controls
+
+Give every applicable PhoneCast panel a consistent control area below its content, modeled on Steam Frame's first-party app/window presentation where public APIs permit it.
+
+The lower control area should expose context-appropriate actions such as:
+
+- move/position;
+- resize or scale;
+- pin/unpin;
+- hide/close;
+- settings;
+- keyboard/text entry where the active panel supports text input.
+
+The phone panel should provide an obvious keyboard option without permanently obscuring phone content. Opening and closing the keyboard must not leave the underlying game or phone with a stuck pointer/button state. Determine whether the SteamVR keyboard can be invoked reliably by a native ARM64 overlay; if it cannot, implement a portable PhoneCast keyboard surface rather than depending on undocumented UI injection.
+
+Do not copy private Steam Frame assets or patch Valve UI. Reproduce the interaction pattern with supported OpenVR surfaces and PhoneCast-owned visuals.
+
+## Move-bar interaction
+
+Standardize the move bar across phone, settings, notification-preview, and other movable PhoneCast panels:
+
+- hold the move bar with the controller trigger to move the panel;
+- move the controller to reposition and orient it;
+- while the move bar is held, push the joystick up to move the panel farther away and down to bring it closer;
+- clamp distance and scale to safe ranges;
+- release the trigger to commit the placement;
+- cancel, tracking loss, dashboard closure, or focus loss must release the drag cleanly without a jump or stuck input state.
+
+Distance adjustment should follow the active view ray or panel-depth axis, not world vertical. The portable interaction layer should own bounded adjustment semantics while the OpenVR backend supplies controller poses and axis events.
+
+## Gestures
+
+Replace the dormant binary wrist-pose experiment with a physically tuned, opt-in recognizer based on the existing gesture research:
+
+- deliberate raise-and-turn sequence rather than a broad static pose;
+- filtered pose samples, entry/exit hysteresis, candidate-hand lock, short tracking-loss grace, and cooldown;
+- left, right, or either-hand preference;
+- conservative, balanced, and responsive sensitivity choices;
+- visible progress only after an intentional candidate is recognized;
+- dashboard access remains available when gestures are disabled or fail.
+
+Gesture handling must remain platform-independent above pose sampling. Record false activations, failed attempts, activation time, and tracking-loss behavior during real gameplay before enabling gestures by default.
+
+## Hotkeys and controller buttons
+
+Repair and simplify optional controller shortcuts without restoring the old broad overlay-global action set.
+
+- Start with a narrow, user-remappable, opt-in action set containing only approved PhoneCast commands.
+- Test dashboard-open and dashboard-closed behavior separately on native Steam Frame and Windows/VRLink.
+- Never claim trigger, grip, joystick axes, or other gameplay controls globally merely to make PhoneCast convenient.
+- Disable shortcut actions while the dashboard or a PhoneCast text-entry surface owns input where necessary.
+- Surface whether each shortcut is bound and active; manifest or binding load success alone is not proof that it works.
+- Retain dashboard controls as the reliable recovery path.
+
+Candidate shortcuts include show/hide, glance, pin/unpin, and opening PhoneCast controls. Exact defaults must be chosen only after conflict testing against real games.
+
+## UI consistency and feedback
+
+- Use one visual language and control ordering across the dashboard, phone toolbar, settings, notifications, and keyboard.
+- Keep controls below panels where practical so streamed content and touch targets are not covered.
+- Provide clear hover, pressed, dragging, disabled, connected, and permission-required states.
+- Make hit targets usable with the Frame controller laser and avoid hover-only destructive actions.
+- Render panels only when visible or dirty; UI polish must not add continuous redraw or measurable game-frame impact.
+- Preserve transactional Apply/Cancel behavior for persisted settings.
+- Ensure all panels recover after dashboard recreation, SteamVR restart, sleep/wake, and application transitions.
+
+## Acceptance Criteria
+
+- PhoneCast panels use a consistent lower control area that is physically approved on Steam Frame.
+- The phone panel offers working keyboard/text entry, or a clearly documented platform limitation with a tested PhoneCast-owned fallback.
+- Holding a panel's move bar allows controller repositioning and joystick-controlled farther/closer depth adjustment.
+- Drag release, cancellation, focus loss, tracking loss, and dashboard closure never leave stuck input or cause an uncontrolled placement jump.
+- The wrist gesture opens PhoneCast reliably when enabled, remains optional, and meets a recorded ordinary-game false-activation target.
+- Approved hotkeys/buttons work on native Steam Frame without suppressing unrelated game controls.
+- Dashboard controls remain usable when gestures and hotkeys are disabled.
+- Phone, settings, notification, and text-entry interactions are tested in portrait and landscape where applicable.
+- Behavior is physically tested over at least one standalone VR scene, in both PhoneCast-first and game-first launch orders.
+- Automated tests cover gesture state transitions, irregular timing, tracking loss, depth clamping, action routing, and input-release safety.
+
+---
+
 # 6. Networking & Security
 
 PhoneCast should assume that phone content is sensitive.
