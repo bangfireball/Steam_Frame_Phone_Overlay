@@ -109,8 +109,8 @@ phonecast::core::VideoFrame MakeWaitingFrame() {
     // Match the sender's normal portrait aspect ratio before the first video
     // configuration arrives. A landscape placeholder made the fixed footer
     // consume a quarter of the surface and looked like a distorted phone.
-    frame.width = 270;
-    frame.height = 576;
+    frame.width = 590;
+    frame.height = 1280;
     frame.format = phonecast::core::PixelFormat::Rgba8;
     frame.pixels.resize(static_cast<std::size_t>(frame.width) * frame.height * 4U);
     for (std::uint32_t y = 0; y < frame.height; ++y) {

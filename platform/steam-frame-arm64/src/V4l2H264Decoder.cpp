@@ -279,7 +279,10 @@ struct V4l2H264Decoder::Implementation {
         while (true) {
             v4l2_event event{};
             if (!Ioctl(fd, VIDIOC_DQEVENT, &event)) {
-                if (errno == EAGAIN) return true;
+                // Drivers differ on how an empty event queue is reported.
+                // Qualcomm iris returns ENOENT while other V4L2 drivers use
+                // EAGAIN; both mean there is no event to process yet.
+                if (errno == EAGAIN || errno == ENOENT) return true;
                 error = SystemError("Reading V4L2 decoder event");
                 return false;
             }
