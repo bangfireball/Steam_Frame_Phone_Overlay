@@ -116,7 +116,7 @@ Useful generated-overlay receiver options:
 --duration-seconds N
 ```
 
-The Windows VR stream receiver additionally accepts `--performance-log PATH`. It writes a flushed one-second CSV containing startup, stream, queue, process CPU/memory, and OpenVR compositor frame-timing samples. See [`performance.md`](performance.md) for the physical-console baseline and glass-to-glass procedure. Use `--help` for current options.
+The Windows VR stream receiver additionally accepts `--performance-log PATH`. It writes a flushed one-second CSV containing startup, stream, queue, process CPU/memory, and OpenVR compositor frame-timing samples. The 2026-10-04 Standard-profile physical run was owner-approved with first submission at 381.8 ms, 29.93 dynamic receive/decode FPS, 2.00 Mbps average bitrate, 1.13% average process CPU, approximately 69 MiB working set, and zero OpenVR-reported dropped/mispresented frames. See [`performance.md`](performance.md) for full evidence, limitations, and the glass-to-glass procedure. Use `--help` for current options.
 
 ### RDP / VRLink diagnostic comparison (2026-10-03)
 

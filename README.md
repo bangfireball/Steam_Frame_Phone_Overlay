@@ -12,7 +12,7 @@ Moving to another development machine or starting a fresh Pi agent? Follow [`doc
 - `[~]` Sprint 6 functional baseline is accepted for progression: the OpenVR dashboard is physically approved, while broader manual UI validation continues alongside later functional work
 - `[x]` Sprints 7–8 are complete and physically approved for the PC-hosted path: gestures, scrolling, Back controls, placement handle, rotation, reconnect, opt-out, and running-game input coexistence are validated
 - `[x]` Sprint 9 is complete for the PC-hosted path: notification cards, revised placement, dashboard-open/closed visibility, and open-phone selection are physically approved; native ARM64 remains Sprint 11 work
-- `[~]` Sprint 10 instrumentation and streaming profiles are implemented; physical performance characterization remains pending
+- `[x]` Sprint 10 is complete: Standard-profile startup, sustained streaming, resources, and OpenVR frametime were physically measured and owner-approved; alternate-profile and external-camera latency evidence remains deferred
 - `[!]` Native coexistence over a standalone VR scene and the Steam Frame decoder/rendering backend remain future validation and Sprint 11 work
 - `[!]` The current LAN transport is paired but not encrypted
 

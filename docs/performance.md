@@ -2,6 +2,36 @@
 
 Sprint 10 adds repeatable instrumentation; it does not replace physical headset or phone validation. Do not start or restart SteamVR through Windows RDP. Follow the physical-console procedure in [`development.md`](development.md).
 
+## Approved Standard-profile result — 2026-10-04
+
+The project owner approved Sprint 10 after a physical Standard-profile run recorded in `out/logs/vr-receiver.stdout.log`. The log is a local test artifact rather than a committed product file. The receiver ran at 590 × 1280 for approximately 253 connected seconds.
+
+Startup from authenticated connection:
+
+- first video configuration: 340.6 ms;
+- first keyframe: 372.2 ms;
+- decoder initialization: 4.25 ms;
+- first submitted overlay frame: 381.8 ms.
+
+Across 201 dynamic one-second samples (`rx-fps >= 20`):
+
+- receive/decode FPS: 29.93 average;
+- submitted render FPS: 28.40 average;
+- bitrate: 2.00 Mbps average, 2.41 Mbps 95th percentile;
+- decode: 3.78 ms average, 4.05 ms 95th percentile;
+- D3D/OpenVR submission: 0.37 ms average;
+- queue age: 8.83 ms average, 11.88 ms 95th percentile, 47.8 ms maximum observed;
+- process CPU: 1.13% average, 3.67% 95th percentile, 4.27% maximum;
+- working set: approximately 69 MiB average and 71.8 MiB maximum;
+- steady-state transport drops/resynchronizations: zero;
+- OpenVR-reported dropped/mispresented frames: zero.
+
+OpenVR total GPU frame time averaged approximately 0.69 ms while waiting without a phone connection and 1.27 ms during dynamic streaming. Compositor CPU time changed from approximately 0.27 ms to 0.41 ms. This is a same-process waiting comparison, not a controlled receiver-stopped game baseline and not process-attributed GPU utilization.
+
+Occasional submitted-render dips occurred while receive/decode remained near 30 FPS, consistent with the receiver retaining the latest decoded frame when work arrives in a batch. No transport loss accompanied the dips, and the owner approved the run without reporting a visible blocker.
+
+Closure explicitly defers separate Battery Saver and Quality characterization and external-camera glass-to-glass distributions. First submission is not photon-level latency; these deferred items must not be represented as tested.
+
 ## Instrumented receiver run
 
 Start the VR receiver at the physical console with a CSV destination:
@@ -60,12 +90,12 @@ Android encoder presentation timestamps and Windows clocks have no established o
 
 Use an external 120/240 FPS camera that sees both the phone and headset lens (or a photodiode/LED fixture). Trigger a high-contrast full-screen change, count camera frames from phone change to headset change, and report the median, 95th percentile, sample count, and camera frame period. Test isolated/static changes separately from continuous motion because decoder look-ahead previously affected sparse updates.
 
-## Acceptance evidence still required
+## Deferred follow-up evidence
 
-Automated builds can validate instrumentation and profile selection, but Sprint 10 remains in progress until physical measurements establish:
+Sprint 10 is owner-approved and closed using the Standard-profile evidence above. Future tuning should still collect:
 
-- startup and glass-to-glass distributions;
-- sustained FPS and bandwidth for each profile;
-- CPU/memory and VR-frame-time impact against a no-PhoneCast baseline;
-- acceptable behavior under representative Wi-Fi load;
-- whether Battery Saver and Quality values should be retained or adjusted.
+- external-camera glass-to-glass distributions;
+- sustained FPS and bandwidth for Battery Saver and Quality;
+- a controlled receiver-stopped gameplay baseline;
+- broader Wi-Fi/device coverage;
+- evidence for adjusting the alternate profile values.
