@@ -7,6 +7,7 @@
 #include "phonecast/platform/windows/ProcessPerformanceSampler.h"
 #else
 #include "phonecast/platform/steamframe/ProcessPerformanceSampler.h"
+#include "phonecast/platform/steamframe/StandaloneRuntime.h"
 #include "phonecast/platform/steamframe/V4l2H264Decoder.h"
 #endif
 #include "phonecast/vr/overlay/GlanceController.h"
@@ -51,7 +52,10 @@ void HandleSignal(int) { signalRequested.store(true); }
 #endif
 
 void PrintUsage() {
-    std::cout << "Usage: phonecast-vr-stream-receiver --pair-code NNNNNN [--port N] [--settings PATH] [--performance-log PATH] [--video-device PATH] [--diagnostic-visible]\n\n"
+    std::cout << "Usage: phonecast-vr-stream-receiver [--pair-code NNNNNN] [--pair-code-file PATH] [--port N] [--settings PATH] [--performance-log PATH] [--video-device PATH] [--focus-dashboard] [--diagnostic-visible]\n\n"
+              << "Native Steam Frame launches create and persist a pairing code when none is supplied.\n"
+              << "  --focus-dashboard      Open the PhoneCast dashboard after launch\n"
+              << "  --pair-code-file PATH  Linux: override the persistent credential path\n\n"
               << "Performance measurement:\n"
               << "  --performance-log PATH  Write one-second receiver/process/VR samples as CSV\n"
               << "  --video-device PATH     Linux: select a stateful V4L2 H.264 decoder\n\n"
@@ -93,6 +97,18 @@ std::filesystem::path DefaultSettingsPath() {
 #endif
     return "phonecast-overlay-settings.ini";
 }
+
+#ifndef _WIN32
+std::filesystem::path DefaultPairCodePath() {
+    const char* configHome = std::getenv("XDG_CONFIG_HOME");
+    if (configHome != nullptr && *configHome != '\0')
+        return std::filesystem::path(configHome) / "phonecast-vr" / "pairing-code";
+    const char* home = std::getenv("HOME");
+    if (home != nullptr && *home != '\0')
+        return std::filesystem::path(home) / ".config" / "phonecast-vr" / "pairing-code";
+    return "phonecast-pairing-code";
+}
+#endif
 
 #ifdef _WIN32
 bool Pressed(int key) {
@@ -183,8 +199,10 @@ int main(int argc, char** argv) {
     std::string pairCode;
     std::uint16_t port = 49321;
     bool diagnosticVisible = false;
+    bool focusDashboard = false;
     std::filesystem::path settingsPath = DefaultSettingsPath();
     std::filesystem::path performanceLogPath;
+    std::filesystem::path pairCodePath;
     std::string videoDevice;
     for (int index = 1; index < argc; ++index) {
         const std::string option = argv[index];
@@ -196,12 +214,17 @@ int main(int argc, char** argv) {
             diagnosticVisible = true;
             continue;
         }
+        if (option == "--focus-dashboard") {
+            focusDashboard = true;
+            continue;
+        }
         if (index + 1 >= argc) {
             PrintUsage();
             return EXIT_FAILURE;
         }
         const std::string value = argv[++index];
         if (option == "--pair-code") pairCode = value;
+        else if (option == "--pair-code-file") pairCodePath = value;
         else if (option == "--settings") settingsPath = value;
         else if (option == "--performance-log") performanceLogPath = value;
         else if (option == "--video-device") videoDevice = value;
@@ -219,17 +242,45 @@ int main(int argc, char** argv) {
             return EXIT_FAILURE;
         }
     }
-    if (!phonecast::core::protocol::IsValidPairCode(pairCode)) {
-        std::cerr << "A six-digit --pair-code is required.\n";
-        PrintUsage();
+#ifdef _WIN32
+    if (!pairCodePath.empty()) {
+        std::cerr << "--pair-code-file is available only on the native Linux receiver.\n";
         return EXIT_FAILURE;
     }
-#ifdef _WIN32
     if (!videoDevice.empty()) {
         std::cerr << "--video-device is available only on the native Linux receiver.\n";
         return EXIT_FAILURE;
     }
+    if (!phonecast::core::protocol::IsValidPairCode(pairCode)) {
+        std::cerr << "A six-digit --pair-code is required on Windows.\n";
+        PrintUsage();
+        return EXIT_FAILURE;
+    }
 #else
+    phonecast::platform::steamframe::StandaloneRuntime standaloneRuntime;
+    std::string instanceError;
+    const auto instanceResult = standaloneRuntime.Start(instanceError);
+    if (instanceResult == phonecast::platform::steamframe::InstanceStartResult::ExistingSignaled) {
+        std::cout << "PhoneCast is already running; requested its dashboard.\n";
+        return EXIT_SUCCESS;
+    }
+    if (instanceResult == phonecast::platform::steamframe::InstanceStartResult::Error) {
+        std::cerr << instanceError << '\n';
+        return EXIT_FAILURE;
+    }
+    if (pairCode.empty()) {
+        if (pairCodePath.empty()) pairCodePath = DefaultPairCodePath();
+        std::string credentialError;
+        if (!phonecast::platform::steamframe::LoadOrCreatePairCode(
+                pairCodePath, pairCode, credentialError)) {
+            std::cerr << credentialError << '\n';
+            return EXIT_FAILURE;
+        }
+    }
+    if (!phonecast::core::protocol::IsValidPairCode(pairCode)) {
+        std::cerr << "The pairing code must contain exactly six digits.\n";
+        return EXIT_FAILURE;
+    }
     std::signal(SIGINT, HandleSignal);
     std::signal(SIGTERM, HandleSignal);
 #endif
@@ -302,6 +353,9 @@ int main(int argc, char** argv) {
             return EXIT_FAILURE;
         }
     }
+    renderer.SetPairingCode(pairCode);
+    if (focusDashboard && !renderer.FocusDashboard(error))
+        std::cerr << "Warning: " << error << '\n';
     if (!renderer.SetVisible(glance.Visible(), error)) {
         std::cerr << error << '\n';
         renderer.Stop();
@@ -321,7 +375,7 @@ int main(int argc, char** argv) {
     }
     PrintUsage();
     std::cout << "\nPhoneCast VR receiver listening on port " << port
-              << ". Pairing code: " << pairCode << '\n';
+              << ". The pairing credential is shown in the PhoneCast dashboard.\n";
 
 #ifdef _WIN32
     PlatformDecoder decoder;
@@ -360,6 +414,11 @@ int main(int argc, char** argv) {
     phonecast::core::protocol::RemoteControlStatus previousRemoteStatus{};
 
     while (running && renderer.PumpEvents()) {
+#ifndef _WIN32
+        if (standaloneRuntime.TakeDashboardFocusRequest() &&
+            !renderer.FocusDashboard(error))
+            std::cerr << "Warning: " << error << '\n';
+#endif
         OverlayAction action{};
         bool glanceCycle = false;
         bool quickToggle = false;
@@ -454,7 +513,7 @@ int main(int argc, char** argv) {
                 }
             }
         }
-        if (quit) break;
+        if (quit || renderer.TakeQuitRequest()) break;
 
         phonecast::vr::SettingsMenuInput settingsInput{};
         if (settingsMenu.IsOpen() && renderer.TakeSettingsMenuInput(settingsInput)) {

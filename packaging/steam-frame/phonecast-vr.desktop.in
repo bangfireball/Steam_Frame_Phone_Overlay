@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=PhoneCast VR
+Comment=View and control your Android phone in SteamVR
+Exec=@PHONECAST_INSTALL_DIR@/launch-phonecast.sh
+Icon=phonecast-vr
+Terminal=false
+Categories=Utility;
+StartupNotify=false
+X-KDE-RunOnDiscreteGpu=false

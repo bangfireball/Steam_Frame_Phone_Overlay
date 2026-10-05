@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+install_dir='@PHONECAST_INSTALL_DIR@'
+state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
+log_dir="$state_home/phonecast-vr"
+mkdir -p "$log_dir"
+
+# VR_Init may cause some desktop Steam configurations to start a runtime. The
+# dashboard launcher must instead fail quietly when SteamVR was intentionally
+# stopped.
+if ! pgrep -x vrserver >/dev/null 2>&1 && ! pgrep -x vrcompositor >/dev/null 2>&1; then
+    command -v notify-send >/dev/null 2>&1 && \
+        notify-send 'PhoneCast VR' 'Start SteamVR before opening PhoneCast.' || true
+    exit 1
+fi
+
+exec "$install_dir/phonecast-vr-stream-receiver" \
+    --focus-dashboard \
+    --performance-log "$log_dir/performance.csv" \
+    >>"$log_dir/receiver.log" 2>&1

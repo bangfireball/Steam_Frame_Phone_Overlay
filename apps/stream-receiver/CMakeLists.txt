@@ -66,6 +66,15 @@ add_custom_command(TARGET phonecast-vr-stream-receiver POST_BUILD
     COMMENT "Copying the OpenVR manifests and input bindings"
 )
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_custom_command(TARGET phonecast-vr-stream-receiver POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${PROJECT_SOURCE_DIR}/packaging/steam-frame"
+            "$<TARGET_FILE_DIR:phonecast-vr-stream-receiver>/steam-frame-installer"
+        COMMENT "Copying the Steam Frame dashboard launcher installer"
+    )
+endif()
+
 install(TARGETS phonecast-vr-stream-receiver RUNTIME DESTINATION .)
 if(WIN32)
     install(TARGETS phonecast-stream-receiver RUNTIME DESTINATION .)
@@ -77,6 +86,12 @@ install(FILES
     "${PROJECT_SOURCE_DIR}/platform/openvr/input/phonecast-bindings-generic.json"
     DESTINATION .
 )
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    install(DIRECTORY "${PROJECT_SOURCE_DIR}/packaging/steam-frame/"
+        DESTINATION steam-frame-installer
+        USE_SOURCE_PERMISSIONS
+    )
+endif()
 
 if(BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
     if(WIN32)
@@ -89,7 +104,9 @@ if(BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
         COMMAND phonecast-vr-stream-receiver --diagnostic-visible --help)
     set_tests_properties(vr-diagnostic-cli-help PROPERTIES
         PASS_REGULAR_EXPRESSION "diagnostic-visible")
-    add_test(NAME vr-diagnostic-requires-pair-code
-        COMMAND phonecast-vr-stream-receiver --diagnostic-visible)
-    set_tests_properties(vr-diagnostic-requires-pair-code PROPERTIES WILL_FAIL TRUE)
+    if(WIN32)
+        add_test(NAME vr-diagnostic-requires-pair-code
+            COMMAND phonecast-vr-stream-receiver --diagnostic-visible)
+        set_tests_properties(vr-diagnostic-requires-pair-code PROPERTIES WILL_FAIL TRUE)
+    endif()
 endif()

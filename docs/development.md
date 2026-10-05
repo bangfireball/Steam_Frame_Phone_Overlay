@@ -229,6 +229,40 @@ The native receiver automatically searches `/dev/video0` through `/dev/video63` 
 
 This cross-build validates compilation only. Qualcomm/iris V4L2 decoding, visible output, and the Vulkan `SetOverlayTexture` renderer are physically established on Steam Frame. Linux converts decoded NV12 to CPU RGBA, uploads through a persistently mapped Vulkan staging buffer, and submits reusable double-buffered images. The Vulkan loader is opened at runtime from `libvulkan.so.1`, so no cross-build Vulkan development package is required. The measured local-game run was project-owner approved as smooth and flicker-free with stable memory; orientation changes, clean shutdown, longer lifecycle cases, and actual standalone-VR-scene coexistence remain pending. Do not describe dma-buf/zero-copy sharing as implemented. See `platform/steam-frame-arm64/README.md` and `docs/steam-frame.md`.
 
+## Steam Frame standalone launcher
+
+Sprint 12's manual launcher baseline is packaged beside the native receiver in
+`bin/steam-frame-installer`. Copy the complete `bin` payload to Steam Frame,
+then run:
+
+```bash
+./steam-frame-installer/install-phonecast.sh
+```
+
+The installer places PhoneCast under `~/.local/opt/phonecast-vr` and adds a
+user desktop entry plus 48/128/256 pixel icons. Open the SteamVR dashboard,
+select **+**, and choose **PhoneCast VR**. The generated launcher uses an
+absolute executable path, opens/focuses PhoneCast, and will not start SteamVR
+when `vrserver`/`vrcompositor` is intentionally stopped.
+
+A second launch signals the resident process over an owner-only local socket
+instead of opening a second server or decoder. Native launches create and reuse
+an owner-only six-digit pairing credential and show it in the PhoneCast
+dashboard. Manual Android receiver-address entry remains supported. Receiver
+logs and performance CSV output are under
+`~/.local/state/phonecast-vr` by default.
+
+Run `~/.local/opt/phonecast-vr/uninstall-phonecast.sh` after quitting PhoneCast
+to remove the application, desktop entry, and icons. User settings and pairing
+are deliberately retained. See [`standalone-ux.md`](standalone-ux.md) for the
+security boundary, recovery behavior, and physical-test checklist. Sprint 12's
+manual-launch baseline was owner-approved on 2026-10-05 after physical launch,
+reconnect, rotation, shutdown, standalone Cubism coexistence, and an issue-free
+video session. Second-launch focus, dashboard recreation, sleep/wake, SteamVR
+restart, crash recovery, and game-first VR-scene launch remain unvalidated
+follow-ups; closure does not imply those cases passed or the earlier decoder
+freeze is fixed.
+
 ## Android sender
 
 Requirements:

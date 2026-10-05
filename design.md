@@ -1537,7 +1537,132 @@ The PC should no longer be involved.
 
 # Sprint 12 — Standalone UX
 
+**Status:** `[x] Complete for the owner-accepted standalone baseline` — installation, manual dashboard launch, pairing/reconnect, native streaming, and PhoneCast-first VR-game coexistence accepted after physical use and a healthy follow-up log review; extended lifecycle checks and known freeze recovery remain follow-up work
+
+- `[x]` SteamOS desktop-entry installer with absolute launch path and 48/128/256 pixel icons
+- `[x]` ARM64 manifest/input packaging and executable-bit-preserving install path
+- `[x]` Local download page provides copyable extraction/install commands and a short curl download-and-run bootstrap, with Linux/ARM64 and non-root checks, temporary-directory cleanup, and stop-on-failure behavior; automated page/route/shell and harmless bootstrap fixture checks pass, physical use of the improved flow remains pending
+- `[x]` Per-user single-instance lock and owner-only local focus IPC
+- `[x]` Second launch opens/focuses the resident PhoneCast dashboard
+- `[x]` Dashboard-handle health check and recreation while the OpenVR runtime remains available
+- `[x]` Owner-only persistent six-digit pairing credential with in-dashboard display
+- `[x]` Manual LAN-address fallback and existing Android reconnect behavior retained
+- `[x]` Launcher refuses to start SteamVR when the runtime is intentionally stopped
+- `[x]` Uninstall path preserves user settings/pairing unless explicitly removed
+- `[x]` Windows build/tests, Linux ARM64 cross-build, and ARM64 portable/runtime tests
+- `[x]` Physical dashboard `+` discovery, first launch, and duplicate-launch prevention approved
+- `[x]` Physical rotation, intentional dashboard Quit/relaunch, reconnect, notifications, and phone-lock/new-capture recovery approved
+- `[x]` Follow-up video playback session reported issue-free; log review found no new decoder-busy error or sustained receive-without-decode failure
+- `[ ]` Deferred physical second-launch focus, dashboard recreation, headset sleep/wake, crash, and SteamVR restart checks
+- `[x]` Physical PhoneCast-first coexistence over standalone Cubism; user approved normal gameplay and logs confirm an OpenXR VR scene with concurrent streaming
+- `[ ]` Physical game-first launch/focus validation over a standalone VR scene
+- `[ ]` Optional autostart control, only after the manual launcher is physically approved
+- `[ ]` Automatic LAN discovery and cryptographic device identity/revocation
+
+## Sprint 12 closure — 2026-10-05
+
+The project owner requested closure after another issue-free session including
+phone video playback, conditional on a healthy log review. Read-only SSH review
+found no new decoder-busy, Vulkan submission, or sustained receive-without-decode
+failure in approximately 1,000 newly appended one-second diagnostics samples.
+The 599 dynamic samples (receive FPS at least 20) averaged 29.57 received FPS,
+29.51 decoded FPS, 29.13 submitted FPS, 1.62% process CPU, and 105.54 MiB working
+set (dynamic range 104.53–106.09 MiB). Rotation recreated portrait/landscape
+textures, reconnect succeeded, and an intentional dashboard Quit at 19:41:04
+was followed by a new native receiver at 19:41:09.
+
+The latest overwritten CSV covers 169 seconds, including 167 connected samples.
+Its 164 dynamic samples averaged 29.94 received FPS, 29.90 decoded FPS, and
+29.27 submitted FPS. First submission was 88.47 ms; memory plateaued at
+105.19 MiB in the final minute. Four video drops and two resyncs were confined
+to startup and rotation samples, not sustained streaming. That CSV contains no
+OpenVR dropped/mispresented sample. In the broader appended log, four samples
+reported `vr-mispresented=1` with temporary higher submission cost, but no user
+issue or sustained decode stall; these snapshots are not an isolated game-impact
+benchmark or necessarily four distinct compositor failures.
+
+Closure accepts the implemented manual-launch baseline and observed behavior,
+not every original lifecycle criterion. Second-launch focus, dashboard
+recreation, game-first standalone launch, headset sleep/wake, receiver crash,
+SteamVR restart, and physical use of the new curl bootstrap remain explicitly
+unvalidated. Autostart, discovery, and cryptographic identity remain unimplemented
+follow-ups. The earlier two freeze incidents and logged V4L2 busy failure are
+not fixed or disproved by this successful session; retain decoder recovery as a
+focused reliability follow-up. The resize handle remains Sprint 14 work.
+
+Validation at closure: Windows incremental build succeeded and all 11 CTest
+tests passed; both local download-server/bootstrap tests passed. No receiver,
+SteamVR, or game was restarted by the agent. Raw logs remain ignored under
+`out/diagnostics/frame-feedback/`, with the prior snapshot retained separately.
+This documentation closure introduces no native receiver code change or new
+ARM64 cross-build claim.
+
+## Physical feedback and log review — 2026-10-05
+
+- The project owner reports that extraction required a terminal but installation worked; rerunning the installer caused no observed issue, PhoneCast appeared in the dashboard `+` app launcher, and a second launch did not duplicate the receiver. Explicit dashboard-focus behavior remains a separate check.
+- Rotation, shutdown, reconnect, notifications, and phone-lock followed by a new capture/reconnect worked in physical use. Phone lock is not headset sleep/wake; crash recovery and SteamVR restart remain unvalidated. The newer curl bootstrap remains to be physically tested.
+- The project owner reports that PhoneCast worked perfectly while playing standalone Cubism. Native SteamVR logs confirm PhoneCast started at approximately 19:15:46, followed by Cubism (AppID `804530`) becoming `VRApplication_OpenXRScene` at 19:16:47 and exiting at 19:21:07. This validates the PhoneCast-first launch order, not game-first launch.
+- Approximately 259 one-second CSV samples overlap the Cubism scene. All remained connected, with zero transport drops/resyncs and zero sampled OpenVR dropped/mispresented frames. The 258 samples with receive FPS at least 20 averaged 29.48 received FPS, 29.47 decoded FPS, 28.59 submitted FPS, 1.62% process CPU, 102.61 MiB working set, and 1.29 ms queue age. These are sampled diagnostics, not isolated game-impact or glass-to-glass measurements.
+- Usability feedback: lack of a directly grabbable screen-resize handle is frustrating. Add a bounded trigger-drag resize affordance in Sprint 14 rather than relying only on Settings scale controls.
+- Two distinct freeze incidents were reported: (1) during a download, remote commands still affected the phone while displayed video froze, then video resumed when the download ended; (2) later, while trying to buy something from Steam with no download running, video froze and the project owner restarted the connection/receiver to recover. The second report does not retract the first. Exact incident timing, download device/application, and which restart was sufficient remain to be clarified.
+- Log review found an earlier `Queueing H.264 access unit: Device or resource busy` error followed by 84 consecutive diagnostics samples with roughly 30 received FPS but zero decoded/submitted FPS. This establishes native decoder failure in that session; correlation to either reported incident remains pending, and the incidents must not be assumed to share a cause. The Cubism session contains no such error. Prioritize reproducing and adding bounded decoder-error recovery without requiring a manual receiver restart; retain concurrent-download testing as a separate reproduction case.
+- Logs were inspected over SSH without restarting PhoneCast, SteamVR, or the game. Raw local evidence is ignored under `out/diagnostics/frame-feedback/`; credentials were not printed or added to tracked files.
+
+## Session Handoff Snapshot — 2026-10-05
+
+Branch and recent commits:
+
+- branch: `review/sprint-12-standalone-ux`;
+- `32859b8` — Android privacy display mode added to the backlog;
+- `900c69d` — Sprint 12 Steam Frame bundle served by the local package page;
+- `e157251` — Sprint 12 manual launcher baseline, single-instance IPC, dashboard recovery, and persistent pairing.
+
+Research documentation added in this handoff:
+
+- [`docs/frametop-research.md`](docs/frametop-research.md) records a source review of [`DeeJanuz/frametop`](https://github.com/DeeJanuz/frametop) at commit `ca9492be000a24f8e539607a02ee5d12f41801a6`;
+- no PhoneCast source code, build configuration, package, or hardware state was changed by that research;
+- the research repository was inspected but not installed or physically run by PhoneCast.
+
+Most useful Frametop findings:
+
+1. Frametop imports Linux DMA-BUFs into SteamVR with `IVRIPCResourceManagerClient::ImportDmabuf` and submits `TextureType_SharedTextureHandle`. This is a credible future experiment for removing PhoneCast's remaining V4L2 NV12 → CPU RGBA → Vulkan staging copies, but Frametop proves XRGB/ARGB compositor buffers rather than Qualcomm decoder NV12. Format/modifier compatibility, V4L2 export, buffer ownership, synchronization, orientation, and teardown remain unknown.
+2. Frametop avoids a permanent game-controller claim by predicting when a controller's render-model laser tip intersects a panel and enabling `MakeOverlaysInteractiveIfVisible` only while aimed, pressed, or in a short linger interval. This is a promising Sprint 14 experiment, not a validated replacement for PhoneCast's dashboard-only interaction.
+3. Its separate move bar, drag-depth adjustment, click stabilization, release catcher, device-loss cleanup, wrist/head placement, custom keyboard fallback, and attention-based scheduling are useful interaction references.
+4. Frametop's local KDE/wlroots desktop, gaze/hand systems, virtual controller, input relay, and undocumented vrserver WebSocket are not appropriate dependencies for PhoneCast.
+5. Frametop is MIT-licensed and compatible with PhoneCast's MIT license; substantial copied code would still require retaining DeeJanuz's copyright and license notice.
+
+Decisions at handoff:
+
+- do not alter the approved native Vulkan renderer or dashboard-first UX based only on source review;
+- do not pull DMA-BUF work into Sprint 12 or treat it as required for v0.1—the measured Vulkan path is already physically accepted;
+- finish the existing Sprint 12 physical validation matrix before optional optimization or Sprint 14 interaction experiments;
+- keep any later DMA-BUF/shared-handle path behind the Steam Frame/OpenVR platform boundary with runtime capability checks and the Vulkan renderer as fallback;
+- keep standalone VR-scene coexistence in both launch orders explicitly unvalidated until PhoneCast itself is physically tested.
+
+Historical next work at this handoff (superseded by the closure decision above;
+unvalidated items remain follow-ups):
+
+1. Install the current Sprint 12 bundle on Steam Frame and validate dashboard `+` discovery, first launch, and second-launch focus.
+2. Exercise rotation, clean shutdown, reconnect, notifications, sleep/wake, crash recovery, and SteamVR restart.
+3. Test a real standalone VR scene in both PhoneCast-first and game-first launch orders.
+4. Only after that baseline is accepted, consider a bounded DMA-BUF capability probe and the Sprint 14 aim-gated interaction experiment described in the research document.
+
 Once standalone operation works, optimize PhoneCast specifically for Steam Frame.
+
+## Approved launch model
+
+PhoneCast should be installed as a user-launchable application in the SteamVR dashboard's **`+` app launcher**. Automatic startup must not be required for normal v0.1 use.
+
+Primary behavior:
+
+1. The user opens the SteamVR dashboard and selects **`+`**.
+2. The user selects PhoneCast.
+3. If PhoneCast is not running, the launcher starts the native receiver.
+4. If PhoneCast is already running, the launch request signals the existing process and opens or focuses its dashboard instead of creating a duplicate receiver.
+5. The user connects or reconnects the trusted phone and uses Show, Glance, Pin, Settings, and placement controls normally.
+6. Closing or hiding the PhoneCast UI must not stop the receiver unless the user explicitly chooses Quit.
+
+Autostart may be offered as an explicit opt-in setting after the manual launcher is reliable. It must default off, remain independently reversible, and must not be necessary to recover PhoneCast.
 
 Desired experience:
 
@@ -1546,59 +1671,78 @@ Put on Frame
 
        ↓
 
-Phone automatically discovered
-
-       ↓
-
-PhoneCast connects
-
-       ↓
-
-Launch VR game
-
-       ↓
-
-Play normally
-
-       ↓
-
 Open SteamVR dashboard
 
        ↓
 
-Select PhoneCast Show / Glance / Pin
+Press + and select PhoneCast
 
        ↓
 
-Phone appears
+PhoneCast starts or focuses its existing instance
 
        ↓
 
-Interact
+Trusted phone reconnects
 
        ↓
 
-Dismiss
+Launch VR game and play normally
+
+       ↓
+
+Open PhoneCast dashboard
+
+       ↓
+
+Select Show / Glance / Pin
+
+       ↓
+
+View, interact, and dismiss
 
        ↓
 
 Continue playing
 ```
 
-The user should not need to manually manage a server every session.
+The user should not need to launch a receiver from SSH, a terminal, or a development computer during ordinary use.
 
-Investigate:
+## Implementation scope
 
-- automatic discovery;
-- trusted-device pairing;
-- reconnect;
-- startup behavior;
-- background operation;
-- Steam Frame application lifecycle;
-- OpenVR overlay autostart using `SetApplicationAutoLaunch`, verifying `GetApplicationAutoLaunch`, and starting a registered process with `LaunchDashboardOverlay` where appropriate;
-- executable-bit and manifest-path validation in native packaging.
+Investigate and implement:
 
-A third-party native Steam Frame utility demonstrates this autostart pattern, but PhoneCast must validate it with its own dashboard, networking, sleep/wake, and application transitions. Optional dashboard-closed hotkeys are not required for standalone UX.
+- native application registration and visibility in the dashboard `+` launcher;
+- a SteamOS `.desktop` launcher using an absolute executable path and suitable 48, 128, and 256 pixel icons;
+- correct ARM64 application manifest and executable-bit packaging;
+- a single-instance lock;
+- a small local signal/IPC path so a second launch focuses or opens the resident PhoneCast dashboard;
+- `LaunchDashboardOverlay` and `ShowDashboard` behavior where appropriate;
+- dashboard-handle health checking and recreation if SteamVR drops the dashboard overlay while the receiver remains alive;
+- trusted-device pairing and credential persistence;
+- automatic discovery where reliable, with a manual LAN-address fallback;
+- reconnect after network interruption;
+- SteamVR restart, dashboard restart, headset sleep/wake, game switching, receiver crash, and intentional-quit behavior;
+- clear logs and an uninstall/disable path;
+- optional autostart using `SetApplicationAutoLaunch`/`GetApplicationAutoLaunch` or a user-level service only after the manual launch flow passes physical testing.
+
+Do not use undocumented SteamVR UI injection. The launcher should use supported application registration and desktop-entry behavior. A third-party native Steam Frame utility demonstrates the dashboard `+`, single-instance, and optional service patterns, but PhoneCast must validate them with its own dashboard, networking, sleep/wake, and application transitions.
+
+## Acceptance Criteria
+
+- A normal user can install PhoneCast and find it through the SteamVR dashboard `+` launcher.
+- Selecting PhoneCast starts the native receiver without SSH or a terminal.
+- Selecting PhoneCast again while it is running does not create a second receiver and instead opens or focuses PhoneCast.
+- The dashboard icon and controls recover if SteamVR recreates or loses the dashboard overlay.
+- Manual address entry remains available if discovery fails.
+- A trusted phone reconnects without repeating first-time pairing during ordinary restarts.
+- SteamVR restart, headset sleep/wake, game switching, network loss, receiver crash, and intentional Quit have documented and physically tested outcomes.
+- Optional autostart defaults off and can be enabled and disabled from a supported PhoneCast control.
+- Launching PhoneCast does not start SteamVR unexpectedly when the runtime is intentionally stopped.
+- Packaging preserves executable permissions, absolute paths, manifests, icons, and user data across an update.
+- The launch flow is physically validated both before and during a standalone VR scene.
+
+Optional dashboard-closed hotkeys are not required for Sprint 12 standalone UX.
 
 ---
 
@@ -1647,7 +1791,7 @@ Give every applicable PhoneCast panel a consistent control area below its conten
 The lower control area should expose context-appropriate actions such as:
 
 - move/position;
-- resize or scale;
+- resize or scale, including a directly grabbable screen-resize handle (project-owner feedback: Settings-only resizing is frustrating);
 - pin/unpin;
 - hide/close;
 - settings;
@@ -1696,6 +1840,13 @@ Repair and simplify optional controller shortcuts without restoring the old broa
 
 Candidate shortcuts include show/hide, glance, pin/unpin, and opening PhoneCast controls. Exact defaults must be chosen only after conflict testing against real games.
 
+### Future research — Framecorder dashboard-closed hotkeys
+
+- `[ ]` Review [`coah80/framecorder`](https://github.com/coah80/framecorder) for its native Steam Frame hotkey implementation, action manifests/bindings, priority, dashboard-focus handling, and game-input coexistence.
+- The project owner physically tested Framecorder and reports that its hotkey is available while the dashboard is closed. This is user-reported Framecorder evidence, not validation of PhoneCast shortcuts; Framecorder source has not yet been reviewed.
+- Compare its approach with the narrow overlay-global action set and binding-layer double/long presses documented in [`docs/frame-passthrough-shortcuts-research.md`](docs/frame-passthrough-shortcuts-research.md).
+- Keep this as Sprint 14 research, not a Sprint 12 dependency. Do not reactivate PhoneCast's dormant broad global action set; any resulting shortcut experiment must be opt-in, narrowly bound, and physically checked for game-input conflicts.
+
 ## UI consistency and feedback
 
 - Use one visual language and control ordering across the dashboard, phone toolbar, settings, notifications, and keyboard.
@@ -1718,6 +1869,89 @@ Candidate shortcuts include show/hide, glance, pin/unpin, and opening PhoneCast 
 - Phone, settings, notification, and text-entry interactions are tested in portrait and landscape where applicable.
 - Behavior is physically tested over at least one standalone VR scene, in both PhoneCast-first and game-first launch orders.
 - Automated tests cover gesture state transitions, irregular timing, tracking loss, depth clamping, action routing, and input-release safety.
+
+---
+
+# Sprint 15 — Android Privacy Display Mode
+
+**Status:** `[ ] Backlog`
+
+## Objective
+
+Reduce battery use and protect the locally visible phone while PhoneCast is
+streaming, without dimming or obscuring the VR stream.
+
+## Supported baseline
+
+Implement an explicit, optional **Dim phone while casting** mode using public
+Android APIs where device behavior permits it:
+
+1. Save the user's brightness and adaptive-brightness state before changing it.
+2. After casting starts, wait for a configurable idle delay and reduce physical
+   display brightness to the lowest safe, usable level.
+3. A physical screen interaction temporarily restores the prior brightness.
+4. After the user-configurable delay, dim again while casting remains active.
+5. Stopping casting, projection revocation, service failure, reboot recovery, or
+   disabling the feature restores the prior settings on a best-effort basis.
+6. Provide a persistent notification action and an obvious in-app recovery path
+   that immediately restores brightness.
+
+The feature must be separately opt-in and explain any required Android
+**Modify system settings** access. It must not silently disable adaptive
+brightness, leave the display unreadable after a crash, or log brightness and
+interaction history unnecessarily.
+
+Brightness is normally applied after display composition and therefore may dim
+the physical panel without affecting MediaProjection output, but this must be
+validated across supported Android versions and devices before approval.
+
+## Privacy-screen investigation
+
+Investigate a stronger **Privacy display** state that resembles a local lock or
+black screen while leaving the captured stream and VR remote control available.
+The ordinary Android lock screen is not acceptable: Android 15 QPR1 and newer
+stop MediaProjection when the device locks, and that projection cannot be
+resumed without a new capture session.
+
+A normal application must not claim Samsung Phone Link-style local blanking
+unless it is physically demonstrated through a supported API. Evaluate:
+
+- whether a transparent or accessibility overlay can intercept physical touches
+  without appearing in MediaProjection or blocking PhoneCast's injected remote
+  gestures;
+- whether public display/brightness APIs can provide a black-looking local panel
+  while the encoded stream remains normal;
+- OEM-supported APIs where available;
+- an explicitly advanced ADB/Shizuku panel-power mode, kept separate from the
+  consumer default and accompanied by reliable recovery controls.
+
+A touch-blocking overlay cannot be assumed to pass the same touch through to the
+underlying application, and injected Accessibility gestures may target that
+same overlay. If physical-input blocking cannot coexist safely with VR remote
+control, ship dimming only and document the limitation.
+
+## Acceptance Criteria
+
+- Dimming is opt-in and active only during an authorized casting session.
+- The VR stream retains normal brightness and content while the physical panel
+  is dimmed.
+- Physical interaction restores the exact prior brightness behavior promptly,
+  then the display dims again after the configured idle delay.
+- Stop, projection revocation, permission removal, crash recovery, and device
+  restart have tested restoration behavior and cannot strand the display at
+  minimum brightness.
+- Automatic and manual brightness modes are restored correctly.
+- Locking the phone continues to follow Android privacy rules and is never
+  represented as resumable projection.
+- Any privacy-screen/touch-guard mode is separately opt-in, has an emergency
+  escape, does not appear in the stream, and does not block VR-originated input.
+- If those privacy-screen criteria cannot be met with supported APIs, the
+  delivered feature is explicitly limited to safe brightness dimming.
+- Physical validation covers the target phone, screen rotation, reconnect,
+  notification shade use, casting stop/restart, and at least one failure path.
+
+Detailed existing research and the validation matrix are in
+[`docs/android-screen-off.md`](docs/android-screen-off.md).
 
 ---
 
@@ -1906,7 +2140,7 @@ Maintain these in `docs/steam-frame.md`.
 
 Can a native ARM64 Steam Frame application create a persistent overlay over another standalone VR application?
 
-**Current answer:** Native ARM64 overlay creation and visible coexistence with an on-device standalone 2D application are confirmed. Coexistence with a standalone VR scene application remains untested. See `docs/steam-frame.md`.
+**Current answer:** Native ARM64 overlay creation and visible coexistence with on-device standalone flat applications are confirmed. PhoneCast-first coexistence with standalone Cubism is now physically confirmed and corroborated by native OpenXR scene logs; the game-first launch order and broader lifecycle matrix remain pending. See `docs/steam-frame.md`.
 
 ### Additional Questions
 

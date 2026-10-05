@@ -29,12 +29,17 @@ public:
     bool TakeSettingsMenuInput(vr::SettingsMenuInput& input) override;
     void SetRemoteControlStatus(bool known, bool appEnabled,
                                 bool accessibilityEnabled) override;
+    void SetPairingCode(const std::string& pairCode) override;
+    // Opens the SteamVR dashboard with PhoneCast selected. Used by the native
+    // launcher and by second-instance IPC; it never starts SteamVR itself.
+    bool FocusDashboard(std::string& error);
     bool TakePointerEvent(core::PointerEvent& event) override;
     bool ShowNotification(const core::protocol::NotificationEvent& notification,
                           std::string& error) override;
     bool HideNotification(std::string& error) override;
     bool TakeNotificationOpenRequest(std::uint64_t& actionToken) override;
     bool TakeHideRequest() override;
+    bool TakeQuitRequest() override;
     bool GetPerformanceStats(vr::VrPerformanceStats& stats) override;
     void Stop() noexcept override;
 

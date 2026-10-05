@@ -50,6 +50,20 @@ Settings default to `$XDG_CONFIG_HOME/phonecast-vr/overlay-settings.ini`, or `$H
 
 The phone must connect to the Steam Frame LAN address and matching TCP port (default `49321`). The transport remains unencrypted and must be tested only on a trusted LAN.
 
+## Standalone launcher baseline
+
+The Linux build copies `steam-frame-installer` beside the receiver. Its installer
+adds an absolute-path SteamOS desktop launcher and 48/128/256 pixel icons. A
+per-user native lock prevents duplicate receivers; later launch attempts signal
+the resident process to open/focus the PhoneCast dashboard. Native first launch
+creates an owner-only persistent pairing code, so ordinary restarts do not
+require a command-line credential.
+
+This is implemented and cross-built but not yet physically approved. Keep
+manual Android address entry available and do not enable autostart before the
+manual dashboard `+` path passes on-headset testing. See
+`docs/standalone-ux.md`.
+
 ## Required physical review
 
 Do not mark Sprint 11 complete from the cross-build alone. Record:

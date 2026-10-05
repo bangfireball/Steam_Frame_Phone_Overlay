@@ -12,7 +12,8 @@
       "is_dashboard_overlay": true,
       "strings": {
         "en_us": {
-          "name": "PhoneCast VR Receiver"
+          "name": "PhoneCast VR",
+          "description": "View and control your Android phone in SteamVR"
         }
       }
     }

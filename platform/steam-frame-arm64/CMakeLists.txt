@@ -4,6 +4,7 @@ endif()
 
 add_library(phonecast-steam-frame
     src/ProcessPerformanceSampler.cpp
+    src/StandaloneRuntime.cpp
     src/V4l2H264Decoder.cpp
 )
 target_include_directories(phonecast-steam-frame PUBLIC include)
