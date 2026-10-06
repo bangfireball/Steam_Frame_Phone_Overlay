@@ -8,7 +8,7 @@ const defaultApkPath = path.resolve(
   __dirname,
   "../android/sender/app/build/outputs/apk/debug/app-debug.apk",
 );
-const steamFrameDirectoryName = "phonecast-steam-frame-arm64-sprint13";
+const steamFrameDirectoryName = "phonecast-steam-frame-arm64-sprint14";
 const steamFrameFileName = `${steamFrameDirectoryName}.tar.gz`;
 const defaultSteamFramePath = path.resolve(
   __dirname,
@@ -59,11 +59,11 @@ return http.createServer((request, response) => {
 <h1>PhoneCast Downloads</h1>
 <h2>Android phone</h2>
 ${apkAvailable
-  ? '<p><a href="/phonecast-sender.apk">Download the Sprint 13 Android APK</a></p><p>Optional phone playback audio is off by default. Enable it in Android Settings, grant audio permission, then start a new cast. The separate local-phone mute option saves and restores media volume around an active headset audio stream.</p>'
+  ? '<p><a href="/phonecast-sender.apk">Download the current Android APK</a></p><p>The sender remains compatible with the Sprint 14 receiver. Optional phone playback audio is off by default.</p>'
   : "<p>The debug APK has not been built yet.</p>"}
 <h2>Steam Frame</h2>
 ${steamFrameAvailable
-  ? `<p><a href="/${steamFrameFileName}">Download the Sprint 13 ARM64 Linux bundle</a></p>
+  ? `<p><a href="/${steamFrameFileName}">Download the Sprint 14 ARM64 Linux bundle</a></p>
 <p>On Steam Frame, open a terminal in desktop mode. Install as your normal user, without <code>sudo</code>. This is a native Linux application, not an APK.</p>
 <h3>Already downloaded? Extract and install</h3>
 <p>These commands assume the archive is in <code>~/Downloads</code>.</p>
@@ -80,7 +80,7 @@ sh "$HOME/install-phonecast.sh" 'http://YOUR_PC_LAN_IP:${port}'</code></pre>
 <button type="button" data-copy="curl-install">Copy commands</button>
 <p>The script checks Linux/ARM64 and refuses root installation. It downloads and extracts the bundle in a temporary directory, cleans up, and stops on failure. No remote script is piped into a shell. The downloaded script remains at <code>~/install-phonecast.sh</code> for inspection or removal.</p>
 <p>After installation, open the SteamVR dashboard <strong>+ app launcher</strong> and select <strong>PhoneCast VR</strong>. Quit PhoneCast before updating an existing installation; settings and pairing are retained.</p>
-<p>Sprint 13 adds phone playback audio with headset Settings → Phone Audio controls. Install both updated builds. Physical headset audio, synchronization, and game-audio mixing validation remain pending.</p>
+<p>This Sprint 14 build contains the mockup-driven portrait dashboard and settings refresh. Windows and ARM64 builds/tests pass; headset visual and laser-target approval are still pending.</p>
 <p><strong>Trusted LAN only:</strong> this development server uses unencrypted HTTP. Install only from your own trusted PC.</p>`
   : "<p>The Steam Frame ARM64 bundle has not been packaged yet.</p>"}
 <script>

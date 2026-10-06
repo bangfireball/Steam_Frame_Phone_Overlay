@@ -28,6 +28,6 @@ curl --fail --show-error --location --connect-timeout 15 \
     --output "$work_dir/phonecast.tar.gz" \
     "$base_url/phonecast-steam-frame-arm64.tar.gz"
 tar -xzf "$work_dir/phonecast.tar.gz" -C "$work_dir"
-installer="$work_dir/phonecast-steam-frame-arm64-sprint13/steam-frame-installer/install-phonecast.sh"
+installer="$work_dir/phonecast-steam-frame-arm64-sprint14/steam-frame-installer/install-phonecast.sh"
 [ -f "$installer" ] || fail 'Downloaded bundle is missing the PhoneCast installer.'
 sh "$installer"

@@ -32,10 +32,10 @@ test('download page commands, origin substitution, routes and failure handling',
   const manual = html.match(/id="manual-install">([\s\S]*?)<\/code>/)[1];
   const curl = html.match(/id="curl-install">([\s\S]*?)<\/code>/)[1].replaceAll('&amp;', '&');
   assert.match(manual, /cd "\$HOME\/Downloads"/);
-  assert.match(manual, /sh phonecast-steam-frame-arm64-sprint13\/steam-frame-installer\/install-phonecast.sh/);
-  assert.match(html, /Download the Sprint 13 Android APK/);
-  assert.match(html, /Download the Sprint 13 ARM64 Linux bundle/);
-  assert.doesNotMatch(html, /sprint12|Sprint 12/);
+  assert.match(manual, /sh phonecast-steam-frame-arm64-sprint14\/steam-frame-installer\/install-phonecast.sh/);
+  assert.match(html, /Download the current Android APK/);
+  assert.match(html, /Download the Sprint 14 ARM64 Linux bundle/);
+  assert.doesNotMatch(html, /sprint12|Sprint 12|sprint13|Sprint 13/);
   assert.match(curl, /curl -fSLo/);
   assert.match(curl, /&&\nsh/);
   assert.ok(!curl.includes('| sh'));
@@ -57,11 +57,11 @@ test('download page commands, origin substitution, routes and failure handling',
   assert.match(script, /without sudo/);
   assert.ok(!script.includes('\r'), 'served Linux installer must use LF line endings');
   assert.equal(spawnSync('bash', ['-n'], { input: script }).status, 0);
-  assert.match(script, /phonecast-steam-frame-arm64-sprint13\/steam-frame-installer\/install-phonecast.sh/);
-  for (const route of ['/phonecast-steam-frame-arm64.tar.gz', '/phonecast-steam-frame-arm64-sprint13.tar.gz']) {
+  assert.match(script, /phonecast-steam-frame-arm64-sprint14\/steam-frame-installer\/install-phonecast.sh/);
+  for (const route of ['/phonecast-steam-frame-arm64.tar.gz', '/phonecast-steam-frame-arm64-sprint14.tar.gz']) {
     const response = await fetch(origin + route);
     assert.equal(response.status, 200);
-    assert.equal(response.headers.get('content-disposition'), 'attachment; filename="phonecast-steam-frame-arm64-sprint13.tar.gz"');
+    assert.equal(response.headers.get('content-disposition'), 'attachment; filename="phonecast-steam-frame-arm64-sprint14.tar.gz"');
     assert.equal(await response.text(), 'test bundle');
   }
   assert.equal(await (await fetch(origin + '/phonecast-sender.apk')).text(), 'test apk');
