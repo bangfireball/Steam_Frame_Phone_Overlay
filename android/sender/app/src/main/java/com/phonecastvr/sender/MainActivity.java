@@ -34,6 +34,7 @@ import java.util.Locale;
 public final class MainActivity extends Activity {
     private static final int REQUEST_CAPTURE = 1001;
     private static final int REQUEST_NOTIFICATIONS = 1002;
+    private static final int REQUEST_AUDIO = 1003;
     private static final int COLOR_BACKGROUND = Color.rgb(7, 13, 23);
     private static final int COLOR_SURFACE = Color.rgb(17, 28, 43);
     private static final int COLOR_SURFACE_HIGH = Color.rgb(24, 40, 59);
@@ -45,6 +46,9 @@ public final class MainActivity extends Activity {
     private TextView screenTitleView;
     private TextView statusView;
     private TextView metricsView;
+    private TextView audioStatusView;
+    private CheckBox playbackAudioView;
+    private CheckBox mutePhoneAudioView;
     private TextView connectionHintView;
     private LinearLayout mainContent;
     private LinearLayout settingsContent;
@@ -74,6 +78,7 @@ public final class MainActivity extends Activity {
                     intent.getIntExtra(ScreenCaptureService.EXTRA_HEIGHT, 0),
                     intent.getLongExtra(ScreenCaptureService.EXTRA_DROPPED_FRAMES, 0L),
                     intent.getLongExtra(ScreenCaptureService.EXTRA_NETWORK_RTT_MICROS, -1L));
+            audioStatusView.setText(intent.getStringExtra(ScreenCaptureService.EXTRA_AUDIO_STATUS));
         }
     };
 
@@ -97,6 +102,10 @@ public final class MainActivity extends Activity {
         updateAccessibilityButton();
         updateNotificationAccessButton();
         ScreenCaptureService.remoteControlStatusChanged(this);
+        if (playbackAudioView != null && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
+            playbackAudioView.setChecked(false);
+        if (audioStatusView != null) audioStatusView.setText(senderPreferences().getString(
+                ScreenCaptureService.EXTRA_AUDIO_STATUS,"Audio off"));
     }
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
@@ -183,6 +192,8 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams metricsParams = matchWrap();
         metricsParams.setMargins(0, dp(8), 0, 0);
         statusCard.addView(metricsView, metricsParams);
+        audioStatusView = text("Audio off",13,COLOR_SECONDARY,Gravity.START);
+        statusCard.addView(audioStatusView,spaced(0,dp(8),0,0));
         mainContent.addView(statusCard, cardParams());
 
         LinearLayout connectionCard = card();
@@ -263,6 +274,42 @@ public final class MainActivity extends Activity {
         });
         performanceCard.addView(streamProfileView, fieldParams());
         settingsContent.addView(performanceCard, cardParams());
+
+        LinearLayout audioCard = card();
+        audioCard.addView(sectionTitle("Phone playback audio"),matchWrap());
+        audioCard.addView(text("Optional playback-only capture; never microphone or calls. Android asks for audio recording permission. Some apps block capture or return silence. Audio is copied, so your phone may still play sound unless the separate mute option is enabled. Use only a trusted LAN. Enabling capture applies to the next cast; disabling stops audio immediately.",
+                13,COLOR_SECONDARY,Gravity.START),spaced(0,dp(6),0,dp(10)));
+        playbackAudioView = new CheckBox(this);
+        playbackAudioView.setText("Stream phone playback audio");
+        playbackAudioView.setTextColor(COLOR_TEXT);
+        playbackAudioView.setChecked(preferences.getBoolean(PlaybackAudioCapture.PREFERENCE_ENABLED,false) &&
+                checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED);
+        playbackAudioView.setOnCheckedChangeListener((button,checked) -> {
+            if (checked && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                playbackAudioView.setChecked(false);
+                requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQUEST_AUDIO);
+                return;
+            }
+            preferences.edit().putBoolean(PlaybackAudioCapture.PREFERENCE_ENABLED,checked).apply();
+            ScreenCaptureService.audioPreferencesChanged();
+            mutePhoneAudioView.setEnabled(checked);
+            audioStatusView.setText(checked ? "Playback audio enabled for next cast" : "Audio off");
+        });
+        audioCard.addView(playbackAudioView,matchWrap());
+        mutePhoneAudioView = new CheckBox(this);
+        mutePhoneAudioView.setText("Mute phone while streaming audio");
+        mutePhoneAudioView.setTextColor(COLOR_TEXT);
+        mutePhoneAudioView.setChecked(preferences.getBoolean(
+                AndroidPhoneAudioMute.PREFERENCE_ENABLED,false));
+        mutePhoneAudioView.setEnabled(playbackAudioView.isChecked());
+        mutePhoneAudioView.setOnCheckedChangeListener((button,checked) -> {
+            preferences.edit().putBoolean(AndroidPhoneAudioMute.PREFERENCE_ENABLED,checked).apply();
+            ScreenCaptureService.audioMutePreferencesChanged();
+        });
+        audioCard.addView(mutePhoneAudioView,matchWrap());
+        audioCard.addView(text("When enabled, PhoneCast saves the current media volume, mutes the phone only while headset audio is actively streamed, and restores that volume when audio disconnects or casting stops. An unclean process stop is repaired the next time PhoneCast starts.",
+                12,COLOR_SECONDARY,Gravity.START),spaced(dp(4),dp(2),0,0));
+        settingsContent.addView(audioCard,cardParams());
 
         LinearLayout remoteCard = card();
         remoteCard.addView(sectionTitle("VR remote control"), matchWrap());
@@ -385,6 +432,11 @@ public final class MainActivity extends Activity {
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions,
                                                       int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_AUDIO) {
+            boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            playbackAudioView.setChecked(granted);
+            if (!granted) audioStatusView.setText("Audio permission denied; video remains available");
+        }
         if (requestCode == REQUEST_NOTIFICATIONS && captureAfterPermission) {
             captureAfterPermission = false;
             launchCaptureConsent();

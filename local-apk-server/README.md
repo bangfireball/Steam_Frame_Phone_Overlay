@@ -11,7 +11,21 @@ node local-apk-server/server.js
 It listens on port `8080` by default and offers whichever artifacts currently exist:
 
 - Android APK: `android/sender/app/build/outputs/apk/debug/app-debug.apk`
-- Steam Frame ARM64 Sprint 12 bundle: `out/packages/phonecast-steam-frame-arm64-sprint12.tar.gz`
+- Steam Frame ARM64 Sprint 13 bundle: `out/packages/phonecast-steam-frame-arm64-sprint13.tar.gz`
+
+The APK path serves the latest rebuilt sender. Sprint 13 adds default-off phone
+playback audio; install both builds, enable playback audio in Android Settings,
+and start a new cast. The Android settings also offer a separate local-phone mute
+that saves/restores media volume around active receiver audio; its capture and
+recovery paths require physical validation. Native supported playback, perceived
+sync, standalone-game mixing, local mute, controls, and sustained playback are now
+owner-approved; deferred failure/lifecycle cases remain in `docs/phone-audio.md`.
+The stable `/phonecast-steam-frame-arm64.tar.gz` alias and curl bootstrap select
+the Sprint 13 archive too. The current bundle includes the receiver-only
+video-cadence correction for audio-enabled playback: independent frame deadlines
+replace the starvation-prone three-frame sync queue. If the Sprint 13 APK is
+already installed, update only the Frame bundle, quitting PhoneCast first.
+Software regressions pass and native smoothness/perceived A/V sync are owner-approved.
 
 Override the port if needed:
 
@@ -26,8 +40,8 @@ First complete the Linux ARM64 build and install staging described in `docs/deve
 
 ```bash
 mkdir -p out/packages
-tar -czf out/packages/phonecast-steam-frame-arm64-sprint12.tar.gz \
-  -C out/packages phonecast-steam-frame-arm64-sprint12
+tar -czf out/packages/phonecast-steam-frame-arm64-sprint13.tar.gz \
+  -C out/packages phonecast-steam-frame-arm64-sprint13
 ```
 
 The archive is a native AArch64 Linux application, not an APK. The download
@@ -40,8 +54,8 @@ For an archive already downloaded to Steam Frame:
 ```bash
 set -eu
 cd "$HOME/Downloads"
-tar -xzf phonecast-steam-frame-arm64-sprint12.tar.gz
-sh phonecast-steam-frame-arm64-sprint12/steam-frame-installer/install-phonecast.sh
+tar -xzf phonecast-steam-frame-arm64-sprint13.tar.gz
+sh phonecast-steam-frame-arm64-sprint13/steam-frame-installer/install-phonecast.sh
 ```
 
 Or paste this block into a Steam Frame desktop terminal, replacing

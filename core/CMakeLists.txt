@@ -1,5 +1,7 @@
 add_library(phonecast-core
     src/AppConfig.cpp
+    src/AudioProtocol.cpp
+    src/AudioPlayback.cpp
     src/ConsoleLogger.cpp
     src/DecoderRecoveryController.cpp
     src/GeneratedVideoSource.cpp

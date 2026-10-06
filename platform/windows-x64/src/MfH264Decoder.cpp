@@ -292,6 +292,9 @@ bool MfH264Decoder::Submit(const std::vector<std::uint8_t>& accessUnit,
         frame.height = state.visibleHeight;
         frame.format = core::PixelFormat::Rgba8;
         frame.sequence = state.sequence++;
+        LONGLONG pictureTime = 0;
+        frame.timestampMicros = SUCCEEDED(outputSample->GetSampleTime(&pictureTime)) && pictureTime > 0
+            ? static_cast<std::uint64_t>(pictureTime / 10) : 0;
         Nv12ToRgba(decoded, state.visibleWidth, state.visibleHeight,
                    static_cast<std::uint32_t>(pitch), state.codedHeight, frame.pixels);
         producedFrame = true;

@@ -35,12 +35,17 @@ int main(int argc, char** argv) {
                                              bytes.begin() + boundaries[i + 1]);
         phonecast::core::VideoFrame frame;
         bool produced = false;
-        if (!decoder.Submit(unit, i * 33333, frame, produced, error)) {
+        const auto pts = 1000000 + i * 33333;
+        if (!decoder.Submit(unit, pts, frame, produced, error)) {
             std::cerr << error << '\n';
             return 1;
         }
         if (!produced) {
             std::cerr << "Frame " << i << " buffered until future input (latency regression)\n";
+            return 1;
+        }
+        if (frame.timestampMicros != pts) {
+            std::cerr << "Decoded picture lost its original PTS\n";
             return 1;
         }
         if (frame.width != 64 || frame.height != 64 || frame.pixels.size() != 64 * 64 * 4 ||

@@ -1,4 +1,5 @@
 #include "phonecast/platform/network/TcpVideoServer.h"
+#include "phonecast/core/audio/AudioProtocol.h"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -65,8 +66,8 @@ bool SendExact(SOCKET socket, const std::vector<std::uint8_t>& bytes) {
 }  // namespace
 
 struct TcpVideoServer::Implementation {
-    Implementation(std::string code, std::uint16_t listenPort)
-        : pairCode(std::move(code)), port(listenPort) {}
+    Implementation(std::string code, std::uint16_t listenPort, bool enableAudio)
+        : pairCode(std::move(code)), port(listenPort), audioEnabled(enableAudio) {}
 
     void SetStatus(std::string value) {
         std::lock_guard<std::mutex> lock(statusMutex);
@@ -174,6 +175,11 @@ struct TcpVideoServer::Implementation {
 
     void HandleClient(SOCKET socket) {
         bool authenticated = false;
+        bool audioNegotiated = false;
+        std::uint64_t audioEpoch = 0;
+        std::uint64_t audioSequence = 0;
+        std::uint64_t audioPts = 0;
+        bool haveAudioSequence = false;
         std::array<std::uint8_t, core::protocol::kHeaderSize> header{};
         while (running.load() && ReceiveExact(socket, header.data(), header.size())) {
             Message message;
@@ -193,6 +199,7 @@ struct TcpVideoServer::Implementation {
                     return;
                 }
                 authenticated = true;
+                ++sessionGeneration;
                 connected.store(true);
                 SetStatus("Phone connected and authenticated");
                 continue;
@@ -218,10 +225,55 @@ struct TcpVideoServer::Implementation {
                     SetStatus("Warning: PhoneCast Accessibility service is disabled");
                 continue;
             }
+            if (message.type == MessageType::AudioConfig || message.type == MessageType::AudioFrame ||
+                message.type == MessageType::AudioStatus) {
+                if (!audioNegotiated) { ++audioDropped; continue; }
+                if (message.type == MessageType::AudioConfig) {
+                    std::uint64_t epoch = 0;
+                    if (!core::audio::ParseConfiguration(message,epoch)) { ++audioDropped; continue; }
+                    audioEpoch = epoch; haveAudioSequence = false;
+                    std::lock_guard<std::mutex> lock(audioMutex);
+                    audioMessages.clear();
+                    audioMessages.push_back({std::move(message),std::chrono::steady_clock::now()});
+                } else if (message.type == MessageType::AudioStatus) {
+                    std::uint64_t epoch = 0; core::audio::CaptureStatus status{};
+                    if (!core::audio::ParseStatus(message,epoch,status) || epoch != audioEpoch) {
+                        ++audioDropped; continue;
+                    }
+                    std::lock_guard<std::mutex> lock(audioMutex);
+                    if (status == core::audio::CaptureStatus::Off || status == core::audio::CaptureStatus::Error) {
+                        audioMessages.clear(); audioEpoch = 0;
+                    }
+                    audioMessages.erase(std::remove_if(audioMessages.begin(),audioMessages.end(),
+                        [](const QueuedMessage& q) { return q.message.type == MessageType::AudioStatus; }),audioMessages.end());
+                    audioMessages.push_back({std::move(message),std::chrono::steady_clock::now()});
+                } else {
+                    core::audio::Block block;
+                    if (!core::audio::ParseBlock(message,block) || block.epoch != audioEpoch ||
+                        (haveAudioSequence && (block.sequence <= audioSequence || block.timestampMicros <= audioPts))) {
+                        ++audioDropped; continue;
+                    }
+                    audioReceivedBytes += message.payload.size() + core::protocol::kHeaderSize;
+                    audioSequence = block.sequence; audioPts = block.timestampMicros; haveAudioSequence = true;
+                    std::lock_guard<std::mutex> lock(audioMutex);
+                    const auto frames = std::count_if(audioMessages.begin(),audioMessages.end(),
+                        [](const QueuedMessage& q) { return q.message.type == MessageType::AudioFrame; });
+                    if (frames >= 10) {
+                        const auto old = std::find_if(audioMessages.begin(),audioMessages.end(),
+                            [](const QueuedMessage& q) { return q.message.type == MessageType::AudioFrame; });
+                        audioMessages.erase(old); ++audioDropped;
+                    }
+                    audioMessages.push_back({std::move(message),std::chrono::steady_clock::now()});
+                }
+                continue;
+            }
             if (message.type == MessageType::Ping) {
                 Message pong;
                 pong.type = MessageType::Pong;
                 pong.timestampMicros = message.timestampMicros;
+                if (audioEnabled && core::audio::HasCapability(message.payload)) {
+                    pong.payload = core::audio::Capability(); audioNegotiated = true;
+                }
                 if (!SendMessage(socket, pong)) return;
             } else if (message.type == MessageType::VideoConfig ||
                        message.type == MessageType::VideoFrame ||
@@ -281,8 +333,10 @@ struct TcpVideoServer::Implementation {
                 haveExpectedSequence = false;
                 keyFrameRequestPending = false;
             }
+            { std::lock_guard<std::mutex> lock(audioMutex); audioMessages.clear(); }
             HandleClient(accepted);
             connected.store(false);
+            { std::lock_guard<std::mutex> lock(audioMutex); audioMessages.clear(); }
             remoteControlStatusKnown.store(false);
             remoteControlAppEnabled.store(false);
             remoteControlAccessibilityEnabled.store(false);
@@ -298,6 +352,10 @@ struct TcpVideoServer::Implementation {
 
     std::string pairCode;
     std::uint16_t port;
+    bool audioEnabled{false};
+    mutable std::mutex audioMutex;
+    std::deque<QueuedMessage> audioMessages;
+    std::atomic<std::uint64_t> audioDropped{}, audioReceivedBytes{}, sessionGeneration{};
     std::atomic_bool running{};
     std::atomic_bool connected{};
     std::atomic_bool remoteControlStatusKnown{};
@@ -329,8 +387,8 @@ struct TcpVideoServer::Implementation {
 #endif
 };
 
-TcpVideoServer::TcpVideoServer(std::string pairCode, std::uint16_t port)
-    : implementation_(std::make_unique<Implementation>(std::move(pairCode), port)) {}
+TcpVideoServer::TcpVideoServer(std::string pairCode, std::uint16_t port, bool audioEnabled)
+    : implementation_(std::make_unique<Implementation>(std::move(pairCode), port, audioEnabled)) {}
 TcpVideoServer::~TcpVideoServer() { Stop(); }
 
 bool TcpVideoServer::Start(std::string& error) {
@@ -366,6 +424,23 @@ bool TcpVideoServer::Pop(Message& message, std::chrono::microseconds* queueAge) 
     }
     return true;
 }
+
+bool TcpVideoServer::PopAudio(Message& message) {
+    auto& state = *implementation_;
+    std::lock_guard<std::mutex> lock(state.audioMutex);
+    while (!state.audioMessages.empty()) {
+        auto queued = std::move(state.audioMessages.front()); state.audioMessages.pop_front();
+        if (queued.message.type == MessageType::AudioFrame &&
+            std::chrono::steady_clock::now() - queued.receivedAt > std::chrono::milliseconds(100)) {
+            ++state.audioDropped; continue;
+        }
+        message = std::move(queued.message); return true;
+    }
+    return false;
+}
+std::uint64_t TcpVideoServer::AudioDropped() const noexcept { return implementation_->audioDropped.load(); }
+std::uint64_t TcpVideoServer::AudioReceivedBytes() const noexcept { return implementation_->audioReceivedBytes.load(); }
+std::uint64_t TcpVideoServer::SessionGeneration() const noexcept { return implementation_->sessionGeneration.load(); }
 
 void TcpVideoServer::Stop() noexcept {
     if (!implementation_) return;

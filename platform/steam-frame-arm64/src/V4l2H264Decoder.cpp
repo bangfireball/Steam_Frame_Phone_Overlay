@@ -362,6 +362,9 @@ struct V4l2H264Decoder::Implementation {
         frame.height = visibleHeight;
         frame.format = core::PixelFormat::Rgba8;
         frame.sequence = buffer.sequence;
+        frame.timestampMicros = buffer.timestamp.tv_sec >= 0 && buffer.timestamp.tv_usec >= 0
+            ? static_cast<std::uint64_t>(buffer.timestamp.tv_sec) * 1000000U +
+                static_cast<std::uint64_t>(buffer.timestamp.tv_usec) : 0;
         frame.pixels.resize(static_cast<std::size_t>(visibleWidth) * visibleHeight * 4U);
         for (std::uint32_t y = 0; y < visibleHeight; ++y) {
             for (std::uint32_t x = 0; x < visibleWidth; ++x) {

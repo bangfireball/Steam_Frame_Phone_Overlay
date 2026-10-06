@@ -76,13 +76,14 @@ void SettingsMenuController::MergeRendererUpdate(const OverlaySettings& settings
 
 std::size_t SettingsMenuController::ItemCount() const noexcept {
     switch (page_) {
-        case Page::Root: return 9;
+        case Page::Root: return 10;
         case Page::Appearance: return 4;
         case Page::Placement: return 5;
         case Page::LeftController:
         case Page::RightController: return 9;
         case Page::Glance: return 3;
         case Page::Notifications: return 5;
+        case Page::Audio: return 5;
     }
     return 0;
 }
@@ -94,9 +95,9 @@ SettingsMenuView SettingsMenuController::View() const {
         case Page::Root:
             view.title = "PHONECAST SETTINGS";
             view.labels = {"APPEARANCE", "PLACEMENT", "LEFT DOCK", "RIGHT DOCK",
-                           "GLANCE AND CONTROLS", "NOTIFICATIONS", "APPLY", "CANCEL", "RESET ALL"};
+                           "GLANCE AND CONTROLS", "NOTIFICATIONS", "APPLY", "CANCEL", "RESET ALL", "PHONE AUDIO"};
             view.values = {">", ">", ">", ">", ">", ">", "", "",
-                           resetConfirmation_ ? "CONFIRM" : ""};
+                           resetConfirmation_ ? "CONFIRM" : "", ">"};
             view.normalizedValues.assign(view.labels.size(), -1.0F);
             break;
         case Page::Appearance:
@@ -161,13 +162,28 @@ SettingsMenuView SettingsMenuController::View() const {
                 Normalize(draft_.notificationOffsetXMeters, -1.00F, 1.00F),
                 Normalize(draft_.notificationOffsetYMeters, -0.75F, 0.75F), -1.0F};
             break;
+        case Page::Audio:
+            view.title = "PHONE AUDIO";
+            view.labels = {"MUTE", "VOLUME", "OUTPUT", "STATUS", "BACK"};
+            view.values = {draft_.audioMuted ? "ON" : "OFF", Decimal(draft_.audioVolume),
+                draft_.audioUseSystemDefault ? "SYSTEM DEFAULT" : "VR / DEFAULT", audioStatus_, ""};
+            view.normalizedValues = {-1.0F, Normalize(draft_.audioVolume,0.0F,1.0F), -1.0F, -1.0F, -1.0F};
+            break;
     }
     return view;
 }
 
 SettingsMenuResult SettingsMenuController::Adjust(int direction) {
     resetConfirmation_ = false;
+    if (page_ == Page::Audio) {
+        if (selected_ == 0) draft_.audioMuted = !draft_.audioMuted;
+        else if (selected_ == 1) draft_.audioVolume = Clamp(draft_.audioVolume + direction * 0.05F,0.0F,1.0F);
+        else if (selected_ == 2) draft_.audioUseSystemDefault = !draft_.audioUseSystemDefault;
+        else return SettingsMenuResult::None;
+        return SettingsMenuResult::Updated;
+    }
     switch (page_) {
+        case Page::Audio:
         case Page::Root:
             return SettingsMenuResult::None;
         case Page::Appearance:
@@ -243,8 +259,15 @@ SettingsMenuResult SettingsMenuController::Adjust(int direction) {
 
 SettingsMenuResult SettingsMenuController::SetNormalized(float value) {
     resetConfirmation_ = false;
+    if (!std::isfinite(value)) return SettingsMenuResult::None;
     value = Clamp(value, 0.0F, 1.0F);
+    if (page_ == Page::Audio) {
+        if (selected_ != 1) return SettingsMenuResult::None;
+        draft_.audioVolume = value;
+        return SettingsMenuResult::Updated;
+    }
     switch (page_) {
+        case Page::Audio:
         case Page::Root:
             return SettingsMenuResult::None;
         case Page::Appearance:
@@ -288,7 +311,12 @@ SettingsMenuResult SettingsMenuController::SetNormalized(float value) {
 }
 
 SettingsMenuResult SettingsMenuController::Activate() {
+    if (page_ == Page::Audio && (selected_ == 0 || selected_ == 2)) return Adjust(1);
     if (page_ == Page::Root) {
+        if (selected_ == 9) {
+            page_ = Page::Audio; selected_ = 0; resetConfirmation_ = false;
+            return SettingsMenuResult::None;
+        }
         if (selected_ <= 5) {
             page_ = static_cast<Page>(static_cast<int>(Page::Appearance) + static_cast<int>(selected_));
             selected_ = 0;

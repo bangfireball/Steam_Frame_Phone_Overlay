@@ -117,6 +117,9 @@ struct OverlaySettings {
     float notificationDistanceMeters{0.75F};
     float notificationOffsetXMeters{0.18F};
     float notificationOffsetYMeters{0.12F};
+    bool audioMuted{false};
+    float audioVolume{0.7F};
+    bool audioUseSystemDefault{false};
 };
 
 class IOverlayRenderer {

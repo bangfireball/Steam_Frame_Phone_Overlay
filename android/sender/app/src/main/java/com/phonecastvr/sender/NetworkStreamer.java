@@ -12,6 +12,7 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -21,6 +22,7 @@ final class NetworkStreamer {
         void onKeyFrameNeeded();
         void onRemoteInput(RemoteInputEvent event);
         void onNotificationOpen(long actionToken);
+        void onAudioCapability(boolean supported);
     }
 
     private static final String TAG = "PhoneCastNetwork";
@@ -33,6 +35,13 @@ final class NetworkStreamer {
     private final Listener listener;
     private final ArrayBlockingQueue<Packet> frames = new ArrayBlockingQueue<>(3);
     private final ArrayBlockingQueue<Packet> notifications = new ArrayBlockingQueue<>(8);
+    private final ArrayBlockingQueue<Packet> audioFrames = new ArrayBlockingQueue<>(10);
+    private final Semaphore wakeup = new Semaphore(0);
+    private final Object audioLock = new Object();
+    private volatile boolean audioRequested, audioSupported;
+    private volatile Packet latestAudioConfig, latestAudioStatus;
+    private long audioEpoch;
+    private final AtomicLong audioDropped = new AtomicLong();
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicBoolean waitingForKeyFrame = new AtomicBoolean(true);
     private final AtomicLong droppedFrames = new AtomicLong();
@@ -57,6 +66,42 @@ final class NetworkStreamer {
         thread.start();
     }
 
+    private void wake() { if (wakeup.availablePermits() == 0) wakeup.release(); }
+    void setAudioRequested(boolean enabled) { audioRequested = enabled; wake(); }
+    boolean audioCapable() { return audioSupported && audioRequested && running.get(); }
+    long audioDropped() { return audioDropped.get(); }
+    void beginAudio(long epoch) {
+        synchronized (audioLock) {
+            if (!audioCapable()) return;
+            audioEpoch = epoch; audioFrames.clear(); latestAudioStatus = null;
+            latestAudioConfig = new Packet(AudioProtocol.CONFIG,0,0,0,0,0,AudioProtocol.config(epoch));
+        }
+        wake();
+    }
+    void offerAudio(long epoch, long sequence, long pts, byte[] payload) {
+        synchronized (audioLock) {
+            if (epoch != audioEpoch || !audioCapable()) return;
+            Packet packet = new Packet(AudioProtocol.FRAME,0,sequence,pts,0,0,payload);
+            if (!audioFrames.offer(packet)) { audioFrames.poll(); audioDropped.incrementAndGet(); audioFrames.offer(packet); }
+        }
+        wake();
+    }
+    void audioStatus(long epoch, int status) {
+        synchronized (audioLock) {
+            if (epoch != audioEpoch || !audioCapable()) return;
+            latestAudioStatus = new Packet(AudioProtocol.STATUS,0,0,0,0,0,AudioProtocol.status(epoch,status));
+        }
+        wake();
+    }
+    void endAudio(long epoch, int status) {
+        synchronized (audioLock) {
+            if (epoch != audioEpoch) return;
+            audioFrames.clear(); audioEpoch = 0;
+            latestAudioStatus = new Packet(AudioProtocol.STATUS,0,0,0,0,0,AudioProtocol.status(epoch,status));
+        }
+        wake();
+    }
+
     void offerConfig(byte[] payload, int width, int height) {
         droppedFrames.addAndGet(frames.size());
         frames.clear();
@@ -64,6 +109,7 @@ final class NetworkStreamer {
         latestKeyFrame = null;
         latestConfig = new Packet(StreamProtocol.TYPE_VIDEO_CONFIG, 0, 0, 0,
                 width, height, payload);
+        wake();
     }
 
     void offerFrame(byte[] payload, int flags, long sequence, long timestampMicros,
@@ -78,13 +124,14 @@ final class NetworkStreamer {
         Packet packet = new Packet(StreamProtocol.TYPE_VIDEO_FRAME, flags, sequence,
                 timestampMicros, width, height, payload);
         if (keyFrame) latestKeyFrame = packet;
-        if (frames.offer(packet)) return;
+        if (frames.offer(packet)) { wake(); return; }
 
         int discarded = frames.size();
         frames.clear();
         droppedFrames.addAndGet(discarded);
         if (keyFrame) {
             frames.offer(packet);
+            wake();
             return;
         }
         droppedFrames.incrementAndGet();
@@ -96,9 +143,10 @@ final class NetworkStreamer {
         Packet packet = new Packet(StreamProtocol.TYPE_NOTIFICATION, 0,
                 notificationSequence.getAndIncrement(), postedAtMillis * 1000L,
                 0, 0, payload);
-        if (notifications.offer(packet)) return;
+        if (notifications.offer(packet)) { wake(); return; }
         notifications.poll();
         notifications.offer(packet);
+        wake();
     }
 
     void clearNotifications() {
@@ -109,6 +157,7 @@ final class NetworkStreamer {
         latestRemoteControlStatus = new Packet(StreamProtocol.TYPE_REMOTE_CONTROL_STATUS,
                 0, 0, 0, 0, 0,
                 StreamProtocol.remoteControlStatusPayload(appEnabled, accessibilityEnabled));
+        wake();
     }
 
     long droppedFrames() {
@@ -136,7 +185,12 @@ final class NetworkStreamer {
                         new BufferedOutputStream(activeSocket.getOutputStream(), 256 * 1024));
                 DataInputStream input = new DataInputStream(
                         new BufferedInputStream(activeSocket.getInputStream(), 4096));
-                Thread reader = new Thread(() -> readReceiverMessages(input),
+                synchronized (audioLock) {
+                    audioSupported = false; audioEpoch = 0; audioFrames.clear();
+                    latestAudioConfig = null; latestAudioStatus = null;
+                }
+                listener.onAudioCapability(false);
+                Thread reader = new Thread(() -> readReceiverMessages(input,activeSocket),
                         "phonecast-network-replies");
                 reader.setDaemon(true);
                 reader.start();
@@ -162,6 +216,7 @@ final class NetworkStreamer {
                 listener.onKeyFrameNeeded();
                 backoffMillis = 250;
                 long nextPingNanos = 0;
+                Packet sentAudioConfig = null, sentAudioStatus = null;
 
                 while (running.get()) {
                     Packet currentRemoteControlStatus = latestRemoteControlStatus;
@@ -180,20 +235,34 @@ final class NetworkStreamer {
                     long now = System.nanoTime();
                     if (now >= nextPingNanos) {
                         StreamProtocol.write(output, StreamProtocol.TYPE_PING, 0, 0,
-                                now / 1000L, 0, 0, new byte[0]);
+                                now / 1000L, 0, 0, audioRequested ? AudioProtocol.capability() : new byte[0]);
                         output.flush();
                         nextPingNanos = now + 1_000_000_000L;
                     }
-                    Packet notification = notifications.poll();
-                    if (notification != null) {
-                        notification.write(output);
-                        output.flush();
-                        continue;
+                    boolean wrote = false;
+                    Packet audioConfig, audioStatus, audioFrame;
+                    synchronized (audioLock) {
+                        audioConfig = latestAudioConfig; audioStatus = latestAudioStatus;
+                        audioFrame = audioFrames.poll();
                     }
-                    Packet packet = frames.poll(100, TimeUnit.MILLISECONDS);
-                    if (packet == null) continue;
-                    packet.write(output);
-                    output.flush();
+                    if (audioSupported && audioConfig != null && audioConfig != sentAudioConfig) {
+                        audioConfig.write(output); sentAudioConfig = audioConfig; wrote = true;
+                    }
+                    if (audioSupported && audioStatus != null && audioStatus != sentAudioStatus) {
+                        audioStatus.write(output); sentAudioStatus = audioStatus; wrote = true;
+                    }
+                    if (audioSupported && audioFrame != null) {
+                        // Never replay stale sound after TCP send blocking.
+                        if (System.nanoTime() - audioFrame.createdNanos < 100_000_000L) {
+                            audioFrame.write(output); wrote = true;
+                        } else audioDropped.incrementAndGet();
+                    }
+                    Packet notification = notifications.poll();
+                    if (notification != null) { notification.write(output); wrote = true; }
+                    Packet packet = frames.poll();
+                    if (packet != null) { packet.write(output); wrote = true; }
+                    if (wrote) output.flush();
+                    else { wakeup.tryAcquire(100,TimeUnit.MILLISECONDS); wakeup.drainPermits(); }
                 }
                 StreamProtocol.write(output, StreamProtocol.TYPE_END_STREAM, 0, 0,
                         0, 0, 0, new byte[0]);
@@ -209,18 +278,28 @@ final class NetworkStreamer {
                 Thread.currentThread().interrupt();
             } finally {
                 socket = null;
+                synchronized (audioLock) {
+                    audioSupported = false; audioEpoch = 0; audioFrames.clear();
+                    latestAudioConfig = null; latestAudioStatus = null;
+                }
+                listener.onAudioCapability(false);
             }
         }
         listener.onConnectionChanged(false, "Streaming stopped");
     }
 
-    private void readReceiverMessages(DataInputStream input) {
+    private void readReceiverMessages(DataInputStream input, Socket owner) {
         try {
-            while (running.get()) {
+            while (running.get() && socket == owner) {
                 StreamProtocol.Header header = StreamProtocol.readHeader(input);
                 byte[] payload = new byte[header.payloadSize];
                 if (header.payloadSize > 0) input.readFully(payload);
+                if (socket != owner) return;
                 if (header.type == StreamProtocol.TYPE_PONG) {
+                    if (audioRequested && !audioSupported && AudioProtocol.hasCapability(payload)) {
+                        audioSupported = true;
+                        listener.onAudioCapability(true);
+                    }
                     roundTripMicros.set(Math.max(0L,
                             System.nanoTime() / 1000L - header.timestampMicros));
                 } else if (header.type == StreamProtocol.TYPE_REQUEST_KEY_FRAME) {
@@ -236,7 +315,13 @@ final class NetworkStreamer {
                 }
             }
         } catch (IOException ignored) {
-            // The writer loop owns reconnect behavior and reports connection state.
+            // Wake a blocked writer and stop capture promptly on reader disconnect.
+            if (socket == owner) {
+                audioSupported = false;
+                listener.onAudioCapability(false);
+                try { owner.close(); } catch (IOException closing) { /* Already closed. */ }
+                wake();
+            }
         }
     }
 
@@ -266,6 +351,7 @@ final class NetworkStreamer {
         final int width;
         final int height;
         final byte[] payload;
+        final long createdNanos = System.nanoTime();
 
         Packet(int type, int flags, long sequence, long timestampMicros,
                int width, int height, byte[] payload) {

@@ -43,6 +43,7 @@ public final class ScreenCaptureService extends Service {
     static final String EXTRA_STREAM_PROFILE = "stream_profile";
     static final String EXTRA_RUNNING = "running";
     static final String EXTRA_MESSAGE = "message";
+    static final String EXTRA_AUDIO_STATUS = "audio_status";
     static final String EXTRA_FRAMES = "frames";
     static final String EXTRA_BYTES = "bytes";
     static final String EXTRA_WIDTH = "width";
@@ -55,6 +56,31 @@ public final class ScreenCaptureService extends Service {
     private static final String CHANNEL_ID = "phonecast_capture";
     private static final int NOTIFICATION_ID = 100;
     private static volatile NetworkStreamer activeNetworkStreamer;
+    private static volatile ScreenCaptureService activeService;
+
+    static void audioPreferencesChanged() {
+        ScreenCaptureService service = activeService;
+        if (service != null) service.mainHandler.post(() -> {
+            if (!service.getSharedPreferences(PREFERENCES,MODE_PRIVATE)
+                    .getBoolean(PlaybackAudioCapture.PREFERENCE_ENABLED,false)) {
+                service.audioEnabledForSession = false;
+                service.stopAudio();
+                if (service.networkStreamer != null) service.networkStreamer.setAudioRequested(false);
+                service.setAudioStatus("Audio off");
+            }
+        });
+    }
+
+    static void audioMutePreferencesChanged() {
+        ScreenCaptureService service = activeService;
+        if (service != null) service.mainHandler.post(() -> {
+            if (service.phoneAudioMute != null) {
+                boolean requested = service.getSharedPreferences(PREFERENCES,MODE_PRIVATE)
+                        .getBoolean(AndroidPhoneAudioMute.PREFERENCE_ENABLED,false);
+                service.phoneAudioMute.setRequested(requested);
+            }
+        });
+    }
 
     static boolean forwardNotification(byte[] payload, long postedAtMillis) {
         NetworkStreamer streamer = activeNetworkStreamer;
@@ -92,6 +118,48 @@ public final class ScreenCaptureService extends Service {
     private CaptureConfig.StreamProfile streamProfile = CaptureConfig.StreamProfile.STANDARD;
     private long lastStatusNanos;
     private boolean stopping;
+    private boolean audioEnabledForSession;
+    private PlaybackAudioCapture audioCapture;
+    private PhoneAudioMuteController phoneAudioMute;
+    private long audioGeneration;
+    private String audioStatus = "Audio off";
+
+    private void setAudioStatus(String value) {
+        audioStatus = value;
+        getSharedPreferences(PREFERENCES,MODE_PRIVATE).edit().putString(EXTRA_AUDIO_STATUS,value).apply();
+        EncoderSession current;
+        synchronized (encoderLock) { current = encoderSession; }
+        if (!stopping) broadcastStatus(true,"Casting",current == null ? null : current.size);
+    }
+
+    private void stopAudio() {
+        if (phoneAudioMute != null) phoneAudioMute.setStreamingAudio(false);
+        ++audioGeneration;
+        PlaybackAudioCapture old = audioCapture; audioCapture = null;
+        if (old != null) old.stop();
+    }
+
+    private void updateAudioCapability(boolean supported) {
+        if (stopping || projection == null || networkStreamer == null) return;
+        if (!supported) {
+            if (networkStreamer.audioCapable()) return; // Ignore an obsolete disconnect callback.
+            stopAudio();
+            setAudioStatus(audioEnabledForSession ? "Audio waiting for capable receiver (video-only fallback)" : "Audio off");
+            return;
+        }
+        if (!audioEnabledForSession || audioCapture != null || !networkStreamer.audioCapable()) return;
+        final long generation = ++audioGeneration;
+        PlaybackAudioCapture capture = new PlaybackAudioCapture(this,projection,networkStreamer,
+                (state,message) -> mainHandler.post(() -> {
+                    if (!stopping && generation == audioGeneration && audioCapture != null) {
+                        phoneAudioMute.setStreamingAudio(state == AudioProtocol.ACTIVE ||
+                                state == AudioProtocol.SILENT);
+                        setAudioStatus(message);
+                    }
+                }));
+        audioCapture = capture;
+        capture.start();
+    }
 
     private final MediaProjection.Callback projectionCallback = new MediaProjection.Callback() {
         @Override public void onStop() {
@@ -118,7 +186,11 @@ public final class ScreenCaptureService extends Service {
 
     @Override public void onCreate() {
         super.onCreate();
+        activeService = this;
         createNotificationChannel();
+        phoneAudioMute = AndroidPhoneAudioMute.create(this);
+        phoneAudioMute.setRequested(getSharedPreferences(PREFERENCES,MODE_PRIVATE)
+                .getBoolean(AndroidPhoneAudioMute.PREFERENCE_ENABLED,false));
         codecThread = new HandlerThread("phonecast-avc-output");
         codecThread.start();
         codecHandler = new Handler(codecThread.getLooper());
@@ -178,6 +250,12 @@ public final class ScreenCaptureService extends Service {
         encodedFrames.set(0);
         encodedBytes.set(0);
         streamProfile = profile == null ? CaptureConfig.StreamProfile.STANDARD : profile;
+        phoneAudioMute.setRequested(getSharedPreferences(PREFERENCES,MODE_PRIVATE)
+                .getBoolean(AndroidPhoneAudioMute.PREFERENCE_ENABLED,false));
+        audioEnabledForSession = getSharedPreferences(PREFERENCES,MODE_PRIVATE)
+                .getBoolean(PlaybackAudioCapture.PREFERENCE_ENABLED,false) &&
+                checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        audioStatus = audioEnabledForSession ? "Audio waiting for capable receiver" : "Audio off";
         lastStatusNanos = 0;
 
         try {
@@ -209,12 +287,17 @@ public final class ScreenCaptureService extends Service {
                     }
                 }
 
+                @Override public void onAudioCapability(boolean supported) {
+                    mainHandler.post(() -> updateAudioCapability(supported));
+                }
+
                 @Override public void onNotificationOpen(long actionToken) {
                     if (!NotificationForwardingService.openNotification(actionToken)) {
                         Log.w(TAG, "Notification open ignored: action is unavailable");
                     }
                 }
             });
+            networkStreamer.setAudioRequested(audioEnabledForSession);
             activeNetworkStreamer = networkStreamer;
             remoteControlStatusChanged(this);
             networkStreamer.start();
@@ -456,6 +539,10 @@ public final class ScreenCaptureService extends Service {
     }
 
     private void stopCaptureResources(boolean stopProjection) {
+        stopAudio();
+        audioEnabledForSession = false;
+        audioStatus = "Audio off";
+        getSharedPreferences(PREFERENCES,MODE_PRIVATE).edit().putString(EXTRA_AUDIO_STATUS,audioStatus).apply();
         if (virtualDisplay != null) {
             virtualDisplay.release();
             virtualDisplay = null;
@@ -480,6 +567,7 @@ public final class ScreenCaptureService extends Service {
     }
 
     @Override public void onDestroy() {
+        if (activeService == this) activeService = null;
         stopping = true;
         mainHandler.removeCallbacks(currentDisplaySizeCheck);
         DisplayManager displayManager = (DisplayManager) getSystemService(DISPLAY_SERVICE);
@@ -495,6 +583,7 @@ public final class ScreenCaptureService extends Service {
                 .setPackage(getPackageName())
                 .putExtra(EXTRA_RUNNING, running)
                 .putExtra(EXTRA_MESSAGE, message)
+                .putExtra(EXTRA_AUDIO_STATUS, audioStatus)
                 .putExtra(EXTRA_FRAMES, encodedFrames.get())
                 .putExtra(EXTRA_BYTES, encodedBytes.get())
                 .putExtra(EXTRA_DROPPED_FRAMES,

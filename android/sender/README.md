@@ -60,6 +60,38 @@ adb logcat -s PhoneCastCapture
 - Refreshes the main Start/Stop state when the activity resumes, so an externally ended projection does not leave stale controls.
 - Reports the in-app remote-control consent and Accessibility-service gate independently to the receiver.
 
+## Optional phone playback audio
+
+Settings → **Phone playback audio** adds a separately opt-in, default-off toggle.
+Grant Android audio-recording permission only if you want this feature, then start
+a new cast. It captures permitted media/game playback using the existing projection,
+not microphones or calls. Some apps return silence or prohibit capture; PhoneCast
+will not bypass this. The phone may continue playing locally because capture copies
+rather than redirects sound.
+
+The separate **Mute phone while streaming audio** setting saves the current global
+media volume before muting local playback. It restores that exact value on receiver
+disconnect, audio opt-out, projection/casting stop, or service teardown. PhoneCast
+commits a recovery marker before muting; after an unclean process exit, the next
+PhoneCast process start attempts restoration before another component starts.
+Android cannot execute restoration at the instant its process is forcibly killed,
+so that last recovery is delayed until PhoneCast runs again. The setting changes
+media volume only, never call/ring volume. Physical testing confirms the target phone
+continues supplying playback capture while local media volume is zero; individual
+restore/failure paths remain to be exercised.
+
+Source-app UI mute is not reliably visible to playback capture. In physical testing,
+Reddit produced captured audio for some embedded videos shown as muted. PhoneCast
+receives PCM selected by Android usage/capture policy and cannot infer that per-video
+UI state. Disabling phone playback audio stops it; a future package-level blocklist
+could exclude an application entirely.
+
+Turning the playback-audio toggle off stops current audio immediately; enabling
+applies to the next capture session. Video continues on older receivers and on
+handled audio failures. Supported native playback, perceived sync, game mixing,
+local mute, controls, and sustained playback are owner-approved. See
+`docs/phone-audio.md` for closure evidence, deferred cases, and receiver controls.
+
 ## Security limitation
 
 The receiver requires the six-digit code before accepting video, but the current Sprint 3 transport is not encrypted. Use it only on a trusted development LAN. See `docs/protocol.md` for the protocol decision and required security follow-up.

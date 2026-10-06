@@ -12,6 +12,8 @@ struct VideoFrame {
     std::uint32_t height{};
     PixelFormat format{PixelFormat::Rgba8};
     std::uint64_t sequence{};
+    // Actual decoded picture PTS; zero means unavailable/generated content.
+    std::uint64_t timestampMicros{};
     std::vector<std::uint8_t> pixels;
 
     [[nodiscard]] bool IsValid() const noexcept {

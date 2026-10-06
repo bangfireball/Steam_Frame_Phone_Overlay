@@ -22,7 +22,7 @@ struct VideoServerStats {
 
 class TcpVideoServer final : public core::IRemoteInputSender {
 public:
-    TcpVideoServer(std::string pairCode, std::uint16_t port);
+    TcpVideoServer(std::string pairCode, std::uint16_t port, bool audioEnabled = false);
     ~TcpVideoServer();
     TcpVideoServer(const TcpVideoServer&) = delete;
     TcpVideoServer& operator=(const TcpVideoServer&) = delete;
@@ -30,6 +30,10 @@ public:
     bool Start(std::string& error);
     bool Pop(core::protocol::Message& message,
              std::chrono::microseconds* queueAge = nullptr);
+    bool PopAudio(core::protocol::Message& message);
+    std::uint64_t AudioDropped() const noexcept;
+    std::uint64_t AudioReceivedBytes() const noexcept;
+    std::uint64_t SessionGeneration() const noexcept;
     bool Send(const core::PointerEvent& event, std::string& error) override;
     bool SendNotificationOpen(std::uint64_t actionToken, std::string& error);
     // Drop queued prediction frames and ask the authenticated sender for a new

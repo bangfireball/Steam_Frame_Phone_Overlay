@@ -66,6 +66,17 @@ manual Android address entry available and do not enable autostart before the
 manual dashboard `+` path passes on-headset testing. See
 `docs/standalone-ux.md`.
 
+## Optional playback audio (Sprint 13)
+
+The native VR receiver now negotiates default-off Android playback capture and
+plays bounded 48 kHz stereo PCM through the existing PulseAudio/PipeWire server.
+Builds need `libpulse-dev` headers; `libpulse.so.0` is loaded at runtime. No audio
+daemon, global output/volume change, or exclusive ALSA stream is installed. The
+read-only Frame probe found the compatible server/library/default speaker sink,
+but audible playback in the Steam Linux Runtime and over games remains pending.
+See `docs/phone-audio.md`. Headset Settings → Phone Audio offers Mute, Volume,
+and automatic/system routing; `--audio-device SINK` provides an explicit sink.
+
 ## Required physical review
 
 Do not mark Sprint 11 complete from the cross-build alone. Record:

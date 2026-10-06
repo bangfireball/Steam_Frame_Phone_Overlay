@@ -1758,6 +1758,27 @@ Optional dashboard-closed hotkeys are not required for Sprint 12 standalone UX.
 
 # Sprint 13 — Optional Phone Audio
 
+**Status:** `[x] Complete — native headset playback, lip-sync, local mute, standalone-game mixing, controls, lifecycle, and sustained stability owner-approved`
+
+- `[x]` Project owner chose Sprint 13 next; Sprint 12 decoder fault validation and Vulkan recovery/investigation remain deferred follow-ups
+- `[x]` Android playback-capture restrictions and timestamp APIs researched
+- `[x]` Windows shared-mode output and Linux PulseAudio/PipeWire candidates researched
+- `[x]` Initial PCM baseline, capability-negotiation requirement, bounded queues, A/V timing, and validation matrix documented in `docs/phone-audio.md`
+- `[x]` Negotiated audio protocol and tested cross-version video-only fallback
+- `[x]` Explicit default-off Android opt-in, permission, playback-only recorder, and cleanup implementation
+- `[x]` Optional local-phone media mute works with continued headset capture and restores when the stream closes; projection-revoke and unclean-exit recovery remain documented follow-ups
+- `[x]` Independent bounded audio transport and output workers with stale-sound rejection
+- `[x]` WASAPI shared-mode and runtime-loaded PulseAudio/PipeWire output implementations; transactional headset mute/volume/route controls and explicit CLI device selection
+- `[x]` Read-only native audio-server/library/sink probe and isolated Pulse null-sink backend tests
+- `[x]` Decoded picture timestamp preservation and tested bounded A/V synchronization/fallback policy
+- `[x]` Audio-enabled video starvation reproduced and corrected with per-picture deadlines, sufficient bounded retention, overflow progress, and new timing diagnostics; continuous-cadence regressions pass
+- `[x]` Corrected receiver physically approved after flawless 15–20 minute two-video playback, seeking/pause/resume/2× playback, and standalone-game coexistence
+- `[x]` Windows build/all 12 CTest tests, Android JVM tests/APK/lint, ARM64 build and QEMU portable/audio/runtime tests
+- `[x]` Supported playback, perceived lip-sync, game-audio coexistence, reconnect/rotation lifecycle, receiver controls, and stream-close volume restoration owner-approved
+- `[~]` Protected/capture-blocked sources and every local-volume failure/recovery path retain design/automated coverage but were not each physically exercised before owner-approved closure
+
+The implementation uses PCM S16LE at 48 kHz stereo in 10 ms blocks: 1.536 Mbps of samples, approximately 1.571 Mbps with audio framing before TCP/IP overhead. The project owner closed Sprint 13 after physically confirming perfect perceived lip-sync through pause/resume, seeking, and 2× playback; simultaneous standalone-game and phone audio; working local-phone mute and stream-close restoration; receiver controls and lifecycle behavior; and flawless playback of two videos over approximately 15–20 minutes. Read-only diagnostics corroborate sustained near-30 FPS video with no audio-output failures or sampled compositor drops. This approval is qualitative rather than an external click/flash skew distribution and does not claim every protected-source or failure-recovery case was physically exercised. Native PipeWire/PulseAudio environment evidence, cadence corrections, remaining limitations, and exact closure diagnostics are recorded in `docs/phone-audio.md`.
+
 ## Objective
 
 Optionally capture supported Android playback audio and route it through the active VR audio output. This remains outside the initial visual MVP and must be user-controlled.
@@ -1781,6 +1802,250 @@ Do not capture microphone input or protected audio, and do not imply that every 
 - Audio remains acceptably synchronized with the phone picture.
 - Unsupported or protected playback fails clearly without breaking video streaming.
 - Phone audio does not unexpectedly replace or mute game audio.
+
+## Sprint 13 closure — 2026-10-06
+
+The project owner explicitly approved Sprint 13 after perfect perceived lip-sync
+through seeking, pause/resume, and 2× playback; simultaneous phone video/audio over
+a standalone VR game; working receiver controls and reconnect/rotation lifecycle;
+local-phone mute with stream-close volume restoration; and two flawless videos over
+approximately 15–20 minutes. A final read-only 1,257-second snapshot contained 871
+dynamic samples averaging 29.78 received/decoded and 29.70 submitted FPS, with no
+audio-output failure, decoder recovery, or sampled OpenVR drop/mispresent.
+
+Closure does not convert untested protected-source behavior, external skew
+measurement, Windows audio, unavailable-device recovery, projection-revoke restore,
+headset sleep/wake, or Android force-kill recovery into tested claims. Reddit can
+produce capturable audio for embedded videos shown muted because source UI mute is
+not exposed by Android playback capture. Those limitations remain documented in
+`docs/phone-audio.md` and do not block progression. The next planned sprint is
+Sprint 14 — Gestures and UI; Sprint 12 decoder/Vulkan reliability follow-ups remain
+separate deferred work.
+
+---
+
+## Sprint 13 session handoff — 2026-10-05, audio/video jitter follow-up
+
+### Current request and acceptance state
+
+The owner requested a design for the remaining audio/video jitter fix, then
+requested this handoff before usage runs out. **Design and implement the next
+focused Sprint 13 timing correction; do not start Sprint 14.** No second correction
+has been implemented or approved. The first correction improves playback, but the
+owner reports significant video jitter and worsening responsiveness with more
+actions. They also observed a glitched YouTube mini-player on the physical phone;
+retain that as a separate observation, not proof of an Android or receiver cause.
+Sprint 13 remains open; smoothness, lip-sync, routing, and game mixing are not
+accepted merely because builds/tests pass.
+
+### Repository and built/download state
+
+- Branch `main`, ahead of `origin/main` by two commits. Latest commits remain
+  `df4295e` (installer line endings) and `0166116` (bounded decoder recovery).
+- Original Sprint 13 implementation and the first video-cadence correction are
+  still modified/untracked in the working tree; **no commits were made**. Preserve
+  these files. `git diff` alone omits untracked audio source/tests/docs.
+- Main references: `docs/phone-audio.md`, `docs/development.md`,
+  `docs/performance.md`, `core/include/phonecast/core/audio/AudioPlayback.h`,
+  `core/src/AudioPlayback.cpp`, `tests/audio_tests.cpp`, and
+  `apps/stream-receiver/src/vr_main.cpp`.
+- Android Sprint 13 APK is unchanged by the receiver-only correction:
+  `android/sender/app/build/outputs/apk/debug/app-debug.apk`.
+- Windows executable: `out/build/windows-x64/bin/phonecast-vr-stream-receiver.exe`.
+- ARM64 build: `out/build/linux-arm64-sprint13`; current bundle:
+  `out/packages/phonecast-steam-frame-arm64-sprint13.tar.gz` (551,833 bytes).
+- Bundle SHA-256:
+  `7c5f5132d554a9a017c96ac2296ab16f1bb6477459d1575eefcc46b328ce259b`.
+- Packaged/installed receiver SHA-256:
+  `661e6d1f06feebc77d536976362c3e0199c4ffe77df3d12cf65035a14137f177`.
+- Existing Node server at `http://10.0.0.3:8080` serves that bundle through both
+  `/phonecast-steam-frame-arm64-sprint13.tar.gz` and the stable
+  `/phonecast-steam-frame-arm64.tar.gz` alias. Both live downloads were hash-verified;
+  bootstrap script matches the local file. Artifact responses use `no-store` and
+  read files per request, so replacing the archive needs no server restart.
+- Packaging preserves executable bits and LF installer scripts, excludes secrets,
+  and uses stripped ARM64 binaries. Quit PhoneCast before physical installation.
+
+### First correction: implemented, software-tested, physically insufficient
+
+Original audio-on logs showed about 29.5 decoded FPS but only 5.2 submitted FPS;
+without audio, about 29.8 decoded/27.1 submitted FPS. A three-picture queue could
+continually evict its oldest picture before the 100 ms timeout. Timeout also
+flushed future pictures by jumping to newest, reducing cadence.
+
+The first correction changes `AudioVideoQueue` to a hard eight-picture ceiling,
+independent 100 ms arrival-based deadlines, due-only releases/coalescing, and
+forced progress on capacity overflow. Audio-off/unknown/incompatible clocks still
+use immediate newest-picture presentation. Audio buffering, protocol, Android
+capture, Vulkan, and headset services were not changed. It adds console/CSV
+`video_sync_*` queue/deadline/overflow/coalescing/last-hold/estimated-skew fields.
+Skew is picture PTS minus estimated audible PTS, not measured lip-sync; the validity
+flag is only a nonzero/two-second-domain guard, not verified clock compatibility.
+
+Validation passed: all 12 Windows CTest tests, audio tests repeated five times,
+ARM64 cross-build plus QEMU portable/audio/standalone-runtime tests, and both local
+server/bootstrap tests. A deterministic exact 30 FPS/130 ms audio-lag simulation
+presents 297/300 pictures in ten seconds, with three still pending and maximum
+steady-state gap 34 ms. Tests also cover 20/60 FPS, multiple clock lags, 240 FPS
+capacity pressure, clock stalls/jitter/transitions, reset, and arithmetic overflow.
+The earlier standalone diagnostic changes from zero to 300/303 submissions.
+**Those simulations did not model the complete runtime dispatch/decode path.**
+An existing asynchronous test race was corrected by waiting for the audio clock,
+not assuming submission immediately implies that latency has been observed.
+
+### Latest read-only physical evidence
+
+Ignored snapshot directory:
+`out/diagnostics/frame-audio-followup-20261005-223914/` contains `receiver.log`,
+`performance.csv`, `vrserver.txt`, `vrcompositor.txt`, `read-only-probe.txt`,
+`comparison.json`, and `findings.md`. Earlier starvation evidence/reproduction is
+under `out/diagnostics/frame-audio-20261005-2157/`, including
+`cadence-fix-validation.json` and `queue-reproduction.cpp`.
+
+The installed receiver hash matches the first correction. It ran from 22:16:10
+until an **intentional dashboard Quit at 22:37:04**. At the 22:39:18 probe no receiver
+was running. PIDs are ephemeral; the reviewed process was 72101. Latest cast was
+approximately 22:32:44–22:37:04. Nothing was started, stopped, or reconfigured by
+the agent on the headset.
+
+- Latest dynamic audio windows (188 samples, receive FPS >=20 and audio bitrate
+  >1 Mbps): 31.132 received FPS, 31.025 decoded FPS, **25.000 submitted FPS**.
+  Thirty-one samples were below 20 submitted FPS; worst was 7.994 FPS.
+- Receive windows burst as high as 94.949 FPS. These are one-second arrival rates,
+  not proof that the sender continuously encodes above its configured 30 FPS.
+- Integrating all latest connected windows gives approximately 6,294 decoded
+  pictures versus 5,059 submitted (gap ~1,235), but only 48 sync-queue coalesced
+  pictures and zero sync overflow releases. Session/config clears and ending
+  pending pictures explain some differences; per-pass attribution is absent.
+- **Important code path:** `vr_main.cpp` drains `while (server.Pop(...))`, decodes
+  each message, repeatedly overwrites `latestFrame`, then adds only the final
+  picture to `videoPlayout`. Most observed picture loss is therefore before the
+  corrected queue; its continuous-source unit tests cannot cover this behavior.
+- Last-picture hold observations often reach the 100 ms fallback deadline:
+  mean 91.788 ms, maximum 126.980 ms in those dynamic windows. This is not a
+  measured frame-gap distribution; render-loop work/polling can overshoot deadlines.
+- Audio drop counter ended at 4,088 blocks versus 25,498 submitted across the
+  whole run; audio failure counter stayed zero. Latest cast logged 22 distinct
+  successful Pulse output descriptions (initial plus 21 further output instances),
+  naming successively created `PhoneCast VR.<id>.spatialize_filter_chain.capture`
+  sinks, without phone disconnects between them.
+- `PulseAudioOutput::Description()` is stored after Open, so those changed
+  descriptions indicate repeated output recreation. Core currently closes/reopens
+  and resets its clock whenever accepted audio PTS jumps by more than 100 ms.
+  This is a plausible reset mechanism, **not a proven per-event reason**: reset
+  reasons, timestamp gaps, sequence gaps, and clock jumps are not logged yet.
+  Capture scheduling, transport drops, controls/configuration, and source behavior
+  must not be ruled out without evidence.
+- No new receiver Vulkan/upload/device-loss failure or decoder recovery trigger.
+  Recent filtered kernel probe returned no GPU-fault lines. Sampled compositor
+  drops were zero, but some frame-index snapshots repeated; these do not establish
+  absence of frame-level compositor jitter. No Android logs were collected, so
+  the phone-side YouTube mini-player observation remains undiagnosed.
+
+### Proposed next design — not implemented, finalize before coding
+
+1. **Bound work and preserve presentation opportunities.** Replace unbounded
+   transport draining with a bounded decode/dispatch pass (provisional packet/time
+   budgets; a single decoder call may exceed a soft time budget). Feed produced
+   pictures into playout instead of silently overwriting every intermediate one.
+   Service due presentation and interaction between passes. Keep codec config,
+   rotation, recovery, and H.264 prediction order correct: never arbitrarily drop
+   compressed dependent access units to meet a budget. Coalesce decoded pictures
+   deliberately when stale/overdue; retain bounded memory and prioritize game health.
+   Verify the portable decoder contract before introducing any worker-thread split;
+   a large threading refactor is not the first choice.
+2. **Make timing stable rather than follow raw arrival bursts.** Use a bounded,
+   monotonic media-time/steady-clock mapping and explicit clock-validity states.
+   Smooth small timing observations with bounded correction; interpolate only
+   within submitted/known playable sound, never indefinitely beyond it. When sound
+   is unavailable or timing is unreliable, fall back to a stable video schedule
+   rather than repeatedly changing between immediate frames and 100 ms holds.
+   Keep audio-off immediate and cap additional video latency. Thresholds/hysteresis
+   are provisional until measured; do not simply enlarge queues or wait budgets.
+3. **Separate audio packet gaps from device failure.** Do not recreate Pulse/WASAPI
+   output for every ordinary missing/late block. Detect gaps using both sequence
+   and PTS, discard stale application audio, reanchor timing, and use bounded
+   silence only where appropriate. Large/new-epoch timeline changes must not play
+   stale backend sound: design an output-worker flush/reset operation or a justified
+   bounded reopen, rather than assuming clearing the application queue flushes the
+   device. Reopen remains appropriate for actual backend failure/device changes.
+   Mute, opt-out, permission/session stop, and routing must retain immediate cleanup.
+4. **Instrument before claiming cause.** Add bounded aggregate counters/timings
+   for decode-pass size/duration, pre-playout coalescing, presentation intervals,
+   audio sequence/PTS gaps, reset/reanchor/reopen reasons, and backend open duration.
+   Separate stale/overflow/duplicate audio drops. Include event/input/dispatch loop
+   timing to establish why more actions worsen responsiveness. Do not log touch
+   contents, notification text, screen/audio samples, or credentials.
+5. **Regression coverage must exercise orchestration.** Reproduce bursty arrivals,
+   multiple decoded pictures per pass, interaction/notification work, variable
+   decoder cost, audio packet losses and clock reanchors—not just an evenly spaced
+   `AudioVideoQueue` source. Check sustained presentation cadence and inter-frame
+   gap distributions, bounded queues/waits, timeline monotonicity, no stale replay,
+   and no backend-recreation storm under ordinary gaps. Preserve existing video-only,
+   network/keyframe, rotation/reset, audio-controls, and decoder-recovery tests.
+6. **Validate incrementally.** Build/all Windows tests, ARM64 build/QEMU tests,
+   private Pulse null-sink tests if backend reset semantics change, then publish a
+   verified receiver bundle. Avoid an Android change unless timestamp evidence
+   justifies it; if needed, collect capture timestamp/fallback diagnostics and run
+   JVM/APK/lint. Owner retest: same video audio-off/on, then scrolling/notification/
+   rotation under playback, click/flash sync, and game coexistence. Record FPS/gap,
+   audio resets/drops, memory, and owner approval. No simulated result closes Sprint 13.
+
+Build notes: Windows CMake/CTest must be invoked through PowerShell and WinLibs
+runtime prepended as documented in `docs/development.md`. Linux caches use `/src`;
+reuse them only in Docker mounted there, with `MSYS_NO_PATHCONV=1`, never Windows
+CMake. Debian prerequisites include `cmake ninja-build g++-aarch64-linux-gnu git
+ca-certificates file libpulse-dev qemu-user`; QEMU uses
+`qemu-aarch64 -L /usr/aarch64-linux-gnu`. SSH uses host alias `frame` and credentials
+from ignored `.env`; do not print/copy credentials into tracked files. Do not
+restart SteamVR through RDP or restart/reconfigure headset audio services. Deferred
+Sprint 12 decoder-fault validation and Vulkan hang/recovery remain separate work.
+
+---
+
+## Sprint 13 implementation continuation — review branch
+
+The previously uncommitted Sprint 13 baseline and first cadence correction are
+preserved as `fece424` on `review/sprint-13-av-timing`. The next receiver-only
+correction now implements bounded video/audio dispatch, a presentation opportunity
+for every decoded picture, bounded monotonic audible-clock interpolation, and
+worker-side backend flush/reanchor instead of stream recreation for forward audio
+gaps above 100 ms. New aggregate diagnostics expose dispatch/loop/submission gaps,
+audio sequence/PTS gaps, flushes/opens, and classified drops.
+
+Windows build/all 12 CTest tests pass; ARM64 build and QEMU portable/audio/runtime
+tests pass. Private Pulse null-sink tests pass including flush/write-after-flush.
+The rebuilt receiver bundle and hashes are recorded in `docs/phone-audio.md`.
+No hardware receiver, SteamVR, or audio service was restarted during implementation.
+In a subsequent short native-headset test, the project owner reported audio was
+“way better” and video looked good. Read-only review of 33 dynamic audio-enabled
+CSV samples averaged 28.63 received, 28.60 decoded, and 28.57 submitted FPS, with
+zero dynamic transport drops/resyncs, audio failures, or sampled OpenVR dropped/
+mispresented frames. The run used one output open with no reanchor/flush/recreation
+storm. This is encouraging initial physical evidence, not final smoothness or
+lip-sync approval.
+
+Simultaneous sound from the phone and headset is expected: Android playback capture
+copies eligible sound, and PhoneCast intentionally does not change phone media
+volume or audio focus. An optional local-phone mute is now implemented behind a separate Android setting:
+it saves media volume before muting, restores on disconnect/stop/teardown, and uses
+a persisted marker for next-process-start recovery after an unclean exit. Android
+cannot execute cleanup at the instant its process is forcibly killed. A later physical test confirmed that local media volume zero does not silence capture
+on the target phone: the mute worked, streaming remained stable, and YouTube playback
+was watchable. The approximately 1,619-second CSV included 546 dynamic audio/video
+samples averaging 29.62 received, 29.61 decoded, and 29.57 submitted FPS, with no
+dynamic audio-output failure or sampled OpenVR dropped/mispresented frame. Exact
+restoration across disconnect, Stop, projection revoke, checkbox disable, and an
+unclean process restart remains pending.
+
+The same test found that muted embedded Reddit videos can still produce captured
+audio. Android selects playback capture by usage, source UID, and capture policy and
+does not expose the source UI's per-video mute state. PhoneCast therefore cannot
+infer this state from nonzero PCM; a future package/UID blocklist could exclude an
+application entirely. Lip-sync, routing, protected playback, game mixing, and the
+remaining lifecycle validation remain pending; stable fallback scheduling and clock-state hysteresis
+remain possible further tuning. This does not close Sprint 13 or begin Sprint 14.
+The previous handoff above is historical implementation state.
 
 ---
 
@@ -2308,7 +2573,7 @@ MSYS_NO_PATHCONV=1 docker run --rm \
   -v "$(pwd -W):/src" -w /src debian:12-slim sh -lc '
     apt-get update &&
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      cmake ninja-build g++-aarch64-linux-gnu git ca-certificates file &&
+      cmake ninja-build g++-aarch64-linux-gnu git ca-certificates file libpulse-dev &&
     rm -rf out/build/linux-arm64-validation &&
     cmake -S . -B out/build/linux-arm64-validation -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \

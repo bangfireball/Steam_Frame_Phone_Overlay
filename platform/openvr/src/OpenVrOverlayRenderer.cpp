@@ -52,7 +52,7 @@ constexpr int kCloseMenuCell = 8;
 constexpr std::uint32_t kGestureTextureSize = 128;
 constexpr int kGestureProgressSteps = 24;
 constexpr std::uint32_t kSettingsTextureWidth = 512;
-constexpr std::uint32_t kSettingsTextureHeight = 896;
+constexpr std::uint32_t kSettingsTextureHeight = 978;
 constexpr std::uint32_t kDashboardTextureWidth = 1024;
 constexpr std::uint32_t kDashboardTextureHeight = 512;
 constexpr std::uint32_t kDashboardThumbnailSize = 256;
@@ -2285,6 +2285,17 @@ void OpenVrOverlayRenderer::SetRemoteControlStatus(bool known, bool appEnabled,
     impl_->remoteAppEnabled = appEnabled;
     impl_->remoteAccessibilityEnabled = accessibilityEnabled;
     if (changed) impl_->RenderDashboard();
+}
+
+std::string OpenVrOverlayRenderer::DefaultAudioDeviceId() const {
+    auto* system = vr::VRSystem();
+    if (!system) return {};
+    char device[1024]{};
+    vr::ETrackedPropertyError propertyError = vr::TrackedProp_Success;
+    const auto size = system->GetStringTrackedDeviceProperty(vr::k_unTrackedDeviceIndex_Hmd,
+        vr::Prop_Audio_DefaultPlaybackDeviceId_String,device,sizeof(device),&propertyError);
+    return propertyError == vr::TrackedProp_Success && size > 1 && size <= sizeof(device)
+        ? std::string(device) : std::string{};
 }
 
 void OpenVrOverlayRenderer::SetPairingCode(const std::string& pairCode) {
