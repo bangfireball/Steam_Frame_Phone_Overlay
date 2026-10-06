@@ -52,6 +52,7 @@ test('download page commands, origin substitution, routes and failure handling',
   const script = await bootstrap.text();
   assert.match(script, /aarch64\|arm64/);
   assert.match(script, /without sudo/);
+  assert.ok(!script.includes('\r'), 'served Linux installer must use LF line endings');
   assert.equal(spawnSync('bash', ['-n'], { input: script }).status, 0);
   for (const route of ['/phonecast-steam-frame-arm64.tar.gz', '/phonecast-steam-frame-arm64-sprint12.tar.gz']) {
     const response = await fetch(origin + route);
