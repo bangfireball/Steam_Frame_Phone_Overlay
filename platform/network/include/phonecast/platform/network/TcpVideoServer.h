@@ -32,6 +32,9 @@ public:
              std::chrono::microseconds* queueAge = nullptr);
     bool Send(const core::PointerEvent& event, std::string& error) override;
     bool SendNotificationOpen(std::uint64_t actionToken, std::string& error);
+    // Drop queued prediction frames and ask the authenticated sender for a new
+    // key frame without closing the stream or remote-input connection.
+    bool RequestVideoResync(std::string& error);
     void Stop() noexcept;
 
     [[nodiscard]] bool Connected() const noexcept;

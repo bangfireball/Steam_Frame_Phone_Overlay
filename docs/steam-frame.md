@@ -390,11 +390,40 @@ capture or demonstrated LAN congestion. Correlation to either reported incident
 remains pending, and the two incidents must not be assumed to share a cause.
 The logged error did not occur in the Cubism receiver session.
 
-Next investigation: establish approximate incident timing and which restart
-restored video, reproduce the purchase-session freeze and concurrent-download
-case separately, inspect decoder error/recovery behavior, and verify bounded
-recovery without killing the remote-input connection.
-No fix or physical recovery validation is claimed by this log review.
+A bounded recovery path is now implemented. Explicit decoder errors, or three
+consecutive active one-second receive windows with no decoded output, stop and
+reopen the decoder up to three times with backoff. The receiver discards queued
+prediction frames and requests a fresh keyframe while retaining the authenticated
+stream and remote-input connection. Recovery counters are recorded in console
+and CSV diagnostics. Windows tests, an ARM64 cross-build, and emulated portable
+tests pass.
+
+Next physical investigation: establish approximate incident timing and which
+restart restored video, reproduce the purchase-session freeze and concurrent-download
+case separately, and verify recovery from the Qualcomm busy condition without a
+manual receiver restart. No physical recovery validation is claimed yet.
+
+### Chromium/Cubism GPU-fault follow-up — 2026-10-05
+
+A later report that PhoneCast exited while Cubism failed to launch was correlated
+with repeated kernel-level Adreno faults, not the V4L2 decoder stall. The kernel
+logged `a6xx_irq` GPU faults followed by `a6xx_recover`; Cubism's OpenXR client
+then repeatedly received Vulkan `VK_ERROR_DEVICE_LOST` (`-4`). PhoneCast was
+still receiving, decoding, and rendering near 30 FPS immediately before its
+one-second Vulkan upload-fence wait returned `VK_TIMEOUT` (`VkResult 2`). The
+receiver has no coredump and called `VR_Shutdown`, consistent with its current
+fatal render-error path rather than a process crash.
+
+PhoneCast is not established as the fault source. Chromium started before the
+sequence and the first captured Adreno fault preceded the reviewed Cubism launch
+attempts. More importantly, additional Adreno faults occurred during a later
+Cubism run while PhoneCast was not running. The likely boundary is a global
+GPU/Turnip failure under the Chromium/Cubism workload; all Vulkan clients become
+victims of the reset. Bounded decoder recovery does not apply. PhoneCast should
+later implement bounded Vulkan renderer recovery so a recoverable global reset
+does not permanently stop the receiver, but that cannot guarantee Cubism launch
+when the underlying GPU/driver is failing. Reproduce Chromium + Cubism with and
+without PhoneCast and retain the no-PhoneCast control.
 
 Raw evidence remains ignored under `out/diagnostics/frame-feedback/`. SSH was
 used only for reading logs/system status; no headset process was restarted and

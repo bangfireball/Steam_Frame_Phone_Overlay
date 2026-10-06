@@ -1537,7 +1537,7 @@ The PC should no longer be involved.
 
 # Sprint 12 — Standalone UX
 
-**Status:** `[x] Complete for the owner-accepted standalone baseline` — installation, manual dashboard launch, pairing/reconnect, native streaming, and PhoneCast-first VR-game coexistence accepted after physical use and a healthy follow-up log review; extended lifecycle checks and known freeze recovery remain follow-up work
+**Status:** `[x] Complete for the owner-accepted standalone baseline` — installation, manual dashboard launch, pairing/reconnect, native streaming, and PhoneCast-first VR-game coexistence accepted after physical use and a healthy follow-up log review; decoder recovery still needs physical fault validation, and Vulkan renderer stability/recovery remains follow-up work
 
 - `[x]` SteamOS desktop-entry installer with absolute launch path and 48/128/256 pixel icons
 - `[x]` ARM64 manifest/input packaging and executable-bit-preserving install path
@@ -1553,9 +1553,12 @@ The PC should no longer be involved.
 - `[x]` Physical dashboard `+` discovery, first launch, and duplicate-launch prevention approved
 - `[x]` Physical rotation, intentional dashboard Quit/relaunch, reconnect, notifications, and phone-lock/new-capture recovery approved
 - `[x]` Follow-up video playback session reported issue-free; log review found no new decoder-busy error or sustained receive-without-decode failure
+- `[x]` Bounded decoder-error/stall recovery implemented with keyframe resync, three reopen attempts, diagnostics, automated tests, and ARM64 cross-build
+- `[ ]` Physically validate automatic recovery from the observed Qualcomm decoder-busy failure and the separate concurrent-download freeze case
 - `[ ]` Deferred physical second-launch focus, dashboard recreation, headset sleep/wake, crash, and SteamVR restart checks
 - `[x]` Physical PhoneCast-first coexistence over standalone Cubism; user approved normal gameplay and logs confirm an OpenXR VR scene with concurrent streaming
-- `[ ]` Physical game-first launch/focus validation over a standalone VR scene
+- `[~]` Game-active launch partially validated: after two Vulkan device-loss exits, a third PhoneCast launch while Cubism was already running streamed successfully until the game exited; this path is not stable enough to approve
+- `[ ]` Add and physically validate bounded Vulkan renderer recovery after `VK_ERROR_DEVICE_LOST`/upload-fence timeout, and investigate whether PhoneCast's submission path can avoid the observed Adreno hangs
 - `[ ]` Optional autostart control, only after the manual launcher is physically approved
 - `[ ]` Automatic LAN discovery and cryptographic device identity/revocation
 
@@ -1586,9 +1589,12 @@ not every original lifecycle criterion. Second-launch focus, dashboard
 recreation, game-first standalone launch, headset sleep/wake, receiver crash,
 SteamVR restart, and physical use of the new curl bootstrap remain explicitly
 unvalidated. Autostart, discovery, and cryptographic identity remain unimplemented
-follow-ups. The earlier two freeze incidents and logged V4L2 busy failure are
-not fixed or disproved by this successful session; retain decoder recovery as a
-focused reliability follow-up. The resize handle remains Sprint 14 work.
+follow-ups. Bounded decoder recovery was implemented after closure, but the
+earlier two freeze incidents and logged V4L2 busy failure are not physically
+confirmed fixed until the Qualcomm busy and concurrent-download cases are
+reproduced. A later Cubism test produced two separate Adreno device-loss exits
+outside that decoder policy; renderer recovery remains a focused follow-up. The
+resize handle remains Sprint 14 work.
 
 Validation at closure: Windows incremental build succeeded and all 11 CTest
 tests passed; both local download-server/bootstrap tests passed. No receiver,
@@ -1605,7 +1611,11 @@ ARM64 cross-build claim.
 - Approximately 259 one-second CSV samples overlap the Cubism scene. All remained connected, with zero transport drops/resyncs and zero sampled OpenVR dropped/mispresented frames. The 258 samples with receive FPS at least 20 averaged 29.48 received FPS, 29.47 decoded FPS, 28.59 submitted FPS, 1.62% process CPU, 102.61 MiB working set, and 1.29 ms queue age. These are sampled diagnostics, not isolated game-impact or glass-to-glass measurements.
 - Usability feedback: lack of a directly grabbable screen-resize handle is frustrating. Add a bounded trigger-drag resize affordance in Sprint 14 rather than relying only on Settings scale controls.
 - Two distinct freeze incidents were reported: (1) during a download, remote commands still affected the phone while displayed video froze, then video resumed when the download ended; (2) later, while trying to buy something from Steam with no download running, video froze and the project owner restarted the connection/receiver to recover. The second report does not retract the first. Exact incident timing, download device/application, and which restart was sufficient remain to be clarified.
-- Log review found an earlier `Queueing H.264 access unit: Device or resource busy` error followed by 84 consecutive diagnostics samples with roughly 30 received FPS but zero decoded/submitted FPS. This establishes native decoder failure in that session; correlation to either reported incident remains pending, and the incidents must not be assumed to share a cause. The Cubism session contains no such error. Prioritize reproducing and adding bounded decoder-error recovery without requiring a manual receiver restart; retain concurrent-download testing as a separate reproduction case.
+- A separate Chromium + PhoneCast + Cubism failure was investigated from read-only Frame logs. The kernel recorded repeated Adreno `a6xx_irq` GPU faults and recovery, Cubism's OpenXR client reported Vulkan `VK_ERROR_DEVICE_LOST` (`-4`), and PhoneCast exited through its fatal render-error path after its upload fence returned `VK_TIMEOUT` (`VkResult 2`). The first GPU fault occurred after Chromium started but before the reviewed Cubism launches, and further GPU faults occurred during a later Cubism run while PhoneCast was absent, so that earlier evidence did not establish PhoneCast as the cause. The decoder remained near 30 FPS immediately before the render failure; decoder recovery does not address this event.
+- A later decoder-recovery-build test reproduced two PhoneCast exits during Cubism coexistence at approximately 20:17:35 and 20:20:09. In both cases the receiver was still receiving, decoding, and submitting video before reporting `Vulkan frame upload failed (VkResult -4)` (`VK_ERROR_DEVICE_LOST`). One second earlier, the kernel logged an Adreno `a6xx_irq` fault and hangcheck recovery naming `phonecast-vr-stream-receiver` as the offending task. No PhoneCast coredump was produced; it followed the existing fatal renderer-error path. Decoder-recovery counters remained zero. This is stronger evidence involving PhoneCast's GPU submission path, but it does not by itself distinguish an application synchronization defect from a SteamOS/Turnip driver fault.
+- The third PhoneCast launch in that test started while Cubism was already active and streamed until Cubism exited. Across 167 dynamic overlapping samples it averaged 29.74 received/decoded FPS, 29.20 submitted FPS, 1.55% process CPU, 102.16 MiB working set, and 1.14 ms queue age, with no dynamic transport drops/resyncs or sampled OpenVR dropped/mispresented frames. This establishes functional game-active launch, not stable game-first approval because of the two preceding GPU faults.
+- Preserve the captured evidence under ignored `out/diagnostics/frame-test-20261005-2025/`. Circle back in a focused renderer-reliability task after collecting more launches with multiple games and controlled launch orders. Implement bounded renderer recreation for recoverable device loss/timeout and separately investigate preventing the GPU hang; renderer recovery cannot guarantee game survival during a global GPU reset.
+- Log review found an earlier `Queueing H.264 access unit: Device or resource busy` error followed by 84 consecutive diagnostics samples with roughly 30 received FPS but zero decoded/submitted FPS. This establishes native decoder failure in that session; correlation to either reported incident remains pending, and the incidents must not be assumed to share a cause. The Cubism session contains no such error. Bounded decoder-error and sustained-stall recovery is now implemented without closing the remote-input connection: queued prediction frames are discarded, a fresh keyframe is requested, and the decoder is reopened up to three times. Automated tests and the ARM64 cross-build pass, but physical recovery from the Qualcomm busy failure remains pending; retain concurrent-download testing as a separate reproduction case.
 - Logs were inspected over SSH without restarting PhoneCast, SteamVR, or the game. Raw local evidence is ignored under `out/diagnostics/frame-feedback/`; credentials were not printed or added to tracked files.
 
 ## Session Handoff Snapshot — 2026-10-05

@@ -1,6 +1,7 @@
 #include "phonecast/apps/Receiver.h"
 #include "phonecast/core/config/AppConfig.h"
 #include "phonecast/core/protocol/StreamProtocol.h"
+#include "phonecast/core/streaming/DecoderRecoveryController.h"
 #include "phonecast/core/streaming/GeneratedVideoSource.h"
 #include "phonecast/vr/interaction/OverlayInteractionController.h"
 #include "phonecast/vr/overlay/GlanceController.h"
@@ -9,6 +10,7 @@
 #include "phonecast/vr/overlay/SettingsMenuController.h"
 #include "phonecast/vr/overlay/WristMenuGesture.h"
 
+#include <chrono>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -77,6 +79,43 @@ void TestConfig() {
     Check(phonecast::core::ParseCommandLine({"--alpha", "nan"}).status ==
               phonecast::core::ParseStatus::Error,
           "non-finite values rejected");
+}
+
+void TestDecoderRecovery() {
+    using Controller = phonecast::core::DecoderRecoveryController;
+    Controller recovery;
+    const auto start = Controller::TimePoint{};
+
+    Check(!recovery.ObserveWindow(30, 1), "decoded output keeps watchdog healthy");
+    Check(!recovery.ObserveWindow(0, 0), "static input does not trip watchdog");
+    Check(!recovery.ObserveWindow(30, 0), "first decode stall window is tolerated");
+    Check(!recovery.ObserveWindow(30, 0), "second decode stall window is tolerated");
+    Check(recovery.ObserveWindow(30, 0), "third active decode stall requests recovery");
+
+    recovery.Begin(start);
+    Check(recovery.Active() && !recovery.Ready(start), "recovery starts with a short reset delay");
+    const auto first = start + std::chrono::milliseconds(100);
+    Check(recovery.Ready(first), "first decoder restart becomes ready");
+    recovery.RecordAttempt(false, first);
+    Check(recovery.Active() && recovery.Attempts() == 1,
+          "failed restart schedules another bounded attempt");
+    Check(!recovery.Ready(first + std::chrono::milliseconds(249)),
+          "restart backoff is enforced");
+    const auto second = first + std::chrono::milliseconds(250);
+    Check(recovery.Ready(second), "second restart becomes ready after backoff");
+    recovery.RecordAttempt(false, second);
+    const auto third = second + std::chrono::milliseconds(500);
+    Check(recovery.Ready(third), "third restart uses increasing backoff");
+    recovery.RecordAttempt(false, third);
+    Check(!recovery.Active() && recovery.Exhausted() &&
+              recovery.Attempts() == Controller::MaximumAttempts(),
+          "decoder restart attempts are bounded");
+
+    recovery.Reset();
+    recovery.Begin(start);
+    recovery.RecordAttempt(true, first);
+    Check(!recovery.Active() && !recovery.Exhausted(),
+          "successful decoder restart clears recovery state");
 }
 
 void TestGeneratedFrames() {
@@ -539,6 +578,7 @@ void TestReceiverLifecycle() {
 
 int main() {
     TestConfig();
+    TestDecoderRecovery();
     TestGeneratedFrames();
     TestStreamProtocol();
     TestOverlayInteraction();

@@ -447,6 +447,33 @@ bool TcpVideoServer::SendNotificationOpen(std::uint64_t actionToken, std::string
     return true;
 }
 
+bool TcpVideoServer::RequestVideoResync(std::string& error) {
+    auto& state = *implementation_;
+    if (!state.connected.load()) {
+        error = "The phone is not connected; a video key frame could not be requested.";
+        return false;
+    }
+    const SOCKET socket = state.clientSocket.load();
+    if (socket == INVALID_SOCKET) {
+        error = "The phone connection closed before a video key frame could be requested.";
+        return false;
+    }
+    {
+        std::lock_guard<std::mutex> lock(state.queueMutex);
+        state.dropped += state.DiscardQueuedFrames();
+        state.waitingForKeyFrame = true;
+        state.haveExpectedSequence = false;
+        state.keyFrameRequestPending = true;
+        ++state.resyncRequests;
+    }
+    if (!state.SendKeyFrameRequest(socket)) {
+        error = "Requesting a recovery key frame from the phone failed.";
+        return false;
+    }
+    error.clear();
+    return true;
+}
+
 bool TcpVideoServer::Connected() const noexcept { return implementation_->connected.load(); }
 std::string TcpVideoServer::Status() const {
     std::lock_guard<std::mutex> lock(implementation_->statusMutex);

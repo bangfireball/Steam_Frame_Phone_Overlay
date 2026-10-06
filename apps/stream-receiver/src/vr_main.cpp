@@ -1,5 +1,6 @@
 #include "phonecast/core/logging/ConsoleLogger.h"
 #include "phonecast/core/protocol/StreamProtocol.h"
+#include "phonecast/core/streaming/DecoderRecoveryController.h"
 #include "phonecast/platform/openvr/OpenVrOverlayRenderer.h"
 #include "phonecast/platform/network/TcpVideoServer.h"
 #ifdef _WIN32
@@ -307,7 +308,9 @@ int main(int argc, char** argv) {
                           "vr_frame_index,vr_frame_presents,vr_mispresented,vr_dropped,"
                           "vr_reprojection_flags,vr_total_gpu_ms,vr_compositor_gpu_ms,"
                           "vr_compositor_cpu_ms,vr_client_interval_ms,first_config_ms,"
-                          "first_keyframe_ms,decoder_start_ms,first_submitted_ms\n";
+                          "first_keyframe_ms,decoder_start_ms,first_submitted_ms,"
+                          "decoder_recovery_triggers,decoder_recovery_successes,"
+                          "decoder_recovery_failed_attempts\n";
         std::cout << "Writing performance samples to " << performanceLogPath.string() << ".\n";
     }
 
@@ -387,6 +390,10 @@ int main(int argc, char** argv) {
     const auto sessionStarted = std::chrono::steady_clock::now();
     bool decoderStarted = false;
     bool running = true;
+    phonecast::core::DecoderRecoveryController decoderRecovery;
+    std::uint64_t decoderRecoveryTriggers = 0;
+    std::uint64_t decoderRecoverySuccesses = 0;
+    std::uint64_t decoderRecoveryFailedAttempts = 0;
     std::vector<std::uint8_t> codecConfig;
     std::uint64_t windowDecodedFrames = 0;
     std::uint64_t windowRenderedFrames = 0;
@@ -412,6 +419,18 @@ int main(int argc, char** argv) {
     std::chrono::steady_clock::time_point notificationDeadline{};
     bool previousRemoteStatusKnown = false;
     phonecast::core::protocol::RemoteControlStatus previousRemoteStatus{};
+
+    const auto beginDecoderRecovery = [&](const std::string& reason) {
+        decoder.Stop();
+        decoderStarted = false;
+        decoderRecovery.Begin(phonecast::core::DecoderRecoveryController::Clock::now());
+        ++decoderRecoveryTriggers;
+        std::cerr << "[decoder] " << reason
+                  << " Restarting the decoder without closing the phone connection.\n";
+        std::string resyncError;
+        if (!server.RequestVideoResync(resyncError))
+            std::cerr << "[decoder] Warning: " << resyncError << '\n';
+    };
 
     while (running && renderer.PumpEvents()) {
 #ifndef _WIN32
@@ -627,8 +646,44 @@ int main(int argc, char** argv) {
             firstKeyFrameMillis = -1.0;
             decoderStartMillis = -1.0;
             firstSubmittedMillis = -1.0;
+            decoderRecovery.Reset();
+        } else if (!connected && wasConnected) {
+            decoder.Stop();
+            decoderStarted = false;
+            decoderRecovery.Reset();
         }
         wasConnected = connected;
+
+        const auto recoveryNow = phonecast::core::DecoderRecoveryController::Clock::now();
+        if (decoderRecovery.Ready(recoveryNow)) {
+            const auto attempt = decoderRecovery.Attempts() + 1U;
+            const auto restartBegan = std::chrono::steady_clock::now();
+            decoderStarted = decoder.Start(streamWidth, streamHeight, error);
+            decoderStartMillis = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - restartBegan).count();
+            if (decoderStarted) {
+                decoderRecovery.RecordAttempt(true, recoveryNow);
+                ++decoderRecoverySuccesses;
+                std::cout << "[decoder] Recovery attempt " << attempt
+                          << " succeeded in " << decoderStartMillis << " ms.\n";
+#ifndef _WIN32
+                std::cout << "[decoder] Using native V4L2 device "
+                          << decoder.DevicePath() << ".\n";
+#endif
+                std::string resyncError;
+                if (!server.RequestVideoResync(resyncError))
+                    std::cerr << "[decoder] Warning: " << resyncError << '\n';
+            } else {
+                decoderRecovery.RecordAttempt(false, recoveryNow);
+                ++decoderRecoveryFailedAttempts;
+                std::cerr << "[decoder] Recovery attempt " << attempt << " failed: "
+                          << error << '\n';
+                if (decoderRecovery.Exhausted())
+                    std::cerr << "[decoder] Recovery exhausted after "
+                              << phonecast::core::DecoderRecoveryController::MaximumAttempts()
+                              << " attempts; waiting for a new stream configuration or reconnect.\n";
+            }
+        }
 
         Message message;
         phonecast::core::VideoFrame latestFrame;
@@ -674,13 +729,15 @@ int main(int argc, char** argv) {
                               << " dimensions=" << message.width << 'x' << message.height << '\n';
                     configReported = true;
                 }
+                decoderRecovery.Reset();
                 const auto decoderStartBegan = std::chrono::steady_clock::now();
                 decoderStarted = decoder.Start(message.width, message.height, error);
                 decoderStartMillis = std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now() - decoderStartBegan).count();
                 std::cout << "[diagnostics] decoder-start-ms=" << decoderStartMillis << '\n';
                 if (!decoderStarted) {
-                    std::cerr << error << '\n';
+                    const auto startError = error;
+                    beginDecoderRecovery("Initial decoder start failed: " + startError);
 #ifndef _WIN32
                 } else {
                     std::cout << "[decoder] Using native V4L2 device "
@@ -708,8 +765,9 @@ int main(int argc, char** argv) {
             bool produced = false;
             const auto decodeStarted = std::chrono::steady_clock::now();
             if (!decoder.Submit(accessUnit, message.timestampMicros, frame, produced, error)) {
-                std::cerr << error << '\n';
-                decoderStarted = false;
+                const auto submitError = error;
+                beginDecoderRecovery("Decode submission failed: " + submitError);
+                break;
             } else if (produced) {
                 windowDecodeMillis += std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now() - decodeStarted).count();
@@ -749,6 +807,10 @@ int main(int argc, char** argv) {
             const auto keyFrames = serverStats.keyFrames - previousServerStats.keyFrames;
             const auto dropped = serverStats.droppedFrames - previousServerStats.droppedFrames;
             const auto resyncs = serverStats.resyncRequests - previousServerStats.resyncRequests;
+            if (decoderStarted && decoderRecovery.ObserveWindow(received, windowDecodedFrames)) {
+                beginDecoderRecovery(
+                    "Watchdog observed three active receive windows with no decoded output.");
+            }
             const double receiveFps = received / seconds;
             const double decodeFps = windowDecodedFrames / seconds;
             const double renderFps = windowRenderedFrames / seconds;
@@ -776,6 +838,9 @@ int main(int argc, char** argv) {
                       << " keyframes=" << keyFrames
                       << " dropped=" << dropped
                       << " resyncs=" << resyncs
+                      << " decoder-recovery-triggers=" << decoderRecoveryTriggers
+                      << " decoder-recovery-successes=" << decoderRecoverySuccesses
+                      << " decoder-recovery-failed-attempts=" << decoderRecoveryFailedAttempts
                       << " process-cpu-percent=" << processStats.cpuPercent
                       << " working-set-mb=" << processStats.workingSetMegabytes;
             if (haveVrStats) {
@@ -809,7 +874,9 @@ int main(int argc, char** argv) {
                     << (haveVrStats ? vrStats.compositorCpuMilliseconds : -1.0F) << ','
                     << (haveVrStats ? vrStats.clientFrameIntervalMilliseconds : -1.0F) << ','
                     << firstConfigMillis << ',' << firstKeyFrameMillis << ','
-                    << decoderStartMillis << ',' << firstSubmittedMillis << '\n';
+                    << decoderStartMillis << ',' << firstSubmittedMillis << ','
+                    << decoderRecoveryTriggers << ',' << decoderRecoverySuccesses << ','
+                    << decoderRecoveryFailedAttempts << '\n';
                 performanceLog.flush();
             }
 

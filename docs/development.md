@@ -229,6 +229,8 @@ The native receiver automatically searches `/dev/video0` through `/dev/video63` 
 
 This cross-build validates compilation only. Qualcomm/iris V4L2 decoding, visible output, and the Vulkan `SetOverlayTexture` renderer are physically established on Steam Frame. Linux converts decoded NV12 to CPU RGBA, uploads through a persistently mapped Vulkan staging buffer, and submits reusable double-buffered images. The Vulkan loader is opened at runtime from `libvulkan.so.1`, so no cross-build Vulkan development package is required. The measured local-game run was project-owner approved as smooth and flicker-free with stable memory; orientation changes, clean shutdown, longer lifecycle cases, and actual standalone-VR-scene coexistence remain pending. Do not describe dma-buf/zero-copy sharing as implemented. See `platform/steam-frame-arm64/README.md` and `docs/steam-frame.md`.
 
+The receiver now performs bounded decoder-error recovery without disconnecting the phone: it requests a new keyframe, reopens the decoder up to three times, and also triggers after three active one-second receive windows produce no decoded frame. Console diagnostics and performance CSV files expose recovery trigger, success, and failed-attempt counters. Windows tests, an ARM64 cross-build, and emulated portable tests cover the policy; recovery from the previously logged Qualcomm `Device or resource busy` failure is not physically validated yet.
+
 ## Steam Frame standalone launcher
 
 Sprint 12's manual launcher baseline is packaged beside the native receiver in
