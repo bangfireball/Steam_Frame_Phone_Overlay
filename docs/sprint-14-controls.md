@@ -13,11 +13,11 @@
 - Legacy menu-button calibration polling is disabled in ordinary use. Controller calibration remains available through Settings.
 - Landscape renderer widths are converted back to the base portrait-size convention before persistence, avoiding repeated scale multiplication during rotation and placement updates.
 
-## Left-controller shortcut
+## Thumbstick shortcuts
 
-The shipped action manifest has two mutually exclusive narrow action sets. `/actions/phonecast_shortcuts` is active only while the dashboard is closed. A binding-layer long press on **either** thumbstick button toggles visibility without resetting placement. A binding-layer double click opens the phone and docks it to the controller whose stick was clicked. `/actions/phonecast_panel` is active only while the dashboard is visible and binds only left/right stick position for move-handle depth adjustment. The old trigger/grip/calibration bindings are not shipped.
+The shipped action manifest has two narrow action sets. `/actions/phonecast_shortcuts` is submitted whether the dashboard is open or closed. A binding-layer long press on **either** thumbstick button toggles visibility without resetting placement. A binding-layer double click opens the phone and docks it to the controller whose stick was clicked. While the dashboard is visible, `/actions/phonecast_panel` is submitted alongside it and binds only left/right stick position for move-handle depth adjustment. The old trigger/grip/calibration bindings are not shipped.
 
-The user explicitly requested these shortcuts after confirming the first left-stick hold worked but sometimes required multiple attempts. The revised path acts directly on active changed events rather than requiring a separately observed released sample first. Both sets use normal action-set priority `0`, following the source-reviewed Framecorder approach, and are user-remappable/unbindable through SteamVR. The dashboard-visible panel set and dashboard-hidden shortcut set are never submitted together. Binding activity is logged without input contents or credentials. Initialization success is not evidence of delivery or conflict-free gameplay.
+The user explicitly requested dashboard-active shortcuts as a physical experiment after confirming that dashboard-closed left-stick hold worked but sometimes required multiple attempts. The revised path acts directly on active changed events rather than requiring a separately observed released sample first. Both sets use normal action-set priority `0`, following the source-reviewed Framecorder approach, and are user-remappable/unbindable through SteamVR. Binding activity is logged without input contents or credentials. OpenVR may suppress or arbitrate same-source bindings while the dashboard owns focus, so compilation and manifest activation are not proof that dashboard-active delivery works or that dashboard navigation remains conflict-free.
 
 ## Validation boundary
 
@@ -28,14 +28,14 @@ The owner physically reported that the previous resize corner worked, but moveme
 3. Explicit-action analog-stick farther/closer adjustment while holding Move with either controller, including clamps.
 4. Left/right docking with tracking initially available and initially lost.
 5. Back, Close, and Resize separation in portrait and landscape.
-6. Either-stick long press toggling and either-stick double-click docking with the dashboard closed, including dashboard transitions and real-game control coexistence in both launch orders.
+6. Either-stick long press toggling and either-stick double-click docking with the dashboard open and closed, including dashboard transitions, dashboard navigation coexistence, and real-game control coexistence in both launch orders.
 
 Software validation for this iteration: Windows build and all 12 CTest tests pass; Linux ARM64 cross-build and QEMU portable/audio tests pass; both download-server/bootstrap tests pass. The published archive was downloaded over `http://10.0.0.3:8080` and its hash matched the local file. Executable permissions were verified in the Linux-created archive. No SteamVR, receiver, game, or headset audio service was restarted; only the local download server was restarted.
 
 Published bundle: `out/packages/phonecast-steam-frame-arm64-sprint14.tar.gz`
 
-SHA-256: `9cc9d6ad183eb6c6f64e70b916d3c5596e3dcc41567de4610cc44448eb0b6db7`
+SHA-256: `22e36bce1a3034fd8a897d820a8653f9a340fe2d1250f6b764b2f1027458684a`
 
-Packaged receiver SHA-256: `044a39fab1c2c59ab151f9036d8d8a078d973a30d982bfc257b05c777a49d823`
+Packaged receiver SHA-256: `5bbe08e66cc45e5c9da7c64ec185f4cdfaaf15a7214d44c99c01d78a71837f55`
 
 Native renderer/decoder reliability follow-ups remain separate.

@@ -924,17 +924,24 @@ public:
 
     void PollShortcut() {
         if (!shortcutReady) return;
-        vr::VRActiveActionSet_t active{};
-        active.ulActionSet = overlayApi->IsDashboardVisible() ? panelSet : shortcutSet;
-        active.nPriority = 0;
-        if (inputApi->UpdateActionState(&active, sizeof(active), 1) != vr::VRInputError_None) return;
-        if (overlayApi->IsDashboardVisible()) {
+        const bool dashboardVisible = overlayApi->IsDashboardVisible();
+        std::array<vr::VRActiveActionSet_t, 2> activeSets{};
+        activeSets[0].ulActionSet = shortcutSet;
+        activeSets[0].nPriority = 0;
+        std::uint32_t activeSetCount = 1;
+        if (dashboardVisible) {
+            activeSets[1].ulActionSet = panelSet;
+            activeSets[1].nPriority = 0;
+            activeSetCount = 2;
+        }
+        if (inputApi->UpdateActionState(activeSets.data(), sizeof(activeSets[0]), activeSetCount) !=
+            vr::VRInputError_None) return;
+        if (dashboardVisible) {
             panelLeftY = ReadPanelAxis(panelAxisLeft);
             panelRightY = ReadPanelAxis(panelAxisRight);
-            shortcutActive = false;
-            return;
+        } else {
+            panelLeftY = panelRightY = 0.0F;
         }
-        panelLeftY = panelRightY = 0.0F;
         bool anyActive = false;
         const bool dockLeft = DigitalPressed(shortcutDockLeft, anyActive);
         const bool dockRight = DigitalPressed(shortcutDockRight, anyActive);
