@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Button xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/quick_connect_button"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:layout_margin="4dp"
+    android:backgroundTint="@color/phonecast_dark"
+    android:contentDescription="@string/widget_quick_connect_description"
+    android:gravity="center"
+    android:padding="8dp"
+    android:text="@string/widget_quick_connect"
+    android:textAllCaps="false"
+    android:textColor="@color/phonecast_blue"
+    android:textSize="16sp"
+    android:textStyle="bold" />

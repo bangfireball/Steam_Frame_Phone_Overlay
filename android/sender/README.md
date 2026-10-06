@@ -31,7 +31,7 @@ Enable USB or wireless debugging, connect the phone, then:
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Start `phonecast-stream-receiver.exe --pair-code 123456` for desktop video or `phonecast-vr-stream-receiver.exe --pair-code 123456` for VR on the PC. Open **PhoneCast**, enter the PC's LAN IPv4 address and matching code, press **Start casting**, approve notification permission when requested, and approve Android's screen-sharing dialog. The address and code are retained so normal startup takes only the Start action and Android's required screen-sharing approval. The app displays encoded frame, byte, and congestion-drop counters. Use the in-app button or foreground notification action to stop.
+Start `phonecast-stream-receiver.exe --pair-code 123456` for desktop video or `phonecast-vr-stream-receiver.exe --pair-code 123456` for VR on the PC. Open **PhoneCast**, enter the PC's LAN IPv4 address and matching code, press **Start casting**, approve notification permission when requested, and approve Android's screen-sharing dialog. The address and code are retained so normal startup takes only the Start action and Android's required screen-sharing approval. After saving valid receiver details, add the **PhoneCast Quick connect** widget to the Android home screen for a one-tap route directly to the required screen-sharing prompt. The widget never embeds or displays the pairing code and cannot bypass per-session MediaProjection consent. If no valid details are saved, it opens PhoneCast with an explanatory status instead. The app displays encoded frame, byte, and congestion-drop counters. Use the in-app button or foreground notification action to stop.
 
 Optional features are under the main screen's menu button so the launch screen remains focused on connection and Start/Stop. Remote control is optional. Read the in-app disclosure, check **Allow remote control while casting**, open Accessibility settings, and explicitly enable **PhoneCast remote control**. Casting does not require remote control. The service can inject user-requested taps, swipes, scrolls, and Back, but is configured not to retrieve window content. Disable either gate to stop control. See `docs/remote-control.md` for alternatives, Google Play policy implications, and security limits.
 
@@ -59,6 +59,7 @@ adb logcat -s PhoneCastCapture
 - Stops cleanly when the user revokes sharing, locks the device on Android versions that revoke projection, presses Stop, or uses the notification action.
 - Refreshes the main Start/Stop state when the activity resumes, so an externally ended projection does not leave stale controls.
 - Reports the in-app remote-control consent and Accessibility-service gate independently to the receiver.
+- Provides a home-screen Quick connect widget that reuses the saved receiver address, pairing code, and streaming profile before showing Android's mandatory capture-consent prompt.
 
 ## Optional phone playback audio
 

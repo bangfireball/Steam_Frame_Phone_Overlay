@@ -38,6 +38,7 @@ The Sprint 2 sender:
 9. On resize, detaches the old surface, replaces the encoder, resizes the same virtual display, and attaches the replacement surface.
 10. Releases all resources on stop or projection revocation.
 11. Persists the authoritative running flag and refreshes the launch-screen action when the activity resumes, so a screen-lock or other external projection revocation returns the UI to **Start casting** without a manual Stop cycle.
+12. Offers an Android home-screen Quick connect widget after valid receiver details have been saved. The widget opens the activity with an explicit app-private action, reloads the saved address/code/profile, and proceeds directly to Android's required MediaProjection consent. It does not store credentials in the widget or bypass consent.
 
 The app logs no screen content, encoded payloads, or sensitive text.
 

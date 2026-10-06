@@ -32,6 +32,7 @@ import android.widget.TextView;
 import java.util.Locale;
 
 public final class MainActivity extends Activity {
+    static final String ACTION_QUICK_CONNECT = "com.phonecastvr.sender.action.QUICK_CONNECT";
     private static final int REQUEST_CAPTURE = 1001;
     private static final int REQUEST_NOTIFICATIONS = 1002;
     private static final int REQUEST_AUDIO = 1003;
@@ -86,6 +87,14 @@ public final class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         buildUi();
         refreshServiceState();
+        handleQuickConnectIntent(getIntent());
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        refreshServiceState();
+        handleQuickConnectIntent(intent);
     }
 
     @Override protected void onStart() {
@@ -396,6 +405,26 @@ public final class MainActivity extends Activity {
         } else if (!active) {
             updateState(false, "Ready to cast", 0, 0, 0, 0, 0, -1);
         }
+    }
+
+    private void handleQuickConnectIntent(Intent intent) {
+        if (intent == null || !ACTION_QUICK_CONNECT.equals(intent.getAction())) return;
+        intent.setAction(null);
+        if (running) {
+            updateState(true, "Casting is already active", 0, 0, 0, 0, 0, -1);
+            return;
+        }
+        SharedPreferences preferences = senderPreferences();
+        String receiverHost = preferences.getString("receiver_host", "");
+        String pairCode = preferences.getString("pair_code", "");
+        if (!QuickConnectConfig.isReady(receiverHost, pairCode)) {
+            updateState(false, "Open PhoneCast and save a receiver address and pairing code first",
+                    0, 0, 0, 0, 0, -1);
+            return;
+        }
+        receiverHostView.setText(receiverHost);
+        pairCodeView.setText(pairCode);
+        requestCapture();
     }
 
     private void requestCapture() {

@@ -30,7 +30,9 @@ Before implementation, read `design.md` completely, `docs/development.md`, and r
 4. World reset was visible but too small/low; left-stick hold worked after multiple tries; legacy stick push/pull did **not** work. Revised reveal sizing/position, added both-stick hold and double-click docking, and replaced legacy axis reads with explicit actions. These revised shortcuts/axes have not been individually physically approved.
 5. Next Show was better but too far right and not facing the user. Owner requested notification-style placement controls with dummy preview.
 6. Latest adjustable Start Location build received “that's better.” No detailed preview/apply/cancel/persistence or drag-depth/shortcut approval was stated.
-7. A dashboard-active hotkey experiment physically failed: neither hold nor double-click actions delivered while the SteamVR dashboard owned focus. The shortcut set is again disabled there. The owner requested repeated same-hand double-click to pin an already docked visible phone in world space; that behavior is implemented but not yet physically validated.
+7. A dashboard-active hotkey experiment physically failed: neither hold nor double-click actions delivered while the SteamVR dashboard owned focus. The shortcut set is again disabled there. Repeated same-hand double-click world pinning was then implemented and physically reported as perfect.
+8. Start Location settings/preview and the phone footer's Back, Close, and Resize behavior/appearance were physically approved in normal use. Explicit-action joystick depth still does not work while the dashboard owns focus and now requires input-route research rather than threshold tuning.
+9. The Android sender now includes a home-screen Quick connect widget that reloads saved receiver details and launches the mandatory MediaProjection consent flow. JVM tests, APK assembly, and lint pass; physical widget installation and launch remain pending.
 
 Do not convert the failed legacy depth test into a claim that the new explicit-axis path works physically.
 
@@ -67,11 +69,11 @@ Do not convert the failed legacy depth test into a claim that the new explicit-a
 - `/actions/phonecast_panel` binds only left/right stick position and is submitted at normal priority while the dashboard is visible. No panel axis set is submitted during dashboard-closed gameplay, and the shortcut set is no longer submitted while the dashboard owns focus.
 - While a phone/settings Move handle is held, the invoking hand's explicit axis supplies depth: up farther, down closer along the head-to-panel ray.
 - Portable `PanelDepth.h` supplies deadzone 0.20, maximum elapsed step 50 ms, maximum speed 0.6 m/s, range 0.20–3.0 m.
-- This is a proposed correction to the physically failed legacy axis path; native dashboard-focus delivery remains pending physical evidence.
+- Physical retesting confirmed that this explicit-action correction also fails to provide joystick depth while the dashboard owns focus. Preserve the bounded depth model, but research a supported dashboard-focused input route before another implementation attempt.
 
 ### Shortcuts
 
-- With the dashboard closed: hold **either thumbstick button** to toggle phone visibility; double-click a stick to open/dock to that hand. If the visible phone is already docked to that same hand, repeating the double click snapshots its current pose and physical size into a stationary world anchor.
+- With the dashboard closed: hold **either thumbstick button** to toggle phone visibility; double-click a stick to open/dock to that hand. If the visible phone is already docked to that same hand, repeating the double click snapshots its current pose and physical size into a stationary world anchor. The owner physically approved the double-click behavior.
 - Long/double recognition is in SteamVR bindings, not application timers.
 - Four optional Boolean actions in `/actions/phonecast_shortcuts`, normal priority `0`.
 - Active+changed+pressed events dispatch existing portable commands. Dock takes precedence if docking and toggle are delivered together.
@@ -127,7 +129,7 @@ Latest code:
 
 1. Resume with the owner's next feedback rather than declaring Sprint 14 complete.
 2. Confirm Start Location dummy preview, live edits, Apply/Cancel, persistence, unchanged size, facing direction, and rotation behavior.
-3. Retest Move + analog-stick depth with both controllers and Settings panel. If it still fails, inspect `GetAnalogActionData` result/`bActive` and dashboard focus; do not increase global priority or activate axes during gameplay merely to force it.
+3. Research why neither legacy polling nor the explicit axis action delivers Move-handle depth while the dashboard owns focus. Inspect `GetAnalogActionData` result/`bActive`, dashboard input ownership, and supported alternatives; do not increase global priority or activate axes during gameplay merely to force it.
 4. Verify both-stick hold and per-hand double-click docking, dashboard-open suppression, transition-held buttons, tracking loss, and real-game conflicts in both launch orders.
 5. Continue remaining Sprint 14 work: consistent lower controls across surfaces, keyboard/text entry, optional gesture recognizer, stronger input-release safety/automation and diagnostics. Avoid private Steam UI injection.
 6. Update and hash-verify the serving site after each owner-testable native build; do not report source-only work as downloadable.

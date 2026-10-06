@@ -19,4 +19,6 @@
     <string name="remote_control_service_enabled">PhoneCast Accessibility service enabled</string>
     <string name="start_capture">Start casting</string>
     <string name="stop_capture">Stop casting</string>
+    <string name="widget_quick_connect">PhoneCast\nQuick connect</string>
+    <string name="widget_quick_connect_description">Start PhoneCast with the saved receiver and pairing code</string>
 </resources>
