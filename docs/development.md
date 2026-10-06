@@ -293,6 +293,36 @@ For optional notification cards, enable **Forward notifications to VR while cast
 
 See `android/sender/README.md`, `docs/android-capture.md`, `docs/remote-control.md`, and `docs/notifications.md` for behavior, permissions, policy constraints, and physical-test status.
 
+## Sprint 13 optional playback audio
+
+[`phone-audio.md`](phone-audio.md) describes the implemented default-off playback
+capture/PCM path, restrictions, and pending physical acceptance matrix. Install the
+new Android APK and VR receiver, enable **Phone playback audio** in Android Settings,
+grant audio permission, then start a new cast. The headset **Settings → Phone Audio**
+category provides live transactional Mute, Volume, and VR/System Default routing.
+Use `--audio-device ID` for an explicit WASAPI endpoint or Pulse sink, or
+`--audio-device default` to force system default. Desktop preview stays video-only;
+older receivers negotiate video-only fallback. No microphone or protected-audio
+fallback is implemented.
+
+Native builds now require PulseAudio headers (`libpulse-dev` in the Docker/Ubuntu
+build environment). Runtime loading of `libpulse.so.0` and connection to the user's
+existing PulseAudio/PipeWire server fail audio only if unavailable. Do not install,
+restart, or reconfigure headset audio services to force a test.
+
+Windows build/all 12 CTest tests and Android JVM tests/APK/lint pass; the ARM64
+receiver and portable/audio/runtime tests cross-build and pass under QEMU. Optional
+`phonecast-pulse-audio-tests` exercises a private Pulse **null sink** or the
+`--unavailable` error path; do not point this fixture at a physical output. That
+software test does not approve native headset audio. The owner has since reported
+decent audible playback but severely reduced video FPS with audio enabled. The
+receiver-only playout correction now retains bounded pictures through independent
+100 ms deadlines and releases only due pictures; its continuous-cadence and
+clock-stall/overflow regressions pass. The new console/CSV `video_sync_*` fields
+support the pending physical retest (see `phone-audio.md`). The existing Sprint 13
+APK needs no change for this correction. Sprint 12 decoder fault and Vulkan
+reliability follow-ups remain separate.
+
 ## CMake options
 
 - `PHONECAST_BUILD_RECEIVER` — build the generated OpenVR receiver and, on Windows, the desktop and OpenVR stream receivers (default `ON`).

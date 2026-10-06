@@ -63,6 +63,58 @@ Message types:
 9. `NOTIFICATION` — phone-to-receiver privacy-filtered notification card.
 10. `REMOTE_CONTROL_STATUS` — phone-to-receiver state for the two independent remote-control gates.
 11. `NOTIFICATION_OPEN` — receiver-to-phone request to invoke a forwarded notification's opaque action token.
+12. `AUDIO_CONFIG` — negotiated phone playback format and capture epoch.
+13. `AUDIO_FRAME` — one independent 10 ms PCM block.
+14. `AUDIO_STATUS` — playback capture off/active/silent/error status.
+
+Audio types are accepted only after capability negotiation on an authenticated
+connection. Their flags, width, and height must be zero. They have independent
+sequence/epoch state and queues; they never participate in H.264 keyframe recovery.
+
+### Sprint 13 capability extension
+
+An opted-in sender puts these eight bytes in its existing `PING` payload:
+`50 43 41 43 01 01 00 00` (`PCAC`, extension version 1, PCM capability 1,
+two reserved zero bytes). A capable VR receiver replies with the same exact bytes
+in `PONG`, retaining the original echoed timestamp for RTT. Ordinary PINGs still
+produce empty PONGs. Unsupported/empty capability replies mean video-only: the
+sender must not record or emit new audio types. The desktop preview does not
+advertise support. Legacy receivers ignore PING payload and send an empty PONG;
+legacy senders consume but ignore PONG payload. Common header version stays 1.
+
+`AUDIO_CONFIG` payload is exactly 16 bytes:
+
+| Offset | Bytes | Value |
+| ---: | ---: | --- |
+| 0 | 1 | payload version 1 |
+| 1 | 1 | encoding 1 = signed PCM16 little-endian samples |
+| 2 | 1 | channels 2 |
+| 3 | 1 | reserved zero |
+| 4 | 4 | network-order sample rate 48000 |
+| 8 | 8 | network-order nonzero capture epoch |
+
+`AUDIO_FRAME` is exactly 1932 bytes: network-order epoch (8 bytes), sample-frame
+count 480 (uint16), two reserved zero bytes, then 1920 interleaved stereo PCM16
+**little-endian** sample bytes. The common header sequence is audio-only; its PTS
+is the first sample frame's Android monotonic time in microseconds. Epoch must
+match the accepted config, sequence/PTS must progress, and PTS must be nonzero
+and leave room for the block duration within signed 64-bit time. No cached audio
+is replayed on reconnect. This wire version supports only the fixed 10 ms format.
+
+`AUDIO_STATUS` is exactly 12 bytes: version 1, state byte (0 off, 1 active,
+2 silent, 3 recorder error), two reserved zero bytes, then network-order epoch
+(uint64). Off/error clears that epoch and pending audio; resumed capture requires
+new configuration. Silent cannot distinguish an idle source from capture policy.
+
+C++ header parsing rejects incorrect audio lengths before allocating payloads.
+Malformed format/metadata, unnegotiated audio, and stale/duplicate/wrong-epoch
+blocks are dropped without disturbing healthy video prediction state. Invalid
+common framing still closes the connection according to the existing parser
+policy. Both sender and receiver retain at most ten audio blocks and discard
+stale blocks; audio config/latest status have separate control handling.
+
+See [`phone-audio.md`](phone-audio.md) for output buffering, timing limitations,
+privacy, compatibility tests, and pending physical validation.
 
 A `REMOTE_INPUT` payload is exactly 16 bytes: one event-type byte (`DOWN`, `MOVE`, `UP`, `SCROLL`, or `BACK`), three reserved zero bytes, then network-byte-order IEEE-754 float32 values for normalized X, normalized Y, and scroll delta. Coordinates are top-left-origin and limited to `[0, 1]`; scroll is limited to `[-1, 1]`. The common header sequence field orders input within a connection. Both endpoints reject malformed types, lengths, non-finite values, and out-of-range values.
 

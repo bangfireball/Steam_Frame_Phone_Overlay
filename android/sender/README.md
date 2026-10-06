@@ -60,6 +60,18 @@ adb logcat -s PhoneCastCapture
 - Refreshes the main Start/Stop state when the activity resumes, so an externally ended projection does not leave stale controls.
 - Reports the in-app remote-control consent and Accessibility-service gate independently to the receiver.
 
+## Optional phone playback audio
+
+Settings → **Phone playback audio** adds a separately opt-in, default-off toggle.
+Grant Android audio-recording permission only if you want this feature, then start
+a new cast. It captures permitted media/game playback using the existing projection,
+not microphones or calls. Some apps return silence or prohibit capture; PhoneCast
+will not bypass this. The phone may continue playing locally because capture copies
+rather than redirects sound. Turning the toggle off stops current audio immediately;
+enabling applies to the next capture session. Video continues on older receivers
+and on handled audio failures. See `docs/phone-audio.md` for the pending physical
+validation matrix and receiver controls.
+
 ## Security limitation
 
 The receiver requires the six-digit code before accepting video, but the current Sprint 3 transport is not encrypted. Use it only on a trusted development LAN. See `docs/protocol.md` for the protocol decision and required security follow-up.

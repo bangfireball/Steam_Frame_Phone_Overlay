@@ -1,15 +1,18 @@
 #include "phonecast/core/logging/ConsoleLogger.h"
 #include "phonecast/core/protocol/StreamProtocol.h"
 #include "phonecast/core/streaming/DecoderRecoveryController.h"
+#include "phonecast/core/audio/AudioPlayback.h"
 #include "phonecast/platform/openvr/OpenVrOverlayRenderer.h"
 #include "phonecast/platform/network/TcpVideoServer.h"
 #ifdef _WIN32
 #include "phonecast/platform/windows/MfH264Decoder.h"
+#include "phonecast/platform/windows/WasapiAudioOutput.h"
 #include "phonecast/platform/windows/ProcessPerformanceSampler.h"
 #else
 #include "phonecast/platform/steamframe/ProcessPerformanceSampler.h"
 #include "phonecast/platform/steamframe/StandaloneRuntime.h"
 #include "phonecast/platform/steamframe/V4l2H264Decoder.h"
+#include "phonecast/platform/steamframe/PulseAudioOutput.h"
 #endif
 #include "phonecast/vr/overlay/GlanceController.h"
 #include "phonecast/vr/overlay/OverlayController.h"
@@ -44,9 +47,11 @@ using phonecast::vr::OverlayAction;
 
 #ifdef _WIN32
 using PlatformDecoder = phonecast::platform::windows::MfH264Decoder;
+using PlatformAudio = phonecast::platform::windows::WasapiAudioOutput;
 using PlatformProcessSampler = phonecast::platform::windows::ProcessPerformanceSampler;
 #else
 using PlatformDecoder = phonecast::platform::steamframe::V4l2H264Decoder;
+using PlatformAudio = phonecast::platform::steamframe::PulseAudioOutput;
 using PlatformProcessSampler = phonecast::platform::steamframe::ProcessPerformanceSampler;
 std::atomic_bool signalRequested{};
 void HandleSignal(int) { signalRequested.store(true); }
@@ -59,7 +64,9 @@ void PrintUsage() {
               << "  --pair-code-file PATH  Linux: override the persistent credential path\n\n"
               << "Performance measurement:\n"
               << "  --performance-log PATH  Write one-second receiver/process/VR samples as CSV\n"
-              << "  --video-device PATH     Linux: select a stateful V4L2 H.264 decoder\n\n"
+              << "  --video-device PATH     Linux: select a stateful V4L2 H.264 decoder\n"
+              << "  --audio-device ID       Select WASAPI endpoint/Pulse sink (default: VR hint/system sink)\n"
+              << "                          Use 'default' to force the system default. Android opt-in is required.\n\n"
               << "Global controls (hold Ctrl+Alt):\n"
               << "  P          Quick show/hide expanded view\n"
               << "  G          Cycle Hidden/Glance/Expanded/Pinned\n"
@@ -205,6 +212,7 @@ int main(int argc, char** argv) {
     std::filesystem::path performanceLogPath;
     std::filesystem::path pairCodePath;
     std::string videoDevice;
+    std::string audioDevice;
     for (int index = 1; index < argc; ++index) {
         const std::string option = argv[index];
         if (option == "--help" || option == "-h") {
@@ -229,6 +237,7 @@ int main(int argc, char** argv) {
         else if (option == "--settings") settingsPath = value;
         else if (option == "--performance-log") performanceLogPath = value;
         else if (option == "--video-device") videoDevice = value;
+        else if (option == "--audio-device") audioDevice = value;
         else if (option == "--port") {
             try {
                 const unsigned long parsed = std::stoul(value);
@@ -310,7 +319,10 @@ int main(int argc, char** argv) {
                           "vr_compositor_cpu_ms,vr_client_interval_ms,first_config_ms,"
                           "first_keyframe_ms,decoder_start_ms,first_submitted_ms,"
                           "decoder_recovery_triggers,decoder_recovery_successes,"
-                          "decoder_recovery_failed_attempts\n";
+                          "decoder_recovery_failed_attempts,audio_submitted,audio_dropped,audio_failures,"
+                          "audio_queued,audio_output_latency_ms,audio_bitrate_mbps,"
+                          "video_sync_queued,video_sync_deadline_releases,video_sync_overflow_releases,"
+                          "video_sync_coalesced,video_sync_last_hold_ms,video_sync_skew_valid,video_sync_estimated_skew_ms\n";
         std::cout << "Writing performance samples to " << performanceLogPath.string() << ".\n";
     }
 
@@ -370,7 +382,7 @@ int main(int argc, char** argv) {
         renderer.Stop();
         return EXIT_FAILURE;
     }
-    phonecast::platform::network::TcpVideoServer server(pairCode, port);
+    phonecast::platform::network::TcpVideoServer server(pairCode, port, true);
     if (!server.Start(error)) {
         std::cerr << error << '\n';
         renderer.Stop();
@@ -384,6 +396,17 @@ int main(int argc, char** argv) {
     PlatformDecoder decoder;
 #else
     PlatformDecoder decoder(videoDevice);
+#endif
+    phonecast::core::audio::AudioPlayback audio([] { return std::make_unique<PlatformAudio>(); });
+    phonecast::core::audio::AudioVideoQueue videoPlayout;
+    std::uint64_t audioEpoch = 0;
+    phonecast::core::audio::CaptureStatus captureAudioStatus = phonecast::core::audio::CaptureStatus::Off;
+    std::uint64_t previousSessionGeneration = 0;
+    std::uint64_t previousAudioBytes = 0;
+    std::string previousAudioOutputStatus;
+    std::string runtimeAudioDevice;
+#ifdef _WIN32
+    runtimeAudioDevice = renderer.DefaultAudioDeviceId();
 #endif
     PlatformProcessSampler processSampler;
     processSampler.Sample();
@@ -615,6 +638,12 @@ int main(int argc, char** argv) {
             }
         }
 
+        std::string selectedAudioDevice = audioDevice;
+        if (audioDevice == "default") selectedAudioDevice.clear();
+        else if (audioDevice.empty() && !controls.Settings().audioUseSystemDefault)
+            selectedAudioDevice = runtimeAudioDevice;
+        audio.SetControls(controls.Settings().audioMuted,controls.Settings().audioVolume,selectedAudioDevice);
+
         const bool connected = server.Connected();
         const bool remoteStatusKnown = connected && server.RemoteControlStatusKnown();
         const auto remoteStatus = server.RemoteControlStatus();
@@ -637,7 +666,11 @@ int main(int argc, char** argv) {
             previousRemoteStatusKnown = remoteStatusKnown;
             previousRemoteStatus = remoteStatus;
         }
-        if (connected && !wasConnected) {
+        const auto generation = server.SessionGeneration();
+        if (connected && (!wasConnected || generation != previousSessionGeneration)) {
+            audio.Reset(); audioEpoch = 0; captureAudioStatus = phonecast::core::audio::CaptureStatus::Off;
+            videoPlayout.Clear();
+            previousSessionGeneration = generation;
             connectionStarted = std::chrono::steady_clock::now();
             configReported = false;
             keyFrameReported = false;
@@ -648,6 +681,8 @@ int main(int argc, char** argv) {
             firstSubmittedMillis = -1.0;
             decoderRecovery.Reset();
         } else if (!connected && wasConnected) {
+            audio.Reset(); audioEpoch = 0; captureAudioStatus = phonecast::core::audio::CaptureStatus::Off;
+            videoPlayout.Clear();
             decoder.Stop();
             decoderStarted = false;
             decoderRecovery.Reset();
@@ -685,6 +720,28 @@ int main(int argc, char** argv) {
             }
         }
 
+        Message audioMessage;
+        while (server.PopAudio(audioMessage)) {
+            using namespace phonecast::core::audio;
+            if (audioMessage.type == MessageType::AudioConfig) {
+                if (ParseConfiguration(audioMessage,audioEpoch)) {
+                    audio.Configure(audioEpoch); captureAudioStatus = CaptureStatus::Active;
+                    videoPlayout.Clear();
+                }
+            } else if (audioMessage.type == MessageType::AudioStatus) {
+                std::uint64_t epoch = 0; CaptureStatus status{};
+                if (ParseStatus(audioMessage,epoch,status)) {
+                    captureAudioStatus = status;
+                    if (status == CaptureStatus::Off || status == CaptureStatus::Error) {
+                        audio.Reset(); audioEpoch = 0; videoPlayout.Clear();
+                    }
+                }
+            } else {
+                Block block;
+                if (ParseBlock(audioMessage,block) && block.epoch == audioEpoch) audio.Enqueue(std::move(block));
+            }
+        }
+
         Message message;
         phonecast::core::VideoFrame latestFrame;
         bool haveFrame = false;
@@ -709,6 +766,7 @@ int main(int argc, char** argv) {
                 continue;
             }
             if (message.type == MessageType::VideoConfig) {
+                videoPlayout.Clear();
                 codecConfig = std::move(message.payload);
                 streamWidth = message.width;
                 streamHeight = message.height;
@@ -776,7 +834,8 @@ int main(int argc, char** argv) {
                 ++windowDecodedFrames;
             }
         }
-        if (haveFrame) {
+        if (haveFrame) videoPlayout.Add(std::move(latestFrame),std::chrono::steady_clock::now());
+        if (videoPlayout.Take(audio.AudibleTimestamp(),std::chrono::steady_clock::now(),latestFrame)) {
             const auto renderStarted = std::chrono::steady_clock::now();
             if (!renderer.SubmitFrame(latestFrame, error)) {
                 std::cerr << error << '\n';
@@ -821,6 +880,24 @@ int main(int argc, char** argv) {
                 ? windowRenderMillis / windowRenderedFrames : 0.0;
             const double queueMillis = windowMessages > 0
                 ? windowQueueMillis / windowMessages : 0.0;
+            const auto audioStats = audio.Stats();
+            const auto videoSyncStats = videoPlayout.Stats();
+            const auto audioBytes = server.AudioReceivedBytes();
+            const auto audioBitrateMbps = (audioBytes - previousAudioBytes) * 8.0 / seconds / 1000000.0;
+            previousAudioBytes = audioBytes;
+            if (audioStats.status != previousAudioOutputStatus) {
+                std::cout << "[audio] " << audioStats.status << '\n';
+                previousAudioOutputStatus = audioStats.status;
+            }
+            using phonecast::core::audio::CaptureStatus;
+            const std::string audioMenuStatus = controls.Settings().audioMuted ? "MUTED" :
+                captureAudioStatus == CaptureStatus::Error ? "CAPTURE ERROR" :
+                captureAudioStatus == CaptureStatus::Silent ? "SILENT / POLICY BLOCKED" :
+                captureAudioStatus == CaptureStatus::Off ? "OFF / VIDEO ONLY" :
+                audioStats.status.rfind("Playing:",0) == 0 ? "PLAYING" : "OUTPUT UNAVAILABLE";
+            settingsMenu.SetAudioStatus(audioMenuStatus);
+            if (settingsMenu.IsOpen() && settingsMenu.View().title == "PHONE AUDIO")
+                renderer.ShowSettingsMenu(settingsMenu.View(),error);
             const auto processStats = processSampler.Sample();
             phonecast::vr::VrPerformanceStats vrStats;
             const bool haveVrStats = renderer.GetPerformanceStats(vrStats);
@@ -841,6 +918,19 @@ int main(int argc, char** argv) {
                       << " decoder-recovery-triggers=" << decoderRecoveryTriggers
                       << " decoder-recovery-successes=" << decoderRecoverySuccesses
                       << " decoder-recovery-failed-attempts=" << decoderRecoveryFailedAttempts
+                      << " audio-submitted=" << audioStats.submitted
+                      << " audio-dropped=" << audioStats.dropped + server.AudioDropped()
+                      << " audio-failures=" << audioStats.failures
+                      << " audio-queued=" << audioStats.queued
+                      << " audio-output-latency-ms=" << audioStats.latencyMicros / 1000.0
+                      << " audio-bitrate-mbps=" << audioBitrateMbps
+                      << " video-sync-queued=" << videoPlayout.Size()
+                      << " video-sync-deadline-releases=" << videoSyncStats.deadlineReleases
+                      << " video-sync-overflow-releases=" << videoSyncStats.overflowReleases
+                      << " video-sync-coalesced=" << videoSyncStats.coalescedFrames
+                      << " video-sync-last-hold-ms=" << videoSyncStats.lastHoldMicros / 1000.0
+                      << " video-sync-skew-valid=" << (videoSyncStats.haveEstimatedSkew ? 1 : 0)
+                      << " video-sync-estimated-skew-ms=" << videoSyncStats.estimatedSkewMicros / 1000.0
                       << " process-cpu-percent=" << processStats.cpuPercent
                       << " working-set-mb=" << processStats.workingSetMegabytes;
             if (haveVrStats) {
@@ -876,7 +966,13 @@ int main(int argc, char** argv) {
                     << firstConfigMillis << ',' << firstKeyFrameMillis << ','
                     << decoderStartMillis << ',' << firstSubmittedMillis << ','
                     << decoderRecoveryTriggers << ',' << decoderRecoverySuccesses << ','
-                    << decoderRecoveryFailedAttempts << '\n';
+                    << decoderRecoveryFailedAttempts << ',' << audioStats.submitted << ','
+                    << audioStats.dropped + server.AudioDropped() << ',' << audioStats.failures << ','
+                    << audioStats.queued << ',' << audioStats.latencyMicros / 1000.0 << ',' << audioBitrateMbps << ','
+                    << videoPlayout.Size() << ',' << videoSyncStats.deadlineReleases << ','
+                    << videoSyncStats.overflowReleases << ',' << videoSyncStats.coalescedFrames << ','
+                    << videoSyncStats.lastHoldMicros / 1000.0 << ',' << (videoSyncStats.haveEstimatedSkew ? 1 : 0) << ','
+                    << videoSyncStats.estimatedSkewMicros / 1000.0 << '\n';
                 performanceLog.flush();
             }
 
@@ -894,6 +990,7 @@ int main(int argc, char** argv) {
     }
 
     server.Stop();
+    audio.Stop();
     decoder.Stop();
     renderer.Stop();
     return EXIT_SUCCESS;

@@ -11,7 +11,17 @@ node local-apk-server/server.js
 It listens on port `8080` by default and offers whichever artifacts currently exist:
 
 - Android APK: `android/sender/app/build/outputs/apk/debug/app-debug.apk`
-- Steam Frame ARM64 Sprint 12 bundle: `out/packages/phonecast-steam-frame-arm64-sprint12.tar.gz`
+- Steam Frame ARM64 Sprint 13 bundle: `out/packages/phonecast-steam-frame-arm64-sprint13.tar.gz`
+
+The APK path serves the latest rebuilt sender. Sprint 13 adds default-off phone
+playback audio; install both builds, enable playback audio in Android Settings,
+and start a new cast. Physical audio/sync/game-mixing acceptance remains pending.
+The stable `/phonecast-steam-frame-arm64.tar.gz` alias and curl bootstrap select
+the Sprint 13 archive too. The current bundle includes the receiver-only
+video-cadence correction for audio-enabled playback: independent frame deadlines
+replace the starvation-prone three-frame sync queue. If the Sprint 13 APK is
+already installed, update only the Frame bundle, quitting PhoneCast first.
+Software regressions pass; physical smoothness and A/V sync still need retesting.
 
 Override the port if needed:
 
@@ -26,8 +36,8 @@ First complete the Linux ARM64 build and install staging described in `docs/deve
 
 ```bash
 mkdir -p out/packages
-tar -czf out/packages/phonecast-steam-frame-arm64-sprint12.tar.gz \
-  -C out/packages phonecast-steam-frame-arm64-sprint12
+tar -czf out/packages/phonecast-steam-frame-arm64-sprint13.tar.gz \
+  -C out/packages phonecast-steam-frame-arm64-sprint13
 ```
 
 The archive is a native AArch64 Linux application, not an APK. The download
@@ -40,8 +50,8 @@ For an archive already downloaded to Steam Frame:
 ```bash
 set -eu
 cd "$HOME/Downloads"
-tar -xzf phonecast-steam-frame-arm64-sprint12.tar.gz
-sh phonecast-steam-frame-arm64-sprint12/steam-frame-installer/install-phonecast.sh
+tar -xzf phonecast-steam-frame-arm64-sprint13.tar.gz
+sh phonecast-steam-frame-arm64-sprint13/steam-frame-installer/install-phonecast.sh
 ```
 
 Or paste this block into a Steam Frame desktop terminal, replacing

@@ -186,6 +186,30 @@ Core or the portable VR models.
 
 See `docs/standalone-ux.md` for packaging and validation boundaries.
 
+## Sprint 13 optional playback audio
+
+Default-off Android AudioPlaybackCapture sends negotiated 48 kHz stereo PCM S16LE
+over the existing paired stream. Separate bounded audio queues, epochs/sequences,
+and a shared sender wake mechanism preserve video prediction/notification behavior.
+Core owns `IAudioOutput`, `AudioPlayback` worker/gain/retry semantics and bounded
+`AudioVideoQueue` coalescing; no platform APIs enter these models. Actual decoded
+picture PTS is retained in `VideoFrame` through both MF and V4L2.
+
+Windows implements shared-mode WASAPI; Steam Frame runtime-loads libpulse for
+mixed PulseAudio/PipeWire output. OpenVR supplies only an optional output-device
+hint; the composition root selects a backend/route and coordinates connection
+changes and transactional portable mute/volume/output settings (store version 4).
+Audio failures remain non-fatal to video. Queues and sound devices never block the
+VR render loop. Video playout retains at most eight pictures with individual
+100 ms arrival-based deadlines; only due pictures are coalesced. Capacity pressure
+forces presentation progress rather than silently renewing the wait. This fixes
+the reproduced three-picture audio-clock starvation without enlarging audio
+buffers or changing the renderer. Receiver diagnostics expose queue/deadline/
+overflow/hold and estimated media-skew observations. See
+[`phone-audio.md`](phone-audio.md) for timing policy, regression evidence, and the
+pending physical acceptance matrix; initial audibility is user-reported, but the
+corrected audio-enabled video cadence still requires headset retesting.
+
 ## Deferred work
 
 Encrypted pairing, automatic discovery, extended ergonomic tuning of controller-placement defaults, physical standalone native-overlay validation, native decoder-to-GPU surface sharing, and process-attributed GPU utilization remain deferred. The custom TCP transport is subject to head-of-line blocking and must be measured on real Wi-Fi before it is treated as a long-term choice.

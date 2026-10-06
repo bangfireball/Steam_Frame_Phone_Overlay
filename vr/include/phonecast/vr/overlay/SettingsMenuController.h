@@ -1,6 +1,7 @@
 #pragma once
 
 #include "phonecast/vr/overlay/IOverlayRenderer.h"
+#include <utility>
 
 namespace phonecast::vr {
 
@@ -19,6 +20,7 @@ public:
     [[nodiscard]] const OverlaySettings& Original() const noexcept { return original_; }
     [[nodiscard]] SettingsMenuView View() const;
     void MergeRendererUpdate(const OverlaySettings& settings) noexcept;
+    void SetAudioStatus(std::string status) { audioStatus_ = std::move(status); }
     SettingsMenuResult Handle(SettingsMenuCommand command);
     SettingsMenuResult Handle(const SettingsMenuInput& input);
     void Close() noexcept { open_ = false; }
@@ -31,7 +33,8 @@ private:
         LeftController,
         RightController,
         Glance,
-        Notifications
+        Notifications,
+        Audio
     };
 
     [[nodiscard]] std::size_t ItemCount() const noexcept;
@@ -43,6 +46,7 @@ private:
     bool resetConfirmation_{false};
     Page page_{Page::Root};
     std::size_t selected_{0};
+    std::string audioStatus_{"OFF"};
     OverlaySettings original_{};
     OverlaySettings draft_{};
 };

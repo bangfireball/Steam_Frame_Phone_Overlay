@@ -25,6 +25,9 @@ enum class MessageType : std::uint8_t {
     Notification = 9,
     RemoteControlStatus = 10,
     NotificationOpen = 11,
+    AudioConfig = 12,
+    AudioFrame = 13,
+    AudioStatus = 14,
 };
 
 enum MessageFlags : std::uint16_t {

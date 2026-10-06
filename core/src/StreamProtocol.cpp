@@ -40,7 +40,7 @@ std::uint64_t Read64(const std::uint8_t* data) {
 }
 bool IsKnownType(std::uint8_t type) {
     return type >= static_cast<std::uint8_t>(MessageType::Hello) &&
-           type <= static_cast<std::uint8_t>(MessageType::NotificationOpen);
+           type <= static_cast<std::uint8_t>(MessageType::AudioStatus);
 }
 
 void WriteFloat(std::vector<std::uint8_t>& bytes, std::size_t offset, float value) {
@@ -110,7 +110,14 @@ bool ParseHeader(const std::uint8_t* data, std::size_t size, Message& message,
         error = "Stream payload exceeds the 4 MiB safety limit.";
         return false;
     }
-    message.type = static_cast<MessageType>(data[5]);
+    const auto type = static_cast<MessageType>(data[5]);
+    if ((type == MessageType::AudioConfig && payloadSize != 16) ||
+        (type == MessageType::AudioFrame && payloadSize != 1932) ||
+        (type == MessageType::AudioStatus && payloadSize != 12)) {
+        error = "Invalid bounded audio payload size.";
+        return false;
+    }
+    message.type = type;
     message.flags = Read16(data + 6);
     message.sequence = Read64(data + 12);
     message.timestampMicros = Read64(data + 20);

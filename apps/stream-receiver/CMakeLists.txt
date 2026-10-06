@@ -1,5 +1,6 @@
 if(WIN32)
     add_library(phonecast-windows-streaming
+        ${PROJECT_SOURCE_DIR}/platform/windows-x64/src/WasapiAudioOutput.cpp
         ${PROJECT_SOURCE_DIR}/platform/windows-x64/src/DesktopPreview.cpp
         ${PROJECT_SOURCE_DIR}/platform/windows-x64/src/MfH264Decoder.cpp
         ${PROJECT_SOURCE_DIR}/platform/windows-x64/src/ProcessPerformanceSampler.cpp
@@ -8,7 +9,7 @@ if(WIN32)
         ${PROJECT_SOURCE_DIR}/platform/windows-x64/include
     )
     target_compile_features(phonecast-windows-streaming PUBLIC cxx_std_17)
-    target_link_libraries(phonecast-windows-streaming PUBLIC phonecast-core mfplat mfuuid ole32 psapi)
+    target_link_libraries(phonecast-windows-streaming PUBLIC phonecast-core mfplat mfuuid ole32 psapi uuid)
     phonecast_enable_warnings(phonecast-windows-streaming)
 
     add_executable(phonecast-stream-receiver src/main.cpp)
