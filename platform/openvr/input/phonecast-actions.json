@@ -1,15 +1,12 @@
 {
   "action_sets": [
-    {"name": "/actions/phonecast_shortcuts", "usage": "leftright"},
-    {"name": "/actions/phonecast_panel", "usage": "leftright"}
+    {"name": "/actions/phonecast_shortcuts", "usage": "leftright"}
   ],
   "actions": [
     {"name": "/actions/phonecast_shortcuts/in/toggle_left", "type": "boolean", "requirement": "optional"},
     {"name": "/actions/phonecast_shortcuts/in/toggle_right", "type": "boolean", "requirement": "optional"},
     {"name": "/actions/phonecast_shortcuts/in/dock_left", "type": "boolean", "requirement": "optional"},
-    {"name": "/actions/phonecast_shortcuts/in/dock_right", "type": "boolean", "requirement": "optional"},
-    {"name": "/actions/phonecast_panel/in/axis_left", "type": "vector2", "requirement": "optional"},
-    {"name": "/actions/phonecast_panel/in/axis_right", "type": "vector2", "requirement": "optional"}
+    {"name": "/actions/phonecast_shortcuts/in/dock_right", "type": "boolean", "requirement": "optional"}
   ],
   "default_bindings": [
     {"controller_type": "frame_controller", "binding_url": "phonecast-bindings-frame-controller.json"}
@@ -17,12 +14,9 @@
   "localization": [{
     "language_tag": "en_US",
     "/actions/phonecast_shortcuts": "PhoneCast shortcuts",
-    "/actions/phonecast_panel": "PhoneCast panel controls",
     "/actions/phonecast_shortcuts/in/toggle_left": "Left hold: show or hide phone",
     "/actions/phonecast_shortcuts/in/toggle_right": "Right hold: show or hide phone",
     "/actions/phonecast_shortcuts/in/dock_left": "Left double click: open on left controller",
-    "/actions/phonecast_shortcuts/in/dock_right": "Right double click: open on right controller",
-    "/actions/phonecast_panel/in/axis_left": "Left move depth",
-    "/actions/phonecast_panel/in/axis_right": "Right move depth"
+    "/actions/phonecast_shortcuts/in/dock_right": "Right double click: open on right controller"
   }]
 }

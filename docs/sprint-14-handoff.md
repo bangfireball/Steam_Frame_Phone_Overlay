@@ -1,4 +1,35 @@
-# Sprint 14 working handoff — 2026-10-06
+# Sprint 14 handoff — closed by project owner
+
+## Closure supersedes the historical working state below
+
+The owner confirmed joystick push/pull works and accepted consistent panel controls,
+move/resize safety, the Android widget, and lifecycle behavior. Sprint 14 is closed
+for that implemented baseline. Keyboard/text entry and optional wrist gestures are
+backlogged; further lifecycle testing proceeds organically. Per-hotkey enable/disable
+toggles are also backlogged because all shortcuts remain callable during gameplay
+and could conflict; conflict-free game input is not claimed. No toggles are added
+by this documentation closure. Dashboard-visible arbitrary hotkeys remain unavailable;
+working depth uses overlay scroll events rather than a SteamVR Input action set.
+
+Current closure: `design.md` and `docs/sprint-14-controls.md`. Earlier pending
+statements below are historical, not instructions to reopen accepted work. Native
+decoder/Vulkan reliability and audio-server-outage recovery remain separate tasks.
+
+## Latest depth experiment — 2026-10-07
+
+The owner's next request was to try fixing joystick push/pull using the prior
+session's research. This is now implemented as owned **smooth overlay scroll**
+for phone and Settings Move drags, with bounded increments and per-drag aggregate
+counts. Discrete events are diagnostic-only. The failed panel-axis action set and
+bindings are removed; dashboard-visible operation submits zero active action sets.
+Windows/all 12 tests, ARM64 cross-build and QEMU portable/audio/runtime tests, and
+both server tests pass. The updated bundle is published; no headset process was
+restarted and physical joystick delivery/sign approval remains pending.
+
+Current implementation, retest steps, and hashes:
+[`sprint-14-depth-input-research.md`](sprint-14-depth-input-research.md).
+The earlier explicit-axis implementation and old package hashes below are historical
+and superseded for depth by that document. Sprint 14 remains open.
 
 ## Current request and scope
 

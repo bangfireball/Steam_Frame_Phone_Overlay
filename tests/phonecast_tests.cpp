@@ -266,6 +266,30 @@ void TestOverlayInteraction() {
           phonecast::vr::AdjustPanelDepth(3.0F, 1.0F, 0.04F) == 3.0F &&
           phonecast::vr::AdjustPanelDepth(0.20F, -1.0F, 0.04F) == 0.20F,
           "move-handle stick depth has correct direction, deadzone, and bounds");
+    phonecast::vr::PanelDepthScroll scroll;
+    scroll.Add(0.1F, true, true);
+    Check(std::fabs(scroll.TakeDistance(1.0F) - 1.005F) < 0.0001F,
+          "smooth scroll increments have no axis deadzone and positive means farther");
+    Check(scroll.TakeDistance(1.0F) == 1.0F, "scroll increments are consumed once");
+    scroll.Add(-1.0F, true, true);
+    Check(std::fabs(scroll.TakeDistance(1.0F) - 0.97F) < 0.0001F,
+          "negative scroll means nearer with bounded per-pump displacement");
+    scroll.Add(1.0F, false, true);
+    scroll.Add(1.0F, true, false);
+    scroll.Add(std::numeric_limits<float>::infinity(), true, true);
+    Check(scroll.TakeDistance(1.0F) == 1.0F && scroll.discreteEvents == 1 && scroll.smoothEvents == 2,
+          "duplicate discrete events, other-hand input, and nonfinite deltas cannot move a drag");
+    for (int i = 0; i < 100; ++i) scroll.Add(1.0F, true, true);
+    Check(std::fabs(scroll.TakeDistance(1.0F) - 1.03F) < 0.0001F,
+          "bursty scroll cannot create an uncontrolled depth jump");
+    scroll.Add(1.0F, true, true);
+    Check(scroll.TakeDistance(3.0F) == 3.0F, "scroll depth clamps far bound");
+    scroll.Add(-1.0F, true, true);
+    Check(scroll.TakeDistance(0.20F) == 0.20F, "scroll depth clamps near bound");
+    scroll.Add(1.0F, true, true);
+    scroll = {};
+    Check(scroll.TakeDistance(1.0F) == 1.0F && scroll.smoothEvents == 0,
+          "drag cancellation clears pending depth and diagnostic counts");
     phonecast::vr::OverlayInteractionController interaction;
     interaction.SetSurfaceSize(1000, 2000);
     const auto down = interaction.PointerDown(250.0F, 500.0F);

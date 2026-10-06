@@ -31,6 +31,58 @@ These are part of the same overlay event stream that already delivers dashboard 
 
 If the runtime does not emit scroll events during a Move drag, the next supported fallback is explicit on-panel nearer/farther buttons or a laser-controlled depth slider. Undocumented `vrserver` input feeds and permanent overlay-global joystick claims are rejected.
 
+## Implemented experiment — 2026-10-07
+
+The owner requested an implementation attempt. Phone and Settings Move drags now
+consume only the owning controller's smooth overlay scroll events; discrete
+scroll is counted, not applied, so duplicate forms cannot move twice. Positive
+smooth delta maps to farther along the current head-to-panel ray, negative nearer.
+A unit maps to 0.05 m, with accumulated displacement capped to ±0.03 m per pump
+and distance clamped to 0.20–3.0 m. There is no polled-axis deadzone/time scaling.
+The failed panel action set and its joystick bindings have been removed; dashboard
+operation submits zero active action sets. Ordinary phone scrolling is retained
+outside owned Move/Resize interactions.
+
+Drag release logs aggregate smooth/discrete counts and delta sign counts under
+`openvr-depth`. Focus leave, overlay hiding, dashboard closure, and tracking loss
+release ownership and clear pending deltas. Missing event device indices use the
+existing primary-dashboard-controller fallback; identifiable other-hand events
+cannot adjust depth. Settings requests both scroll flags as well.
+
+Windows build/all 12 CTest tests pass. ARM64 cross-build, QEMU portable/audio/runtime
+tests, and both download-server tests pass. The initial container CTest invocation
+lacked the ARM64 loader prefix; rerunning with `QEMU_LD_PREFIX=/usr/aarch64-linux-gnu`
+passed. Tests cover sign, tiny deltas, duplicate discrete suppression, wrong-owner
+rejection, nonfinite input, burst caps, distance clamps, consumption, and reset.
+These do not prove runtime scroll delivery during a held-trigger drag.
+
+Physical retest: quit PhoneCast, update the Frame bundle, reopen the dashboard,
+and hold phone Move while pushing the same hand's stick up/down. Repeat with
+Settings and each hand; check direction, speed, clamps, off-surface release,
+dashboard closure, tracking loss, rotation, and no Android scroll during movement.
+If nothing moves, inspect the released drag's `openvr-depth` counts: zero smooth
+with nonzero discrete suggests a discrete-only runtime; both zero means this
+runtime does not deliver the candidate route during drag. Do not enable both
+forms blindly or restore global axis claims. No hardware/runtime was restarted
+by the agent and physical approval remains pending.
+
+Published archive: `out/packages/phonecast-steam-frame-arm64-sprint14.tar.gz`.
+The live stable download at `http://10.0.0.3:8080/phonecast-steam-frame-arm64.tar.gz`
+was fetched and its SHA-256 matched the local archive; no server restart was needed.
+
+- Archive SHA-256: `beba327e4d66ca63ad2aec61ea5ef8b74dddc7503bfc2937efcbf358b509d1a5`
+- Receiver SHA-256: `873ddb28ba771cefa29db55d4da18dc8326a47c6f41ab141de1f36b1822ce716`
+
+## Physical result and closure
+
+The owner physically confirmed: “the joystick fix worked. i am now able to push
+and pull the window.” This validates the supported overlay-scroll depth route.
+It does not establish general SteamVR Input hotkey delivery while the dashboard
+is visible. The prior read-only log snapshot showed the previous installed hash;
+that snapshot predates this approval and cannot identify the build used for the
+successful physical test. Exact per-hand/edge-case results were not separately
+reported. The owner later accepted move/resize safety and closed Sprint 14.
+
 ## Evidence boundaries
 
 ### Documented
@@ -47,11 +99,10 @@ If the runtime does not emit scroll events during a Move drag, the next supporte
 - Normal-priority explicit axis depth input did not work while the dashboard was active.
 - Normal-priority Boolean hotkeys also did not deliver while the dashboard owned focus.
 
-### Not yet tested
+### Remaining detailed evidence
 
-- Whether scroll events continue while trigger is held on the Move handle.
-- Whether Steam Frame emits smooth, discrete, or both event forms for the relevant stick gesture.
-- Event sign, cadence, hand identity, and behavior on the Settings overlay.
+- Push/pull during an owned Move drag is physically confirmed; exact smooth/discrete event counts were not collected from the successful test.
+- Per-hand, Settings-specific, sign/cadence, and edge-case measurements were not individually reported; the owner accepted the move/resize baseline without requiring a separately recorded result for every case.
 
 ## Primary references
 

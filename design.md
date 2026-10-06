@@ -2051,26 +2051,41 @@ The previous handoff above is historical implementation state.
 
 # Sprint 14 — Gestures and UI
 
-**Status:** `[~] In progress — mockup-driven dashboard/settings refresh started; hardware approval pending`
+**Status:** `[x] Complete — project-owner approved UI/control baseline; optional gestures and text entry backlogged`
 
-Current working handoff: [`docs/sprint-14-handoff.md`](docs/sprint-14-handoff.md). The owner reported the latest Start Location iteration was “better” and requested a handoff while continuing work; this is positive placement feedback, not Sprint 14 closure or approval of every preview/shortcut/depth/lifecycle case.
+Closure supersedes the earlier working handoff in [`docs/sprint-14-handoff.md`](docs/sprint-14-handoff.md). The owner physically confirmed joystick push/pull, accepted consistent panel controls, move/resize safety, the Quick connect widget, and lifecycle behavior, and requested Sprint 14 closure. Further lifecycle evidence will accumulate organically; this does not establish an individually witnessed result for every original test-matrix case.
 
 - `[x]` Local UI mockups reviewed and `_injest/` excluded from version control
 - `[x]` Framecorder dashboard-closed hotkey source research completed and documented
-- `[~]` Mockup-derived settings refresh and landscape quick dashboard implemented for build validation
+- `[x]` Mockup-derived settings refresh and landscape quick dashboard physically accepted
 - `[x]` Removed Glance/Pin from the primary dashboard after physical feedback found no useful visible distinction
 - `[x]` Dashboard Show preserves physical size and resets a user-facing world anchor closer to center; Settings → Placement → Start Location provides persisted offsets/distance and a live dummy preview, physically approved in normal use
-- `[~]` Phone lower control area now has physically approved Back, Close, Move, and trigger-drag Resize controls; settings/notification consistency and extended lifecycle coverage remain pending
-- `[!]` Trigger-drag analog-stick depth adjustment remains nonfunctional while the dashboard owns focus despite legacy polling and explicit-action attempts; research now recommends a bounded experiment reusing supported overlay scroll events during an owned Move drag, which remains to be implemented and physically tested
-- `[ ]` Keyboard/text-entry path and PhoneCast-owned fallback decision
-- `[ ]` Portable opt-in gesture recognizer and gameplay false-activation evidence
-- `[~]` Dashboard-closed either-stick hold toggles visibility; double-click docking and repeated same-hand world pinning are physically approved. Normal-priority hotkeys do not deliver through dashboard focus and remain disabled there; hold reliability and game-input coexistence remain pending
-- `[~]` Android home-screen Quick connect widget reuses saved receiver details and proceeds directly to mandatory MediaProjection consent; compact 1 × 1 and expanded labeled layouts use the supplied PhoneCast mark. JVM tests, APK, and lint pass, with physical widget sizing/launch pending
-- `[ ]` Native Steam Frame physical validation in both launch orders
+- `[x]` Consistent panel controls and phone Back, Close, Move, Resize accepted by the owner
+- `[x]` Owned smooth-overlay-scroll joystick push/pull physically confirmed; failed panel-axis set removed
+- `[x]` Move/resize safety accepted after physical use
+- `[ ]` Backlog: keyboard/text entry and fallback investigation, removed from closure scope by the owner
+- `[ ]` Backlog: optional wrist gesture and false-activation validation, not currently needed
+- `[x]` Dashboard-closed hotkeys work during gameplay; double-click docking/world pinning physically approved. Dashboard-visible shortcuts remain disabled; working overlay scroll is not general hotkey delivery
+- `[!]` Known shortcut-conflict risk: owner could invoke all hotkeys during gameplay. Per-hotkey enable/disable toggles are backlogged, not implemented or required for closure; current shortcuts remain SteamVR-remappable/unbindable
+- `[x]` Android Quick connect widget physically accepted; JVM tests, APK, and lint pass
+- `[x]` Lifecycle behavior accepted by the owner; extended testing proceeds organically rather than blocking closure
+- `[~]` Original per-case/both-launch-order Sprint 14 matrix is not independently recorded as fully exercised
 
-The initial visual implementation follows the two owner-provided `_injest` mockups for panel hierarchy, dark navy cards, blue selection states, settings categories, calibration sliders, transactional actions, and bottom move affordances. Physical feedback found the portrait quick panel too tall and found no useful visible distinction for its Glance and Pin actions. The quick panel is therefore landscape, exposes only Show/Hide, concrete placement choices, Android Back, Settings, and Quit, and resets a newly shown phone's world anchor beside the dashboard. Glance/Pinned remain internal compatibility states for existing keyboard/dormant controller paths but are no longer presented as primary dashboard modes. A subsequent feedback iteration replaces Show's head lock with a world-space reset beside the dashboard, removes dashboard Back, separates footer Close from Back, corrects pointer-controller fallback and transient dock tracking failures, and adds move-handle analog-stick depth and a narrow left-stick long-press toggle. See [`docs/sprint-14-controls.md`](docs/sprint-14-controls.md) for behavior and the pending physical matrix. The phone footer adds a dedicated lower-right resize corner while keeping Back, Close, and Move separate. These local reference images are intentionally ignored rather than shipped. Compilation and automated tests do not constitute visual approval; the refreshed surfaces still require headset review and iteration.
+The initial visual implementation follows the two owner-provided `_injest` mockups for panel hierarchy, dark navy cards, blue selection states, settings categories, calibration sliders, transactional actions, and bottom move affordances. Physical feedback found the portrait quick panel too tall and found no useful visible distinction for its Glance and Pin actions. The quick panel is therefore landscape, exposes only Show/Hide, concrete placement choices, Android Back, Settings, and Quit, and resets a newly shown phone's world anchor beside the dashboard. Glance/Pinned remain internal compatibility states for existing keyboard/dormant controller paths but are no longer presented as primary dashboard modes. A subsequent feedback iteration replaces Show's head lock with a world-space reset beside the dashboard, removes dashboard Back, separates footer Close from Back, corrects pointer-controller fallback and transient dock tracking failures, and adds move-handle analog-stick depth and a narrow left-stick long-press toggle. See [`docs/sprint-14-controls.md`](docs/sprint-14-controls.md) for behavior and the pending physical matrix. The phone footer adds a dedicated lower-right resize corner while keeping Back, Close, and Move separate. These local reference images are intentionally ignored rather than shipped. Compilation and automated tests do not constitute visual approval; the owner subsequently physically accepted the refreshed surfaces and closed the implemented scope.
 
 Framecorder research at native commit `171a905006bb917e5a1677fa922a1d00cc1ec214` found a narrower hotkey implementation than the earlier overlay-global reference: one optional Boolean action, a left-thumbstick binding-layer long press, haptic feedback, and normal action-set priority `0`. PhoneCast will test a separate narrow opt-in action set rather than reactivating its dormant broad global set. See [`docs/framecorder-hotkey-research.md`](docs/framecorder-hotkey-research.md).
+
+## Closure decision
+
+The owner explicitly closed Sprint 14 and requested commit/push after physical
+approval. Keyboard/text entry and wrist gestures are moved to backlog; the detailed
+plans below are retained as future design references, not unmet closure gates.
+Per-hotkey enable/disable controls are a separate backlog task to mitigate possible
+gameplay conflicts; hotkey availability during a game does not prove conflict-free
+input. Organic lifecycle testing continues without claiming each original edge
+case was separately exercised. The known Sprint 12 decoder/Vulkan reliability
+follow-ups remain separate, as does the newly observed audio-server outage recovery
+follow-up. No new feature implementation is included in this closure.
 
 ## Objective
 

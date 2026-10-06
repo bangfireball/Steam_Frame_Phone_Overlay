@@ -1,6 +1,6 @@
 {
   "controller_type": "frame_controller",
-  "name": "PhoneCast visibility and panel controls",
+  "name": "PhoneCast visibility shortcuts",
   "description": "Hold either stick to toggle the phone; double click to open it on that controller.",
   "bindings": {
     "/actions/phonecast_shortcuts": {
@@ -12,16 +12,6 @@
         {"path": "/user/hand/right/input/thumbstick", "mode": "button", "inputs": {
           "long": {"output": "/actions/phonecast_shortcuts/in/toggle_right"},
           "double": {"output": "/actions/phonecast_shortcuts/in/dock_right"}
-        }}
-      ]
-    },
-    "/actions/phonecast_panel": {
-      "sources": [
-        {"path": "/user/hand/left/input/thumbstick", "mode": "joystick", "inputs": {
-          "position": {"output": "/actions/phonecast_panel/in/axis_left"}
-        }},
-        {"path": "/user/hand/right/input/thumbstick", "mode": "joystick", "inputs": {
-          "position": {"output": "/actions/phonecast_panel/in/axis_right"}
         }}
       ]
     }

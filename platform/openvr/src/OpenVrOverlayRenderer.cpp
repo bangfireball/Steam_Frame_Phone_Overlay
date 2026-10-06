@@ -891,13 +891,10 @@ public:
         const bool ok =
             inputApi->SetActionManifestPath(manifest.string().c_str()) == vr::VRInputError_None &&
             inputApi->GetActionSetHandle("/actions/phonecast_shortcuts", &shortcutSet) == vr::VRInputError_None &&
-            inputApi->GetActionSetHandle("/actions/phonecast_panel", &panelSet) == vr::VRInputError_None &&
             inputApi->GetActionHandle("/actions/phonecast_shortcuts/in/toggle_left", &shortcutToggleLeft) == vr::VRInputError_None &&
             inputApi->GetActionHandle("/actions/phonecast_shortcuts/in/toggle_right", &shortcutToggleRight) == vr::VRInputError_None &&
             inputApi->GetActionHandle("/actions/phonecast_shortcuts/in/dock_left", &shortcutDockLeft) == vr::VRInputError_None &&
-            inputApi->GetActionHandle("/actions/phonecast_shortcuts/in/dock_right", &shortcutDockRight) == vr::VRInputError_None &&
-            inputApi->GetActionHandle("/actions/phonecast_panel/in/axis_left", &panelAxisLeft) == vr::VRInputError_None &&
-            inputApi->GetActionHandle("/actions/phonecast_panel/in/axis_right", &panelAxisRight) == vr::VRInputError_None;
+            inputApi->GetActionHandle("/actions/phonecast_shortcuts/in/dock_right", &shortcutDockRight) == vr::VRInputError_None;
         if (!ok) {
             logger.Log(core::LogLevel::Warning, "openvr-shortcut", "Shortcut/panel action initialization failed.");
             return;
@@ -915,28 +912,19 @@ public:
         return data.bActive && data.bChanged && data.bState;
     }
 
-    float ReadPanelAxis(vr::VRActionHandle_t action) const {
-        vr::InputAnalogActionData_t data{};
-        if (inputApi->GetAnalogActionData(action, &data, sizeof(data),
-                vr::k_ulInvalidInputValueHandle) != vr::VRInputError_None || !data.bActive)
-            return 0.0F;
-        return data.y;
-    }
-
     void PollShortcut() {
         if (!shortcutReady) return;
         const bool dashboardVisible = overlayApi->IsDashboardVisible();
         vr::VRActiveActionSet_t active{};
-        active.ulActionSet = dashboardVisible ? panelSet : shortcutSet;
+        active.ulActionSet = shortcutSet;
         active.nPriority = 0;
-        if (inputApi->UpdateActionState(&active, sizeof(active), 1) != vr::VRInputError_None) return;
+        // Explicitly deactivate the shortcut set when the dashboard owns input.
+        if (inputApi->UpdateActionState(&active, sizeof(active), dashboardVisible ? 0 : 1) !=
+            vr::VRInputError_None) return;
         if (dashboardVisible) {
-            panelLeftY = ReadPanelAxis(panelAxisLeft);
-            panelRightY = ReadPanelAxis(panelAxisRight);
             shortcutActive = false;
             return;
         }
-        panelLeftY = panelRightY = 0.0F;
         bool anyActive = false;
         const bool dockLeft = DigitalPressed(shortcutDockLeft, anyActive);
         const bool dockRight = DigitalPressed(shortcutDockRight, anyActive);
@@ -1744,7 +1732,10 @@ public:
         settingsGrabRelative = Multiply(InverseRigid(controllerPose), settingsWorldTransform);
         if (overlayApi->SetOverlayTransformTrackedDeviceRelative(
                 settingsOverlay, device, &settingsGrabRelative) == vr::VROverlayError_None)
+        {
             settingsGrabbedDevice = device;
+            settingsDepthScroll = {};
+        }
     }
 
     void EndSettingsGrab(vr::TrackedDeviceIndex_t device) {
@@ -1756,6 +1747,8 @@ public:
         settingsWorldTransformValid = true;
         overlayApi->SetOverlayTransformAbsolute(
             settingsOverlay, vr::TrackingUniverseStanding, &settingsWorldTransform);
+        LogDragScroll("Settings", settingsDepthScroll);
+        settingsDepthScroll = {};
         settingsGrabbedDevice = vr::k_unTrackedDeviceIndexInvalid;
     }
 
@@ -1935,10 +1928,6 @@ public:
     }
 
     void UpdateDragDepth() {
-        const auto now = std::chrono::steady_clock::now();
-        const float dt = lastDragUpdate.time_since_epoch().count() == 0 ? 0.0F :
-            std::min(0.05F, std::chrono::duration<float>(now - lastDragUpdate).count());
-        lastDragUpdate = now;
         const auto update = [&](vr::TrackedDeviceIndex_t device, vr::VROverlayHandle_t handle,
                                 vr::HmdMatrix34_t& relative) {
             if (device == vr::k_unTrackedDeviceIndexInvalid) return;
@@ -1952,13 +1941,6 @@ public:
             if (handle == overlay) grabLastAbsolute = tracked;
             else settingsWorldTransform = tracked;
             if (!DevicePose(vr::k_unTrackedDeviceIndex_Hmd, head)) return;
-            const auto leftDevice = system->GetTrackedDeviceIndexForControllerRole(
-                vr::TrackedControllerRole_LeftHand);
-            const auto rightDevice = system->GetTrackedDeviceIndexForControllerRole(
-                vr::TrackedControllerRole_RightHand);
-            const float axis = device == leftDevice ? panelLeftY
-                : device == rightDevice ? panelRightY : 0.0F;
-            if (std::fabs(axis) < 0.20F) return;
             auto absolute = Multiply(pose, relative);
             float direction[3]{};
             float distanceSquared = 0;
@@ -1968,14 +1950,34 @@ public:
             }
             const float distance = std::sqrt(distanceSquared);
             if (distance < 0.001F) return;
-            const float next = phonecast::vr::AdjustPanelDepth(distance, axis, dt);
+            auto& scroll = handle == overlay ? phoneDepthScroll : settingsDepthScroll;
+            const float next = scroll.TakeDistance(distance);
+            if (next == distance) return;
             for (int row = 0; row < 3; ++row)
                 absolute.m[row][3] += direction[row] * ((next - distance) / distance);
             relative = Multiply(InverseRigid(pose), absolute);
+            if (handle == overlay) grabLastAbsolute = absolute;
+            else settingsWorldTransform = absolute;
             overlayApi->SetOverlayTransformTrackedDeviceRelative(handle, device, &relative);
         };
         update(grabbedDevice, overlay, grabRelative);
         update(settingsGrabbedDevice, settingsOverlay, settingsGrabRelative);
+    }
+
+    void QueueDragScroll(const vr::VREvent_t& event, bool settings) {
+        const auto owner = settings ? settingsGrabbedDevice : grabbedDevice;
+        if (owner == vr::k_unTrackedDeviceIndexInvalid || !overlayApi->IsDashboardVisible()) return;
+        auto& scroll = settings ? settingsDepthScroll : phoneDepthScroll;
+        scroll.Add(event.data.scroll.ydelta, event.eventType == vr::VREvent_ScrollSmooth,
+                   ResolvePointerDevice(event.trackedDeviceIndex) == owner);
+    }
+
+    void LogDragScroll(const char* panel, const phonecast::vr::PanelDepthScroll& scroll) {
+        logger.Log(core::LogLevel::Info, "openvr-depth", std::string(panel) +
+            " drag scroll: smooth=" + std::to_string(scroll.smoothEvents) +
+            " discrete=" + std::to_string(scroll.discreteEvents) +
+            " positive=" + std::to_string(scroll.positiveEvents) +
+            " negative=" + std::to_string(scroll.negativeEvents));
     }
 
     void BeginResize(float overlayX) {
@@ -2014,6 +2016,7 @@ public:
         if (OverlayCall(overlayApi->SetOverlayTransformTrackedDeviceRelative(
                             overlay, device, &grabRelative), "begin overlay grab", ignored)) {
             grabbedDevice = device;
+            phoneDepthScroll = {};
             logger.Log(core::LogLevel::Info, "openvr", "Overlay grab started.");
         }
     }
@@ -2033,6 +2036,8 @@ public:
             hasPendingSettings = true;
             logger.Log(core::LogLevel::Info, "openvr", "Overlay grab ended; placement is world-locked.");
         }
+        LogDragScroll("Phone", phoneDepthScroll);
+        phoneDepthScroll = {};
         grabbedDevice = vr::k_unTrackedDeviceIndexInvalid;
     }
 
@@ -2148,19 +2153,14 @@ public:
     HoldState rightHold{};
     phonecast::vr::WristMenuGesture wristMenuGesture{};
     vr::VRActionSetHandle_t shortcutSet{vr::k_ulInvalidActionSetHandle};
-    vr::VRActionSetHandle_t panelSet{vr::k_ulInvalidActionSetHandle};
+    phonecast::vr::PanelDepthScroll phoneDepthScroll, settingsDepthScroll;
     vr::VRActionHandle_t shortcutToggleLeft{vr::k_ulInvalidActionHandle};
     vr::VRActionHandle_t shortcutToggleRight{vr::k_ulInvalidActionHandle};
     vr::VRActionHandle_t shortcutDockLeft{vr::k_ulInvalidActionHandle};
     vr::VRActionHandle_t shortcutDockRight{vr::k_ulInvalidActionHandle};
-    vr::VRActionHandle_t panelAxisLeft{vr::k_ulInvalidActionHandle};
-    vr::VRActionHandle_t panelAxisRight{vr::k_ulInvalidActionHandle};
-    float panelLeftY{0.0F};
-    float panelRightY{0.0F};
     bool wasDashboardVisible{false};
     bool shortcutReady{false};
     bool shortcutActive{false};
-    std::chrono::steady_clock::time_point lastDragUpdate{};
     bool shown{false};
     bool desiredVisible{true};
     bool remoteStatusKnown{false};
@@ -2279,6 +2279,12 @@ bool OpenVrOverlayRenderer::Start(const phonecast::vr::OverlaySettings& settings
         !impl_->OverlayCall(impl_->overlayApi->SetOverlayInputMethod(
                                 impl_->settingsOverlay, vr::VROverlayInputMethod_Mouse),
                             "Set settings input method", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayFlag(
+                                impl_->settingsOverlay, vr::VROverlayFlags_SendVRSmoothScrollEvents, true),
+                            "Enable settings smooth scroll events", error) ||
+        !impl_->OverlayCall(impl_->overlayApi->SetOverlayFlag(
+                                impl_->settingsOverlay, vr::VROverlayFlags_SendVRDiscreteScrollEvents, true),
+                            "Enable settings discrete scroll diagnostics", error) ||
         !impl_->OverlayCall(impl_->overlayApi->SetOverlayFlag(
                                 impl_->settingsOverlay,
                                 vr::VROverlayFlags_MakeOverlaysInteractiveIfVisible, true),
@@ -2493,7 +2499,6 @@ bool OpenVrOverlayRenderer::PumpEvents() {
     if (impl_->overlayApi == nullptr || impl_->system == nullptr) return false;
     impl_->EnsureDashboardHealthy();
     impl_->PollShortcut();
-    impl_->UpdateDragDepth();
     const bool dashboardVisible = impl_->overlayApi->IsDashboardVisible();
     if (impl_->wasDashboardVisible && !dashboardVisible) {
         if (impl_->resizing) impl_->EndResize();
@@ -2543,7 +2548,9 @@ bool OpenVrOverlayRenderer::PumpEvents() {
     }
     while (impl_->overlayApi->PollNextOverlayEvent(
                impl_->settingsOverlay, &event, sizeof(event))) {
-        if (event.eventType == vr::VREvent_MouseButtonDown &&
+        if (event.eventType == vr::VREvent_FocusLeave || event.eventType == vr::VREvent_OverlayHidden) {
+            impl_->EndSettingsGrab(impl_->settingsGrabbedDevice);
+        } else if (event.eventType == vr::VREvent_MouseButtonDown &&
             (event.data.mouse.button & vr::VRMouseButton_Left) != 0) {
             if (impl_->IsSettingsGrabHandle(event.data.mouse.y))
                 impl_->BeginSettingsGrab(event.trackedDeviceIndex);
@@ -2553,6 +2560,9 @@ bool OpenVrOverlayRenderer::PumpEvents() {
                    (event.data.mouse.button & vr::VRMouseButton_Left) != 0 &&
                    impl_->settingsGrabbedDevice != vr::k_unTrackedDeviceIndexInvalid) {
             impl_->EndSettingsGrab(event.trackedDeviceIndex);
+        } else if (event.eventType == vr::VREvent_ScrollSmooth ||
+                   event.eventType == vr::VREvent_ScrollDiscrete) {
+            impl_->QueueDragScroll(event, true);
         }
         if (IsQuitEvent(event.eventType)) {
             impl_->logger.Log(core::LogLevel::Info, "openvr", "Runtime requested overlay shutdown.");
@@ -2577,7 +2587,15 @@ bool OpenVrOverlayRenderer::PumpEvents() {
         }
     }
     while (impl_->overlayApi->PollNextOverlayEvent(impl_->overlay, &event, sizeof(event))) {
-        if (!impl_->calibrationActive && event.eventType == vr::VREvent_MouseButtonDown &&
+        if (event.eventType == vr::VREvent_FocusLeave || event.eventType == vr::VREvent_OverlayHidden) {
+            impl_->EndGrab(impl_->grabbedDevice);
+            if (impl_->resizing) impl_->EndResize();
+            if (impl_->pointerDown) {
+                impl_->QueuePointer(impl_->interaction.PointerUp(impl_->lastPointerX, impl_->lastPointerY));
+                impl_->pointerDown = false;
+            }
+            impl_->backButtonDown = false;
+        } else if (!impl_->calibrationActive && event.eventType == vr::VREvent_MouseButtonDown &&
             (event.data.mouse.button & vr::VRMouseButton_Left) != 0) {
             if (impl_->interaction.IsBackButton(event.data.mouse.x, event.data.mouse.y)) {
                 impl_->backButtonDown = true;
@@ -2625,17 +2643,21 @@ bool OpenVrOverlayRenderer::PumpEvents() {
             }
             impl_->pointerDown = false;
         } else if (!impl_->calibrationActive &&
-                   !impl_->interaction.IsGrabHandle(impl_->lastPointerY) &&
                    (event.eventType == vr::VREvent_ScrollDiscrete ||
                     event.eventType == vr::VREvent_ScrollSmooth)) {
-            impl_->QueuePointer(impl_->interaction.Scroll(
-                impl_->lastPointerX, impl_->lastPointerY, event.data.scroll.ydelta));
+            if (impl_->grabbedDevice != vr::k_unTrackedDeviceIndexInvalid) {
+                impl_->QueueDragScroll(event, false);
+            } else if (!impl_->resizing && !impl_->interaction.IsGrabHandle(impl_->lastPointerY)) {
+                impl_->QueuePointer(impl_->interaction.Scroll(
+                    impl_->lastPointerX, impl_->lastPointerY, event.data.scroll.ydelta));
+            }
         }
         if (IsQuitEvent(event.eventType)) {
             impl_->logger.Log(core::LogLevel::Info, "openvr", "Runtime requested overlay shutdown.");
             return false;
         }
     }
+    impl_->UpdateDragDepth();
     while (impl_->system->PollNextEvent(&event, sizeof(event))) {
         if (IsQuitEvent(event.eventType)) {
             impl_->system->AcknowledgeQuit_Exiting();
@@ -2923,10 +2945,9 @@ void OpenVrOverlayRenderer::Stop() noexcept {
     impl_->resizing = false;
     impl_->shortcutReady = false;
     impl_->shortcutActive = false;
-    impl_->panelLeftY = 0.0F;
-    impl_->panelRightY = 0.0F;
+    impl_->phoneDepthScroll = {};
+    impl_->settingsDepthScroll = {};
     impl_->wasDashboardVisible = false;
-    impl_->lastDragUpdate = {};
     impl_->hasPendingSettingsMenuCommand = false;
     impl_->gestureProgressVisible = false;
     impl_->startLocationPreviewVisible = false;
