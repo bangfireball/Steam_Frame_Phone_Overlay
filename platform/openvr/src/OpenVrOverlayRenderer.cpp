@@ -1,5 +1,6 @@
 #include "phonecast/platform/openvr/OpenVrOverlayRenderer.h"
 #include "phonecast/vr/interaction/OverlayInteractionController.h"
+#include "phonecast/vr/interaction/PanelDepth.h"
 #include "phonecast/vr/overlay/WristMenuGesture.h"
 
 #include <openvr.h>
@@ -84,7 +85,7 @@ constexpr std::array<DashboardTarget, 8> kDashboardTargets{{
     {24, 136, 360, 174, DashboardControl::ToggleVisible},
     {416, 156, 276, 92, DashboardControl::HeadLocked},
     {708, 156, 276, 92, DashboardControl::WorldLocked},
-    {24, 352, 360, 92, DashboardControl::AndroidBack},
+    {24, 352, 0, 0, DashboardControl::AndroidBack},
     {416, 264, 276, 92, DashboardControl::LeftControllerLocked},
     {708, 264, 276, 92, DashboardControl::RightControllerLocked},
     {416, 408, 376, 104, DashboardControl::OpenSettings},
@@ -629,7 +630,8 @@ void AddGrabHandle(const phonecast::core::VideoFrame& frame,
 
     // Keep Close beside Back so the lower-right corner can use the familiar
     // panel-resize affordance.
-    const int closeLeft = static_cast<int>(kGrabHandleHeightPixels);
+    const int closeLeft = std::max(0, static_cast<int>(composite.width) -
+        static_cast<int>(kGrabHandleHeightPixels * 2U));
     FillImageRect(composite.pixels, composite.width, composite.height,
                   closeLeft, phoneHeight, static_cast<int>(kGrabHandleHeightPixels),
                   static_cast<int>(kGrabHandleHeightPixels), footerButton);
@@ -724,12 +726,10 @@ std::vector<std::uint8_t> MakeDashboardTexture(
                        selected ? header : text);
     }
 
-    const auto& back = kDashboardTargets[3];
-    FillImageRoundedRect(image, kDashboardTextureWidth, kDashboardTextureHeight,
-                         back.left, back.top, back.width, back.height, 18, card);
     DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
-                   "ANDROID BACK", back.left + back.width / 2,
-                   back.top + back.height / 2, 3, text);
+                   "LEFT STICK HOLD", 204, 372, 2, secondary);
+    DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                   "TOGGLE PHONE", 204, 410, 2, secondary);
     const auto& settings = kDashboardTargets[6];
     const auto& quit = kDashboardTargets[7];
     FillImageRoundedRect(image, kDashboardTextureWidth, kDashboardTextureHeight,
@@ -876,6 +876,49 @@ public:
                        (identifyName != nullptr ? identifyName : "unknown error"));
         } else {
             logger.Log(core::LogLevel::Info, "openvr", "Associated this process with the registered application key.");
+        }
+    }
+
+    void InitializeShortcut() {
+        inputApi = vr::VRInput();
+        if (!inputApi) return;
+        const auto manifest = std::filesystem::absolute(executablePath).parent_path() /
+            "phonecast-actions.json";
+        if (inputApi->SetActionManifestPath(manifest.string().c_str()) != vr::VRInputError_None ||
+            inputApi->GetActionSetHandle("/actions/phonecast_shortcuts", &shortcutSet) != vr::VRInputError_None ||
+            inputApi->GetActionHandle("/actions/phonecast_shortcuts/in/toggle", &shortcutToggle) != vr::VRInputError_None) {
+            logger.Log(core::LogLevel::Warning, "openvr-shortcut", "Shortcut initialization failed.");
+            return;
+        }
+        shortcutReady = true;
+        logger.Log(core::LogLevel::Info, "openvr-shortcut", "Narrow left-stick long press initialized at normal priority.");
+    }
+
+    void PollShortcut() {
+        if (!shortcutReady) return;
+        if (overlayApi->IsDashboardVisible()) {
+            inputApi->UpdateActionState(nullptr, sizeof(vr::VRActiveActionSet_t), 0);
+            shortcutArmed = false;
+            return;
+        }
+        vr::VRActiveActionSet_t active{};
+        active.ulActionSet = shortcutSet;
+        active.nPriority = 0;
+        if (inputApi->UpdateActionState(&active, sizeof(active), 1) != vr::VRInputError_None) return;
+        vr::InputDigitalActionData_t data{};
+        if (inputApi->GetDigitalActionData(shortcutToggle, &data, sizeof(data),
+                vr::k_ulInvalidInputValueHandle) != vr::VRInputError_None) return;
+        if (data.bActive != shortcutActive) {
+            shortcutActive = data.bActive;
+            logger.Log(core::LogLevel::Info, "openvr-shortcut",
+                       shortcutActive ? "Toggle binding active." : "Toggle binding inactive.");
+        }
+        if (!data.bActive) return;
+        if (!data.bState) shortcutArmed = true;
+        if (shortcutArmed && data.bChanged && data.bState) {
+            pendingRadialMenuSelection.action = phonecast::vr::RadialMenuAction::ToggleVisible;
+            hasPendingRadialMenuSelection = true;
+            shortcutArmed = false;
         }
     }
 
@@ -1181,8 +1224,12 @@ public:
         } else {
             vr::HmdMatrix34_t transform{};
             if (!ControllerTransform(settings, transform)) {
-                error = "The selected VR controller or HMD pose is not available.";
-                return false;
+                // Keep the visible panel at its last valid pose until tracking
+                // becomes available; a transient tracking miss must not hide it.
+                currentSettings = settings;
+                if (dashboardPlacementChanged) RenderDashboard();
+                error.clear();
+                return true;
             }
             if (!OverlayCall(overlayApi->SetOverlayTransformAbsolute(
                                  overlay, vr::TrackingUniverseStanding, &transform),
@@ -1600,7 +1647,26 @@ public:
             vr::VROverlayError_None;
     }
 
+    vr::TrackedDeviceIndex_t ResolvePointerDevice(vr::TrackedDeviceIndex_t device) const {
+        const auto valid = [&](vr::TrackedDeviceIndex_t candidate) {
+            return candidate < vr::k_unMaxTrackedDeviceCount &&
+                system->GetTrackedDeviceClass(candidate) == vr::TrackedDeviceClass_Controller;
+        };
+        if (valid(device)) return device;
+        device = overlayApi->GetPrimaryDashboardDevice();
+        if (valid(device)) return device;
+        for (const auto role : {vr::TrackedControllerRole_LeftHand, vr::TrackedControllerRole_RightHand}) {
+            const auto candidate = system->GetTrackedDeviceIndexForControllerRole(role);
+            vr::VRControllerState_t state{};
+            if (valid(candidate) && system->GetControllerState(candidate, &state, sizeof(state)) &&
+                (state.ulButtonPressed & vr::ButtonMaskFromId(vr::k_EButton_SteamVR_Trigger)))
+                return candidate;
+        }
+        return vr::k_unTrackedDeviceIndexInvalid;
+    }
+
     void BeginSettingsGrab(vr::TrackedDeviceIndex_t device) {
+        device = ResolvePointerDevice(device);
         vr::HmdMatrix34_t controllerPose{};
         if (!DevicePose(device, controllerPose) || !settingsWorldTransformValid) return;
         settingsGrabRelative = Multiply(InverseRigid(controllerPose), settingsWorldTransform);
@@ -1610,15 +1676,14 @@ public:
     }
 
     void EndSettingsGrab(vr::TrackedDeviceIndex_t device) {
-        if (settingsGrabbedDevice == vr::k_unTrackedDeviceIndexInvalid ||
-            device != settingsGrabbedDevice) return;
+        if (settingsGrabbedDevice == vr::k_unTrackedDeviceIndexInvalid) return;
+        device = settingsGrabbedDevice;
         vr::HmdMatrix34_t controllerPose{};
-        if (DevicePose(device, controllerPose)) {
+        if (DevicePose(device, controllerPose))
             settingsWorldTransform = Multiply(controllerPose, settingsGrabRelative);
-            settingsWorldTransformValid = true;
-            overlayApi->SetOverlayTransformAbsolute(
-                settingsOverlay, vr::TrackingUniverseStanding, &settingsWorldTransform);
-        }
+        settingsWorldTransformValid = true;
+        overlayApi->SetOverlayTransformAbsolute(
+            settingsOverlay, vr::TrackingUniverseStanding, &settingsWorldTransform);
         settingsGrabbedDevice = vr::k_unTrackedDeviceIndexInvalid;
     }
 
@@ -1689,6 +1754,9 @@ public:
     }
 
     void PollControllerCalibration() {
+        // Calibration is exclusively edited through transactional Settings.
+        // Legacy menu-button polling must not activate it or consume pointer drags.
+        if (!kEnableExperimentalGestureControls) return;
         HandInput left{};
         HandInput right{};
         if (!explicitInputReady || !PollExplicitInput(left, right)) PollLegacyInput(left, right);
@@ -1794,6 +1862,56 @@ public:
         if (pendingPointerEvents.size() < 64) pendingPointerEvents.push_back(event);
     }
 
+    void UpdateDragDepth() {
+        const auto now = std::chrono::steady_clock::now();
+        const float dt = lastDragUpdate.time_since_epoch().count() == 0 ? 0.0F :
+            std::min(0.05F, std::chrono::duration<float>(now - lastDragUpdate).count());
+        lastDragUpdate = now;
+        const auto update = [&](vr::TrackedDeviceIndex_t device, vr::VROverlayHandle_t handle,
+                                vr::HmdMatrix34_t& relative) {
+            if (device == vr::k_unTrackedDeviceIndexInvalid) return;
+            vr::HmdMatrix34_t pose{}, head{};
+            if (!DevicePose(device, pose)) {
+                if (handle == overlay) EndGrab(device);
+                else EndSettingsGrab(device);
+                return;
+            }
+            const auto tracked = Multiply(pose, relative);
+            if (handle == overlay) grabLastAbsolute = tracked;
+            else settingsWorldTransform = tracked;
+            if (!DevicePose(vr::k_unTrackedDeviceIndex_Hmd, head)) return;
+            vr::VRControllerState_t state{};
+            if (!system->GetControllerState(device, &state, sizeof(state))) return;
+            std::size_t axisIndex = 0;
+            for (std::size_t index = 0; index < vr::k_unControllerStateAxisCount; ++index) {
+                const auto property = static_cast<vr::ETrackedDeviceProperty>(
+                    static_cast<int>(vr::Prop_Axis0Type_Int32) + static_cast<int>(index));
+                if (system->GetInt32TrackedDeviceProperty(device, property) == vr::k_eControllerAxis_Joystick) {
+                    axisIndex = index;
+                    break;
+                }
+            }
+            const float axis = state.rAxis[axisIndex].y;
+            if (std::fabs(axis) < 0.20F) return;
+            auto absolute = Multiply(pose, relative);
+            float direction[3]{};
+            float distanceSquared = 0;
+            for (int row = 0; row < 3; ++row) {
+                direction[row] = absolute.m[row][3] - head.m[row][3];
+                distanceSquared += direction[row] * direction[row];
+            }
+            const float distance = std::sqrt(distanceSquared);
+            if (distance < 0.001F) return;
+            const float next = phonecast::vr::AdjustPanelDepth(distance, axis, dt);
+            for (int row = 0; row < 3; ++row)
+                absolute.m[row][3] += direction[row] * ((next - distance) / distance);
+            relative = Multiply(InverseRigid(pose), absolute);
+            overlayApi->SetOverlayTransformTrackedDeviceRelative(handle, device, &relative);
+        };
+        update(grabbedDevice, overlay, grabRelative);
+        update(settingsGrabbedDevice, settingsOverlay, settingsGrabRelative);
+    }
+
     void BeginResize(float overlayX) {
         resizing = true;
         resizeStartX = overlayX;
@@ -1820,9 +1938,11 @@ public:
     }
 
     void BeginGrab(vr::TrackedDeviceIndex_t device) {
+        device = ResolvePointerDevice(device);
         vr::HmdMatrix34_t controllerPose{};
         vr::HmdMatrix34_t overlayPose{};
         if (!DevicePose(device, controllerPose) || !AbsoluteForSettings(currentSettings, overlayPose)) return;
+        grabLastAbsolute = overlayPose;
         grabRelative = Multiply(InverseRigid(controllerPose), overlayPose);
         std::string ignored;
         if (OverlayCall(overlayApi->SetOverlayTransformTrackedDeviceRelative(
@@ -1833,10 +1953,12 @@ public:
     }
 
     void EndGrab(vr::TrackedDeviceIndex_t device) {
-        if (grabbedDevice == vr::k_unTrackedDeviceIndexInvalid || device != grabbedDevice) return;
+        if (grabbedDevice == vr::k_unTrackedDeviceIndexInvalid) return;
+        (void)device;
         vr::HmdMatrix34_t controllerPose{};
-        if (DevicePose(grabbedDevice, controllerPose)) {
-            const auto absolute = Multiply(controllerPose, grabRelative);
+        {
+            const auto absolute = DevicePose(grabbedDevice, controllerPose)
+                ? Multiply(controllerPose, grabRelative) : grabLastAbsolute;
             currentSettings.placementMode = phonecast::vr::PlacementMode::WorldLocked;
             currentSettings.worldTransform = ToArray(absolute);
             currentSettings.worldTransformValid = true;
@@ -1957,6 +2079,13 @@ public:
     HoldState leftHold{};
     HoldState rightHold{};
     phonecast::vr::WristMenuGesture wristMenuGesture{};
+    vr::VRActionSetHandle_t shortcutSet{vr::k_ulInvalidActionSetHandle};
+    vr::VRActionHandle_t shortcutToggle{vr::k_ulInvalidActionHandle};
+    bool wasDashboardVisible{false};
+    bool shortcutReady{false};
+    bool shortcutActive{false};
+    bool shortcutArmed{false};
+    std::chrono::steady_clock::time_point lastDragUpdate{};
     bool shown{false};
     bool desiredVisible{true};
     bool remoteStatusKnown{false};
@@ -1977,6 +2106,7 @@ public:
     std::chrono::steady_clock::time_point lastCalibrationAdjustment{};
     vr::TrackedDeviceIndex_t grabbedDevice{vr::k_unTrackedDeviceIndexInvalid};
     vr::HmdMatrix34_t grabRelative{};
+    vr::HmdMatrix34_t grabLastAbsolute{};
     phonecast::vr::OverlayInteractionController interaction{};
     phonecast::core::VideoFrame compositeFrame{};
     std::deque<core::PointerEvent> pendingPointerEvents;
@@ -2156,6 +2286,7 @@ bool OpenVrOverlayRenderer::Start(const phonecast::vr::OverlaySettings& settings
         return false;
     }
     impl_->InitializeDashboard();
+    impl_->InitializeShortcut();
     impl_->logger.Log(core::LogLevel::Info, "openvr",
                       "Overlay created; dashboard laser interacts with the phone and bottom handle without claiming game input while the dashboard is closed.");
     error.clear();
@@ -2234,10 +2365,44 @@ bool OpenVrOverlayRenderer::SetVisible(bool visible, std::string& error) {
     return true;
 }
 
+bool OpenVrOverlayRenderer::PlaceBesideDashboard(
+        phonecast::vr::OverlaySettings& settings, std::string& error) {
+    vr::HmdMatrix34_t panel{};
+    const vr::HmdVector2_t center{{0.5F, 0.5F}};
+    float dashboardWidth = 1.0F;
+    if (impl_->overlayApi->GetTransformForOverlayCoordinates(
+            impl_->dashboardOverlay, vr::TrackingUniverseStanding, center, &panel) !=
+            vr::VROverlayError_None) {
+        if (!impl_->DevicePose(vr::k_unTrackedDeviceIndex_Hmd, panel)) {
+            error = "No dashboard or HMD pose is available.";
+            return false;
+        }
+        const vr::HmdMatrix34_t local{{{1,0,0,0},{0,1,0,0},{0,0,1,-0.85F}}};
+        panel = Multiply(panel, local);
+    } else {
+        impl_->overlayApi->GetOverlayWidthInMeters(impl_->dashboardOverlay, &dashboardWidth);
+    }
+    float phoneWidth = settings.widthMeters;
+    const auto phoneHeight = impl_->compositeFrame.height > kGrabHandleHeightPixels
+        ? impl_->compositeFrame.height - kGrabHandleHeightPixels : 0U;
+    if (phoneHeight > 0 && impl_->compositeFrame.width > phoneHeight)
+        phoneWidth *= static_cast<float>(impl_->compositeFrame.width) / phoneHeight;
+    const float offset = dashboardWidth * 0.5F + phoneWidth * 0.5F + 0.08F;
+    for (int row = 0; row < 3; ++row) panel.m[row][3] += panel.m[row][0] * offset;
+    settings.placementMode = phonecast::vr::PlacementMode::WorldLocked;
+    settings.worldTransform = ToArray(panel);
+    settings.worldTransformValid = true;
+    error.clear();
+    return true;
+}
+
 bool OpenVrOverlayRenderer::PumpEvents() {
     if (impl_->overlayApi == nullptr || impl_->system == nullptr) return false;
     impl_->EnsureDashboardHealthy();
-    if (!impl_->overlayApi->IsDashboardVisible()) {
+    impl_->PollShortcut();
+    impl_->UpdateDragDepth();
+    const bool dashboardVisible = impl_->overlayApi->IsDashboardVisible();
+    if (impl_->wasDashboardVisible && !dashboardVisible) {
         if (impl_->resizing) impl_->EndResize();
         if (impl_->grabbedDevice != vr::k_unTrackedDeviceIndexInvalid)
             impl_->EndGrab(impl_->grabbedDevice);
@@ -2250,6 +2415,7 @@ bool OpenVrOverlayRenderer::PumpEvents() {
         }
         impl_->backButtonDown = false;
     }
+    impl_->wasDashboardVisible = dashboardVisible;
     impl_->UpdateControllerPlacement();
     impl_->PollControllerCalibration();
     vr::VREvent_t event{};
@@ -2660,6 +2826,11 @@ void OpenVrOverlayRenderer::Stop() noexcept {
     impl_->hasPendingGlanceInput = false;
     impl_->hasPendingRadialMenuSelection = false;
     impl_->resizing = false;
+    impl_->shortcutReady = false;
+    impl_->shortcutActive = false;
+    impl_->shortcutArmed = false;
+    impl_->wasDashboardVisible = false;
+    impl_->lastDragUpdate = {};
     impl_->hasPendingSettingsMenuCommand = false;
     impl_->gestureProgressVisible = false;
     impl_->gestureProgressStep = -1;

@@ -33,6 +33,7 @@ public:
     // Opens the SteamVR dashboard with PhoneCast selected. Used by the native
     // launcher and by second-instance IPC; it never starts SteamVR itself.
     bool FocusDashboard(std::string& error);
+    bool PlaceBesideDashboard(vr::OverlaySettings& settings, std::string& error);
     std::string DefaultAudioDeviceId() const;
     bool TakePointerEvent(core::PointerEvent& event) override;
     bool ShowNotification(const core::protocol::NotificationEvent& notification,

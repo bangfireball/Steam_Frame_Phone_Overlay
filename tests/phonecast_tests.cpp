@@ -4,6 +4,7 @@
 #include "phonecast/core/streaming/DecoderRecoveryController.h"
 #include "phonecast/core/streaming/GeneratedVideoSource.h"
 #include "phonecast/vr/interaction/OverlayInteractionController.h"
+#include "phonecast/vr/interaction/PanelDepth.h"
 #include "phonecast/vr/overlay/GlanceController.h"
 #include "phonecast/vr/overlay/OverlayController.h"
 #include "phonecast/vr/overlay/OverlaySettingsStore.h"
@@ -249,6 +250,12 @@ void TestStreamProtocol() {
 }
 
 void TestOverlayInteraction() {
+    Check(phonecast::vr::AdjustPanelDepth(1.0F, 1.0F, 0.04F) > 1.0F &&
+          phonecast::vr::AdjustPanelDepth(1.0F, -1.0F, 0.04F) < 1.0F &&
+          phonecast::vr::AdjustPanelDepth(1.0F, 0.1F, 0.04F) == 1.0F &&
+          phonecast::vr::AdjustPanelDepth(3.0F, 1.0F, 0.04F) == 3.0F &&
+          phonecast::vr::AdjustPanelDepth(0.20F, -1.0F, 0.04F) == 0.20F,
+          "move-handle stick depth has correct direction, deadzone, and bounds");
     phonecast::vr::OverlayInteractionController interaction;
     interaction.SetSurfaceSize(1000, 2000);
     const auto down = interaction.PointerDown(250.0F, 500.0F);
@@ -273,10 +280,10 @@ void TestOverlayInteraction() {
               !interaction.IsBackButton(100.0F, 50.0F) &&
               !interaction.IsBackButton(50.0F, 100.0F),
           "the lower-left handle corner is reserved for Android Back");
-    Check(interaction.IsCloseButton(150.0F, 50.0F) &&
-              !interaction.IsCloseButton(99.0F, 50.0F) &&
-              !interaction.IsCloseButton(150.0F, 100.0F),
-          "the footer keeps Close beside Android Back");
+    Check(interaction.IsCloseButton(850.0F, 50.0F) &&
+              !interaction.IsCloseButton(50.0F, 50.0F) &&
+              !interaction.IsCloseButton(850.0F, 100.0F),
+          "Close is separated from Back and placed beside the resize corner");
     Check(interaction.IsResizeButton(950.0F, 50.0F) &&
               !interaction.IsResizeButton(899.0F, 50.0F) &&
               !interaction.IsResizeButton(950.0F, 100.0F),

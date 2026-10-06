@@ -32,8 +32,7 @@ enum class GlanceInput {
 
 enum class RadialMenuAction {
     ToggleVisible,
-    // Reveals the phone head-locked beside the open dashboard without
-    // overwriting the user's persisted placement.
+    // Resets the phone's world anchor beside the open dashboard.
     ShowBesideDashboard,
     ShowGlance,
     ShowPinned,

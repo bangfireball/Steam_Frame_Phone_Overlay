@@ -509,10 +509,12 @@ int main(int argc, char** argv) {
                         break;
                     case phonecast::vr::RadialMenuAction::ShowBesideDashboard: {
                         auto besideDashboard = controls.Settings();
-                        besideDashboard.placementMode = phonecast::vr::PlacementMode::HeadLocked;
-                        besideDashboard.offsetXMeters = 0.48F;
-                        besideDashboard.offsetYMeters = 0.0F;
-                        besideDashboard.distanceMeters = 0.85F;
+                        besideDashboard.placementMode = phonecast::vr::PlacementMode::WorldLocked;
+                        besideDashboard.worldTransformValid = false;
+                        if (!renderer.PlaceBesideDashboard(besideDashboard, error)) {
+                            std::cerr << "Warning: " << error << '\n';
+                            break;
+                        }
                         controls.ReplaceSettings(besideDashboard);
                         glance.ShowExpanded();
                         break;
@@ -644,6 +646,8 @@ int main(int argc, char** argv) {
             } else {
                 auto merged = controls.Settings();
                 merged.widthMeters = vrUpdate.widthMeters;
+                if (streamHeight > 0 && streamWidth > streamHeight)
+                    merged.widthMeters *= static_cast<float>(streamHeight) / streamWidth;
                 merged.placementMode = vrUpdate.placementMode;
                 merged.leftController = vrUpdate.leftController;
                 merged.rightController = vrUpdate.rightController;
