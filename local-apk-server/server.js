@@ -59,7 +59,7 @@ return http.createServer((request, response) => {
 <h1>PhoneCast Downloads</h1>
 <h2>Android phone</h2>
 ${apkAvailable
-  ? '<p><a href="/phonecast-sender.apk">Download the Sprint 13 Android APK</a></p><p>Optional phone playback audio is off by default. Enable it in Android Settings, grant audio permission, then start a new cast.</p>'
+  ? '<p><a href="/phonecast-sender.apk">Download the Sprint 13 Android APK</a></p><p>Optional phone playback audio is off by default. Enable it in Android Settings, grant audio permission, then start a new cast. The separate local-phone mute option saves and restores media volume around an active headset audio stream.</p>'
   : "<p>The debug APK has not been built yet.</p>"}
 <h2>Steam Frame</h2>
 ${steamFrameAvailable

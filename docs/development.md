@@ -325,8 +325,14 @@ opportunity, interpolates a bounded monotonic audio clock, and flushes/reanchors
 rather than recreating healthy outputs for forward packet gaps. Additional CSV
 fields expose dispatch/loop/submission gaps and audio gap/flush/open/drop counters.
 Windows/ARM64 software tests and private Pulse flush tests pass; physical jitter,
-sync and game mixing remain unapproved. The existing Sprint 13 APK needs no change. Sprint 12 decoder fault and Vulkan
-reliability follow-ups remain separate.
+sync and game mixing remain unapproved. The later optional **Mute phone while
+streaming audio** setting requires the rebuilt APK. It stores media volume before
+muting and restores on receiver disconnect, audio/capture stop, projection revoke,
+and service teardown; a persisted marker is recovered on the next PhoneCast process
+start after an unclean exit. Android cannot restore at the instant its process is
+forcibly killed. Confirm physically that capture remains audible at local volume
+zero and every restoration path returns the prior value. Sprint 12 decoder fault
+and Vulkan reliability follow-ups remain separate.
 
 ## CMake options
 

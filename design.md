@@ -1766,6 +1766,7 @@ Optional dashboard-closed hotkeys are not required for Sprint 12 standalone UX.
 - `[x]` Initial PCM baseline, capability-negotiation requirement, bounded queues, A/V timing, and validation matrix documented in `docs/phone-audio.md`
 - `[x]` Negotiated audio protocol and tested cross-version video-only fallback
 - `[x]` Explicit default-off Android opt-in, permission, playback-only recorder, and cleanup implementation
+- `[~]` Optional local-phone media mute implemented with disconnect/stop restoration and persisted next-process-start recovery; physical capture/restore validation pending
 - `[x]` Independent bounded audio transport and output workers with stale-sound rejection
 - `[x]` WASAPI shared-mode and runtime-loaded PulseAudio/PipeWire output implementations; transactional headset mute/volume/route controls and explicit CLI device selection
 - `[x]` Read-only native audio-server/library/sink probe and isolated Pulse null-sink backend tests
@@ -2006,8 +2007,13 @@ lip-sync approval.
 
 Simultaneous sound from the phone and headset is expected: Android playback capture
 copies eligible sound, and PhoneCast intentionally does not change phone media
-volume or audio focus. An optional local-phone mute would be separate lifecycle
-work. Lip-sync, routing, protected playback, game mixing, longer load, and lifecycle
+volume or audio focus. An optional local-phone mute is now implemented behind a separate Android setting:
+it saves media volume before muting, restores on disconnect/stop/teardown, and uses
+a persisted marker for next-process-start recovery after an unclean exit. Android
+cannot execute cleanup at the instant its process is forcibly killed. Physical
+validation must confirm that local media volume zero does not silence capture on
+the target phone and that all restoration paths return the exact prior value.
+Lip-sync, routing, protected playback, game mixing, longer load, and lifecycle
 validation remain pending; stable fallback scheduling and clock-state hysteresis
 remain possible further tuning. This does not close Sprint 13 or begin Sprint 14.
 The previous handoff above is historical implementation state.

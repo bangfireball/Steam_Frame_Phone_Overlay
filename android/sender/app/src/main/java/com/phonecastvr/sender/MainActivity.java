@@ -48,6 +48,7 @@ public final class MainActivity extends Activity {
     private TextView metricsView;
     private TextView audioStatusView;
     private CheckBox playbackAudioView;
+    private CheckBox mutePhoneAudioView;
     private TextView connectionHintView;
     private LinearLayout mainContent;
     private LinearLayout settingsContent;
@@ -276,7 +277,7 @@ public final class MainActivity extends Activity {
 
         LinearLayout audioCard = card();
         audioCard.addView(sectionTitle("Phone playback audio"),matchWrap());
-        audioCard.addView(text("Optional playback-only capture; never microphone or calls. Android asks for audio recording permission. Some apps block capture or return silence. Audio is copied, so your phone may still play sound. Use only a trusted LAN. Enabling applies to the next cast; disabling stops audio immediately.",
+        audioCard.addView(text("Optional playback-only capture; never microphone or calls. Android asks for audio recording permission. Some apps block capture or return silence. Audio is copied, so your phone may still play sound unless the separate mute option is enabled. Use only a trusted LAN. Enabling capture applies to the next cast; disabling stops audio immediately.",
                 13,COLOR_SECONDARY,Gravity.START),spaced(0,dp(6),0,dp(10)));
         playbackAudioView = new CheckBox(this);
         playbackAudioView.setText("Stream phone playback audio");
@@ -291,9 +292,23 @@ public final class MainActivity extends Activity {
             }
             preferences.edit().putBoolean(PlaybackAudioCapture.PREFERENCE_ENABLED,checked).apply();
             ScreenCaptureService.audioPreferencesChanged();
+            mutePhoneAudioView.setEnabled(checked);
             audioStatusView.setText(checked ? "Playback audio enabled for next cast" : "Audio off");
         });
         audioCard.addView(playbackAudioView,matchWrap());
+        mutePhoneAudioView = new CheckBox(this);
+        mutePhoneAudioView.setText("Mute phone while streaming audio");
+        mutePhoneAudioView.setTextColor(COLOR_TEXT);
+        mutePhoneAudioView.setChecked(preferences.getBoolean(
+                AndroidPhoneAudioMute.PREFERENCE_ENABLED,false));
+        mutePhoneAudioView.setEnabled(playbackAudioView.isChecked());
+        mutePhoneAudioView.setOnCheckedChangeListener((button,checked) -> {
+            preferences.edit().putBoolean(AndroidPhoneAudioMute.PREFERENCE_ENABLED,checked).apply();
+            ScreenCaptureService.audioMutePreferencesChanged();
+        });
+        audioCard.addView(mutePhoneAudioView,matchWrap());
+        audioCard.addView(text("When enabled, PhoneCast saves the current media volume, mutes the phone only while headset audio is actively streamed, and restores that volume when audio disconnects or casting stops. An unclean process stop is repaired the next time PhoneCast starts.",
+                12,COLOR_SECONDARY,Gravity.START),spaced(dp(4),dp(2),0,0));
         settingsContent.addView(audioCard,cardParams());
 
         LinearLayout remoteCard = card();

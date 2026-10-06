@@ -67,9 +67,22 @@ Grant Android audio-recording permission only if you want this feature, then sta
 a new cast. It captures permitted media/game playback using the existing projection,
 not microphones or calls. Some apps return silence or prohibit capture; PhoneCast
 will not bypass this. The phone may continue playing locally because capture copies
-rather than redirects sound. Turning the toggle off stops current audio immediately;
-enabling applies to the next capture session. Video continues on older receivers
-and on handled audio failures. See `docs/phone-audio.md` for the pending physical
+rather than redirects sound.
+
+The separate **Mute phone while streaming audio** setting saves the current global
+media volume before muting local playback. It restores that exact value on receiver
+disconnect, audio opt-out, projection/casting stop, or service teardown. PhoneCast
+commits a recovery marker before muting; after an unclean process exit, the next
+PhoneCast process start attempts restoration before another component starts.
+Android cannot execute restoration at the instant its process is forcibly killed,
+so that last recovery is delayed until PhoneCast runs again. The setting changes
+media volume only, never call/ring volume. Physical validation must confirm that
+the target phone continues supplying playback capture while local media volume is
+zero.
+
+Turning the playback-audio toggle off stops current audio immediately; enabling
+applies to the next capture session. Video continues on older receivers and on
+handled audio failures. See `docs/phone-audio.md` for the pending physical
 validation matrix and receiver controls.
 
 ## Security limitation

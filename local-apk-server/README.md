@@ -15,7 +15,10 @@ It listens on port `8080` by default and offers whichever artifacts currently ex
 
 The APK path serves the latest rebuilt sender. Sprint 13 adds default-off phone
 playback audio; install both builds, enable playback audio in Android Settings,
-and start a new cast. Physical audio/sync/game-mixing acceptance remains pending.
+and start a new cast. The Android settings also offer a separate local-phone mute
+that saves/restores media volume around active receiver audio; its capture and
+recovery paths require physical validation. Physical audio/sync/game-mixing
+acceptance remains pending.
 The stable `/phonecast-steam-frame-arm64.tar.gz` alias and curl bootstrap select
 the Sprint 13 archive too. The current bundle includes the receiver-only
 video-cadence correction for audio-enabled playback: independent frame deadlines

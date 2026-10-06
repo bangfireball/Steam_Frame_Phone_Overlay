@@ -19,7 +19,14 @@ below is software-tested; physical audio/video acceptance remains open.
 3. Start casting and approve the normal screen-sharing consent. Only a capable
    paired receiver activates playback recording. The Android status card reports
    capture, video-only fallback, silence/policy limitations, or recorder failure.
-4. Receiver dashboard → Settings → **Phone Audio**: Mute, Volume, and Output
+4. Optional Android setting **Mute phone while streaming audio** saves the current
+   media-stream volume and sets local media volume to zero only while compatible
+   receiver audio is active. Disconnect, opt-out, projection/cast stop, and service
+   teardown restore the saved value. A persisted recovery marker restores on the
+   next PhoneCast process start after an unclean exit; Android cannot execute that
+   repair at the instant its process is forcibly killed. This affects media volume,
+   never call/ring volume.
+5. Receiver dashboard → Settings → **Phone Audio**: Mute, Volume, and Output
    controls apply live; Apply persists and Cancel restores the previous controls.
    Audio plays independently of phone overlay visibility and placement.
 
@@ -70,7 +77,11 @@ intentionally advertises no audio support.
   status reads **No capturable playback; source may be silent or disallow capture**.
   Nonzero samples restore active status. This is not a DRM/permission detector.
 - Audio is copied, not redirected: the phone may still play through its own output.
-  PhoneCast does not change phone volume, request audio focus, or promise local muting.
+  PhoneCast never requests audio focus or reroutes source playback. The separately
+  opt-in local-mute setting changes only Android's global media-stream volume. It
+  commits the pre-mute value before setting zero and restores on normal interruption/
+  stop paths. A force-killed process cannot run immediate cleanup; the persisted
+  marker is recovered at the next PhoneCast process start.
 - Permission/recorder failures disable audio without deliberately stopping healthy
   video. Android itself may kill an application on permission revocation; PhoneCast
   cannot promise process survival when the OS does so.
@@ -217,8 +228,8 @@ pass. Regression coverage includes continuous 20/30/60 FPS at 20/60/130/250/1000
 audio lag, 240 FPS capacity pressure, per-picture deadlines, clock stalls/jitter/
 transitions, audio-off/reset, clock mismatch, unknown PTS, and tolerance overflow.
 The rebuilt Sprint 13 Frame archive is served by the existing download routes;
-the current Sprint 13 Android APK does not need reinstalling for this receiver-only
-correction. Quit PhoneCast before updating. Physical retest of smooth audio-enabled
+at that receiver-only correction point, the Android APK did not need reinstalling.
+The later local-phone mute feature below does require the rebuilt APK. Quit PhoneCast before updating. Physical retest of smooth audio-enabled
 video, skew, memory, and game coexistence remains pending; Sprint 13 stays open.
 
 ## Second timing correction — review branch implementation
@@ -291,13 +302,38 @@ Raw read-only evidence is ignored under
 `out/diagnostics/frame-audio-lite-followup/`. No process, runtime, or audio service
 was restarted during review.
 
-The owner also heard playback simultaneously on the phone and headset. This is
+The owner also heard playback simultaneously on the phone and headset. This was
 expected baseline behavior, not receiver duplication: Android playback capture
-copies eligible playback and PhoneCast deliberately does not request audio focus,
-change phone media volume, or redirect the source. The Android settings disclosure
-already says the phone may continue playing sound. A separately opt-in local-phone
-mute/volume-restore feature would require its own safe lifecycle and physical
-validation; it is not part of the current Sprint 13 implementation.
+copies eligible playback and PhoneCast deliberately does not request audio focus
+or redirect the source.
+
+### Optional local-phone mute implementation
+
+Following that feedback, Android Settings → Phone playback audio now includes a
+separate default-off **Mute phone while streaming audio** checkbox. The implementation:
+
+- waits until compatible receiver audio is actually active before changing volume;
+- commits the exact current `STREAM_MUSIC` volume and an active recovery marker
+  synchronously before setting media volume to zero;
+- restores on receiver capability/disconnect, playback-audio opt-out, capture stop,
+  projection revocation, service teardown, and preference disable;
+- restores before re-muting on reconnect, so a later session snapshots the then-current
+  media volume rather than an old value;
+- retains the recovery marker when restoration fails and attempts recovery from the
+  custom Application startup before any new activity/service starts;
+- changes no call/ring volume, audio focus, route, receiver gain, or PCM payload.
+
+A force-killed Android process cannot execute cleanup at the instant it dies; its
+volume is restored when PhoneCast next starts. Six JVM tests cover opt-in gating,
+exact restore, duplicate callbacks, reconnect snapshotting, next-process recovery,
+and failed mute/restore behavior. Android JVM tests, APK assembly, and lint pass.
+The rebuilt APK is served by the live download route and has SHA-256
+`ffbd2304ef73c6314ee9976bb589d25a5930cc6c3a75c137ff1bc037496d5ea9`.
+
+This remains physically unvalidated. The target phone must confirm that Android
+continues providing captured PCM when its local media stream is at zero, and that
+disconnect, Stop, projection revoke, checkbox disable, and unclean-restart recovery
+restore the exact saved value. Software tests cannot establish device mixer behavior.
 
 Next: a longer physical run with scrolling, notifications, rotation and a standalone
 game, then click/flash sync and game-audio coexistence. Stable fallback scheduling/
@@ -335,6 +371,10 @@ and VR timing. Do not retain sample payloads by default.
 
 1. Default-off cast requests no audio permission and sends no audio. Permission deny,
    opt-out, permission revocation, projection revoke/phone lock, and fresh capture.
+   Test local-phone mute separately: capture remains audible in VR at phone media
+   volume zero; receiver disconnect, Stop, projection revoke, service teardown, and
+   next-process-start recovery restore the exact saved volume. Confirm call/ring
+   volume is untouched and a failed restoration retains its recovery marker.
 2. Eligible playback on Windows VR output and native Frame output while game audio
    remains audible; no ducking, default-device replacement, or exclusivity.
 3. Capture-blocked/protected app and idle playback: healthy video/input and truthful
