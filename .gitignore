@@ -1,7 +1,8 @@
-# Local secrets
+# Local secrets and local design inputs
 .env
 .env.*
 !.env.example
+/_injest/
 
 # CMake/build output
 /out/

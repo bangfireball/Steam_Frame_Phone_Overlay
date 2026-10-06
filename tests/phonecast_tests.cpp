@@ -464,7 +464,7 @@ void TestSettingsMenu() {
               menu.Draft().widthMeters == 2.0F,
           "settings sliders expose and apply normalized values");
     menu.Handle(phonecast::vr::SettingsMenuCommand::Back);
-    for (int index = 0; index < 6; ++index)
+    for (int index = 0; index < 9; ++index)
         menu.Handle(phonecast::vr::SettingsMenuCommand::NextItem);
     Check(menu.Handle(phonecast::vr::SettingsMenuCommand::Activate) ==
               phonecast::vr::SettingsMenuResult::Applied && !menu.IsOpen(),

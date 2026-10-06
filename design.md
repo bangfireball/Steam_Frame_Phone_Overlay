@@ -2051,7 +2051,21 @@ The previous handoff above is historical implementation state.
 
 # Sprint 14 — Gestures and UI
 
-**Status:** `[ ] Not started`
+**Status:** `[~] In progress — mockup-driven dashboard/settings refresh started; hardware approval pending`
+
+- `[x]` Local UI mockups reviewed and `_injest/` excluded from version control
+- `[x]` Framecorder dashboard-closed hotkey source research completed and documented
+- `[~]` Native-style portrait dashboard and settings visual refresh implemented for build validation
+- `[ ]` Consistent phone/settings/notification lower control areas and direct resize handle
+- `[ ]` Trigger-drag depth adjustment and complete drag cancellation/release safety
+- `[ ]` Keyboard/text-entry path and PhoneCast-owned fallback decision
+- `[ ]` Portable opt-in gesture recognizer and gameplay false-activation evidence
+- `[ ]` Narrow opt-in hotkey experiment and game-input coexistence validation
+- `[ ]` Native Steam Frame physical validation in both launch orders
+
+The initial visual implementation follows the two owner-provided `_injest` mockups for panel hierarchy, dark navy cards, blue selection states, portrait layout, quick actions, settings categories, calibration sliders, transactional actions, and bottom move affordances. These local reference images are intentionally ignored rather than shipped. Compilation and automated tests do not constitute visual approval; the refreshed surfaces still require headset review and iteration.
+
+Framecorder research at native commit `171a905006bb917e5a1677fa922a1d00cc1ec214` found a narrower hotkey implementation than the earlier overlay-global reference: one optional Boolean action, a left-thumbstick binding-layer long press, haptic feedback, and normal action-set priority `0`. PhoneCast will test a separate narrow opt-in action set rather than reactivating its dormant broad global set. See [`docs/framecorder-hotkey-research.md`](docs/framecorder-hotkey-research.md).
 
 ## Objective
 
@@ -2115,12 +2129,13 @@ Repair and simplify optional controller shortcuts without restoring the old broa
 
 Candidate shortcuts include show/hide, glance, pin/unpin, and opening PhoneCast controls. Exact defaults must be chosen only after conflict testing against real games.
 
-### Future research — Framecorder dashboard-closed hotkeys
+### Framecorder dashboard-closed hotkey research
 
-- `[ ]` Review [`coah80/framecorder`](https://github.com/coah80/framecorder) for its native Steam Frame hotkey implementation, action manifests/bindings, priority, dashboard-focus handling, and game-input coexistence.
-- The project owner physically tested Framecorder and reports that its hotkey is available while the dashboard is closed. This is user-reported Framecorder evidence, not validation of PhoneCast shortcuts; Framecorder source has not yet been reviewed.
-- Compare its approach with the narrow overlay-global action set and binding-layer double/long presses documented in [`docs/frame-passthrough-shortcuts-research.md`](docs/frame-passthrough-shortcuts-research.md).
-- Keep this as Sprint 14 research, not a Sprint 12 dependency. Do not reactivate PhoneCast's dormant broad global action set; any resulting shortcut experiment must be opt-in, narrowly bound, and physically checked for game-input conflicts.
+- `[x]` Reviewed [`coah80/framecorder`](https://github.com/coah80/framecorder) at commit `171a905006bb917e5a1677fa922a1d00cc1ec214`; see [`docs/framecorder-hotkey-research.md`](docs/framecorder-hotkey-research.md).
+- Framecorder uses one optional Boolean action, a binding-layer long press on the left thumbstick button, one haptic action, and normal action-set priority `0`; it does not claim trigger, grip, or thumbstick axes for this shortcut.
+- The project owner physically tested Framecorder and reports that its hotkey is available while the dashboard is closed. This is user-reported Framecorder evidence, not validation of PhoneCast shortcuts.
+- Compared with the overlay-global approach in [`docs/frame-passthrough-shortcuts-research.md`](docs/frame-passthrough-shortcuts-research.md), the normal-priority result is a better first native PhoneCast experiment but still requires per-action activity diagnostics and real-game conflict testing.
+- Keep this as Sprint 14 work, not a Sprint 12 dependency. Do not reactivate PhoneCast's dormant broad global action set; any resulting shortcut experiment must be opt-in, narrowly bound, and physically checked for game-input conflicts.
 
 ## UI consistency and feedback
 

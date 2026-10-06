@@ -95,9 +95,14 @@ SettingsMenuView SettingsMenuController::View() const {
         case Page::Root:
             view.title = "PHONECAST SETTINGS";
             view.labels = {"APPEARANCE", "PLACEMENT", "LEFT DOCK", "RIGHT DOCK",
-                           "GLANCE AND CONTROLS", "NOTIFICATIONS", "APPLY", "CANCEL", "RESET ALL", "PHONE AUDIO"};
-            view.values = {">", ">", ">", ">", ">", ">", "", "",
-                           resetConfirmation_ ? "CONFIRM" : "", ">"};
+                           "GLANCE AND CONTROLS", "NOTIFICATIONS", "PHONE AUDIO",
+                           "RESET ALL", "CANCEL", "APPLY"};
+            view.values = {"DARK", PlacementName(draft_.placementMode),
+                           Decimal(draft_.leftController.distanceMeters) + " M",
+                           Decimal(draft_.rightController.distanceMeters) + " M",
+                           "ON", "PRIORITY",
+                           draft_.audioMuted ? "MUTED" : "HEADSET",
+                           resetConfirmation_ ? "CONFIRM" : "", "", ""};
             view.normalizedValues.assign(view.labels.size(), -1.0F);
             break;
         case Page::Appearance:
@@ -313,10 +318,6 @@ SettingsMenuResult SettingsMenuController::SetNormalized(float value) {
 SettingsMenuResult SettingsMenuController::Activate() {
     if (page_ == Page::Audio && (selected_ == 0 || selected_ == 2)) return Adjust(1);
     if (page_ == Page::Root) {
-        if (selected_ == 9) {
-            page_ = Page::Audio; selected_ = 0; resetConfirmation_ = false;
-            return SettingsMenuResult::None;
-        }
         if (selected_ <= 5) {
             page_ = static_cast<Page>(static_cast<int>(Page::Appearance) + static_cast<int>(selected_));
             selected_ = 0;
@@ -324,12 +325,18 @@ SettingsMenuResult SettingsMenuController::Activate() {
             return SettingsMenuResult::None;
         }
         if (selected_ == 6) {
-            open_ = false;
-            return SettingsMenuResult::Applied;
+            page_ = Page::Audio;
+            selected_ = 0;
+            resetConfirmation_ = false;
+            return SettingsMenuResult::None;
         }
-        if (selected_ == 7) {
+        if (selected_ == 8) {
             open_ = false;
             return SettingsMenuResult::Cancelled;
+        }
+        if (selected_ == 9) {
+            open_ = false;
+            return SettingsMenuResult::Applied;
         }
         if (!resetConfirmation_) {
             resetConfirmation_ = true;

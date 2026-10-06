@@ -53,12 +53,46 @@ constexpr std::uint32_t kGestureTextureSize = 128;
 constexpr int kGestureProgressSteps = 24;
 constexpr std::uint32_t kSettingsTextureWidth = 512;
 constexpr std::uint32_t kSettingsTextureHeight = 978;
-constexpr std::uint32_t kDashboardTextureWidth = 1024;
-constexpr std::uint32_t kDashboardTextureHeight = 512;
+constexpr std::uint32_t kDashboardTextureWidth = 680;
+constexpr std::uint32_t kDashboardTextureHeight = 960;
 constexpr std::uint32_t kDashboardThumbnailSize = 256;
 constexpr std::uint32_t kGrabHandleHeightPixels = 48;
-constexpr int kDashboardColumns = 3;
-constexpr int kDashboardRows = 4;
+enum class DashboardControl {
+    ToggleVisible,
+    HeadLocked,
+    WorldLocked,
+    ShowPinned,
+    ShowGlance,
+    AndroidBack,
+    LeftControllerLocked,
+    RightControllerLocked,
+    OpenSettings,
+    Quit
+};
+
+struct DashboardTarget {
+    int left;
+    int top;
+    int width;
+    int height;
+    DashboardControl control;
+};
+
+// Coordinates intentionally mirror the portrait mock-up in _injest. Keeping
+// drawing and hit targets in one table prevents visual controls drifting away
+// from their laser targets as the panel evolves.
+constexpr std::array<DashboardTarget, 10> kDashboardTargets{{
+    {18, 168, 644, 124, DashboardControl::ToggleVisible},
+    {24, 370, 204, 104, DashboardControl::HeadLocked},
+    {238, 370, 204, 104, DashboardControl::WorldLocked},
+    {452, 370, 204, 104, DashboardControl::ShowPinned},
+    {18, 532, 314, 104, DashboardControl::ShowGlance},
+    {348, 532, 314, 104, DashboardControl::AndroidBack},
+    {18, 648, 314, 104, DashboardControl::LeftControllerLocked},
+    {348, 648, 314, 104, DashboardControl::RightControllerLocked},
+    {18, 786, 396, 100, DashboardControl::OpenSettings},
+    {430, 786, 232, 100, DashboardControl::Quit}
+}};
 // The dashboard is the approved in-headset entry point. Keep the earlier pose,
 // thumbstick-menu, and overlay-global input experiments dormant until product
 // direction changes. An active overlay-global set can suppress game bindings
@@ -76,9 +110,6 @@ constexpr std::array<phonecast::vr::RadialMenuAction, 8> kMenuActions{
     phonecast::vr::RadialMenuAction::WorldLocked,
     phonecast::vr::RadialMenuAction::LeftControllerLocked,
     phonecast::vr::RadialMenuAction::RightControllerLocked};
-constexpr std::array<const char*, 12> kDashboardLabels{
-    "SHOW", "GLANCE", "PIN", "SETTINGS", "HEAD", "WORLD",
-    "LEFT DOCK", "RIGHT DOCK", "BACK", "QUIT", "", ""};
 
 bool IsQuitEvent(std::uint32_t type) {
     // VREvent_ProcessQuit reports that some VR process exited; it is not a request
@@ -311,58 +342,94 @@ void DrawSettingsLabel(std::vector<std::uint8_t>& image, const std::string& labe
 }
 
 std::vector<std::uint8_t> MakeSettingsTexture(const phonecast::vr::SettingsMenuView& view) {
-    constexpr std::array<std::uint8_t, 4> panel{8, 14, 24, 248};
-    constexpr std::array<std::uint8_t, 4> header{13, 34, 54, 255};
-    constexpr std::array<std::uint8_t, 4> row{18, 31, 48, 250};
-    constexpr std::array<std::uint8_t, 4> selected{24, 83, 126, 255};
-    constexpr std::array<std::uint8_t, 4> accent{42, 177, 240, 255};
-    constexpr std::array<std::uint8_t, 4> text{245, 249, 255, 255};
-    constexpr std::array<std::uint8_t, 4> value{125, 218, 255, 255};
+    constexpr std::array<std::uint8_t, 4> panel{10, 25, 42, 252};
+    constexpr std::array<std::uint8_t, 4> header{10, 24, 40, 255};
+    constexpr std::array<std::uint8_t, 4> row{27, 49, 76, 255};
+    constexpr std::array<std::uint8_t, 4> selected{31, 67, 101, 255};
+    constexpr std::array<std::uint8_t, 4> primary{48, 153, 245, 255};
+    constexpr std::array<std::uint8_t, 4> text{224, 235, 249, 255};
+    constexpr std::array<std::uint8_t, 4> secondary{161, 184, 211, 255};
+    constexpr std::array<std::uint8_t, 4> value{119, 188, 255, 255};
     constexpr std::array<std::uint8_t, 4> track{58, 77, 96, 255};
+    constexpr std::array<std::uint8_t, 4> danger{255, 119, 126, 255};
     std::vector<std::uint8_t> image(
         static_cast<std::size_t>(kSettingsTextureWidth) * kSettingsTextureHeight * 4U, 0);
     FillSettingsRoundedRect(image, 6, 6, static_cast<int>(kSettingsTextureWidth) - 12,
                             static_cast<int>(kSettingsTextureHeight) - 12, 22, panel);
     FillSettingsRoundedRect(image, 12, 12, static_cast<int>(kSettingsTextureWidth) - 24,
                             82, 17, header);
-    FillSettingsRect(image, 12, 86, static_cast<int>(kSettingsTextureWidth) - 24, 5, accent);
-    DrawSettingsLabel(image, "PC", 48, 50, 3, accent);
-    DrawSettingsLabel(image, view.title, 286, 50,
+    FillSettingsRect(image, 12, 86, static_cast<int>(kSettingsTextureWidth) - 24, 4, primary);
+    DrawSettingsLabel(image, "PC", 42, 50, 3, primary);
+    DrawSettingsLabel(image, view.title, 276, 50,
                       view.title.size() > 18 ? 2 : 3, text);
-    const int rowHeight = 82;
-    const int firstRow = 126;
-    for (std::size_t index = 0; index < view.labels.size(); ++index) {
-        const int centerY = firstRow + static_cast<int>(index) * rowHeight;
-        FillSettingsRoundedRect(image, 16, centerY - 34,
-                                static_cast<int>(kSettingsTextureWidth) - 32, 68, 12,
-                                index == view.selectedIndex ? selected : row);
-        DrawSettingsLabel(image, view.labels[index], 170, centerY - 12,
-                          view.labels[index].size() > 15 ? 1 : 2, text);
-        const bool adjustable = index < view.values.size() &&
-                                !view.values[index].empty() && view.values[index] != ">";
-        if (index < view.values.size())
-            DrawSettingsLabel(image, view.values[index], 350, centerY - 12,
-                              view.values[index].size() > 13 ? 1 : 2, value);
-        if (adjustable) {
-            DrawSettingsLabel(image, "-", 42, centerY + 18, 3, text);
-            DrawSettingsLabel(image, "+", 470, centerY + 18, 3, text);
-            if (index < view.normalizedValues.size() && view.normalizedValues[index] >= 0.0F) {
-                constexpr int trackLeft = 82;
-                constexpr int trackWidth = 346;
-                FillSettingsRoundedRect(image, trackLeft, centerY + 14, trackWidth, 9, 4, track);
-                const int fillWidth = std::max(9, static_cast<int>(
-                    Clamp(view.normalizedValues[index], 0.0F, 1.0F) * trackWidth));
-                FillSettingsRoundedRect(image, trackLeft, centerY + 14, fillWidth, 9, 4, accent);
-                const int knobX = trackLeft + static_cast<int>(
-                    Clamp(view.normalizedValues[index], 0.0F, 1.0F) * trackWidth);
-                FillSettingsRoundedRect(image, knobX - 7, centerY + 9, 14, 19, 7, text);
+
+    const bool root = view.title == "PHONECAST SETTINGS";
+    if (root) {
+        DrawSettingsLabel(image, "DISPLAY", 58, 111, 1, secondary);
+        constexpr int firstCenter = 150;
+        constexpr int rowStep = 78;
+        for (std::size_t index = 0; index < 7 && index < view.labels.size(); ++index) {
+            const int centerY = firstCenter + static_cast<int>(index) * rowStep;
+            FillSettingsRoundedRect(image, 16, centerY - 32,
+                                    static_cast<int>(kSettingsTextureWidth) - 32, 64, 13,
+                                    index == view.selectedIndex ? selected : row);
+            DrawSettingsLabel(image, view.labels[index], 158, centerY,
+                              view.labels[index].size() > 15 ? 1 : 2, text);
+            if (index < view.values.size())
+                DrawSettingsLabel(image, view.values[index], 390, centerY,
+                                  view.values[index].size() > 12 ? 1 : 2, secondary);
+            DrawSettingsLabel(image, ">", 474, centerY, 2, secondary);
+        }
+        constexpr std::array<int, 3> actionLeft{16, 174, 332};
+        constexpr std::array<int, 3> actionWidth{142, 142, 164};
+        for (std::size_t action = 0; action < 3; ++action) {
+            const std::size_t index = action + 7;
+            FillSettingsRoundedRect(image, actionLeft[action], 730, actionWidth[action], 78, 14,
+                                    index == view.selectedIndex
+                                        ? (index == 9 ? primary : selected) : row);
+            const auto color = index == 7 ? danger : (index == 9 ? header : text);
+            DrawSettingsLabel(image, view.labels[index],
+                              actionLeft[action] + actionWidth[action] / 2, 769,
+                              view.labels[index].size() > 7 ? 1 : 2, color);
+            if (index == 7 && !view.values[index].empty())
+                DrawSettingsLabel(image, view.values[index],
+                                  actionLeft[action] + actionWidth[action] / 2, 794, 1, danger);
+        }
+    } else {
+        constexpr int rowHeight = 82;
+        constexpr int firstRow = 126;
+        for (std::size_t index = 0; index < view.labels.size(); ++index) {
+            const int centerY = firstRow + static_cast<int>(index) * rowHeight;
+            FillSettingsRoundedRect(image, 16, centerY - 34,
+                                    static_cast<int>(kSettingsTextureWidth) - 32, 68, 12,
+                                    index == view.selectedIndex ? selected : row);
+            DrawSettingsLabel(image, view.labels[index], 152, centerY - 12,
+                              view.labels[index].size() > 15 ? 1 : 2, text);
+            const bool adjustable = index < view.values.size() &&
+                                    !view.values[index].empty() && view.values[index] != ">";
+            if (index < view.values.size())
+                DrawSettingsLabel(image, view.values[index], 372, centerY - 12,
+                                  view.values[index].size() > 13 ? 1 : 2, value);
+            if (adjustable) {
+                FillSettingsRoundedRect(image, 18, centerY + 2, 54, 30, 8, header);
+                FillSettingsRoundedRect(image, 440, centerY + 2, 54, 30, 8, header);
+                DrawSettingsLabel(image, "-", 45, centerY + 17, 2, text);
+                DrawSettingsLabel(image, "+", 467, centerY + 17, 2, text);
+                if (index < view.normalizedValues.size() && view.normalizedValues[index] >= 0.0F) {
+                    constexpr int trackLeft = 88;
+                    constexpr int trackWidth = 336;
+                    FillSettingsRoundedRect(image, trackLeft, centerY + 13, trackWidth, 8, 4, track);
+                    const int knobX = trackLeft + static_cast<int>(
+                        Clamp(view.normalizedValues[index], 0.0F, 1.0F) * trackWidth);
+                    FillSettingsRoundedRect(image, knobX - 7, centerY + 5, 14, 24, 7, value);
+                }
             }
         }
     }
-    FillSettingsRoundedRect(image, 176, static_cast<int>(kSettingsTextureHeight) - 35,
-                            160, 10, 5, value);
     DrawSettingsLabel(image, "MOVE", 256,
                       static_cast<int>(kSettingsTextureHeight) - 52, 1, value);
+    FillSettingsRoundedRect(image, 176, static_cast<int>(kSettingsTextureHeight) - 35,
+                            160, 10, 5, primary);
     return image;
 }
 
@@ -581,67 +648,120 @@ void AddGrabHandle(const phonecast::core::VideoFrame& frame,
     }
 }
 
-std::vector<std::uint8_t> MakeDashboardTexture(bool currentlyVisible,
-                                                bool remoteStatusKnown,
-                                                bool remoteAppEnabled,
-                                                bool remoteAccessibilityEnabled,
-                                                const std::string& pairingCode) {
-    constexpr std::array<std::uint8_t, 4> background{8, 14, 24, 255};
-    constexpr std::array<std::uint8_t, 4> header{15, 31, 50, 255};
-    constexpr std::array<std::uint8_t, 4> cell{25, 52, 78, 255};
-    constexpr std::array<std::uint8_t, 4> primary{22, 116, 184, 255};
-    constexpr std::array<std::uint8_t, 4> text{245, 249, 255, 255};
-    constexpr std::array<std::uint8_t, 4> accent{65, 188, 245, 255};
-    constexpr int margin = 20;
-    constexpr int gap = 12;
-    constexpr int headerHeight = 104;
-    const int cellWidth = (static_cast<int>(kDashboardTextureWidth) - margin * 2 -
-                           gap * (kDashboardColumns - 1)) / kDashboardColumns;
-    const int cellHeight = (static_cast<int>(kDashboardTextureHeight) - headerHeight -
-                            margin - gap * (kDashboardRows - 1)) / kDashboardRows;
+std::vector<std::uint8_t> MakeDashboardTexture(
+        bool currentlyVisible, phonecast::vr::PlacementMode placementMode,
+        bool remoteStatusKnown, bool remoteAppEnabled,
+        bool remoteAccessibilityEnabled, const std::string& pairingCode) {
+    constexpr std::array<std::uint8_t, 4> background{10, 25, 42, 255};
+    constexpr std::array<std::uint8_t, 4> header{10, 24, 40, 255};
+    constexpr std::array<std::uint8_t, 4> card{27, 49, 76, 255};
+    constexpr std::array<std::uint8_t, 4> segment{4, 18, 34, 255};
+    constexpr std::array<std::uint8_t, 4> primary{48, 153, 245, 255};
+    constexpr std::array<std::uint8_t, 4> text{224, 235, 249, 255};
+    constexpr std::array<std::uint8_t, 4> secondary{161, 184, 211, 255};
+    constexpr std::array<std::uint8_t, 4> accent{48, 153, 245, 255};
+    constexpr std::array<std::uint8_t, 4> warning{255, 187, 92, 255};
+    constexpr std::array<std::uint8_t, 4> danger{255, 119, 126, 255};
     std::vector<std::uint8_t> image(
         static_cast<std::size_t>(kDashboardTextureWidth) * kDashboardTextureHeight * 4U, 0);
-    FillImageRect(image, kDashboardTextureWidth, kDashboardTextureHeight, 0, 0,
-                  static_cast<int>(kDashboardTextureWidth),
-                  static_cast<int>(kDashboardTextureHeight), background);
-    FillImageRect(image, kDashboardTextureWidth, kDashboardTextureHeight, 0, 0,
-                  static_cast<int>(kDashboardTextureWidth), headerHeight, header);
-    FillImageRect(image, kDashboardTextureWidth, kDashboardTextureHeight, 0,
-                  headerHeight - 6, static_cast<int>(kDashboardTextureWidth), 6, accent);
+    FillImageRoundedRect(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                         4, 4, 672, 952, 24, background);
+    FillImageRoundedRect(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                         8, 8, 664, 104, 20, header);
+    FillImageRect(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                  8, 108, 664, 3, accent);
     DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
-                   "PHONECAST", 190, 50, 4, text);
+                   "PHONECAST", 132, 58, 4, text);
+    FillImageRoundedRect(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                         438, 28, 210, 58, 28, card);
     DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
                    currentlyVisible ? "PHONE VISIBLE" : "PHONE HIDDEN",
-                   760, 38, 3, accent);
-    std::string remoteStatus = pairingCode.empty()
-        ? "CONTROL STATUS PENDING" : "PAIR " + pairingCode;
+                   543, 57, 2, currentlyVisible ? accent : warning);
+
+    const std::string pairStatus = pairingCode.empty()
+        ? "PAIRING CODE PENDING" : "PAIRED  CODE " + pairingCode;
+    DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                   pairStatus, 142, 140, 2, secondary);
+
+    const auto& show = kDashboardTargets[0];
+    FillImageRoundedRect(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                         show.left, show.top, show.width, show.height, 22, card);
+    FillImageRoundedRect(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                         show.left + 2, show.top + 2, show.width - 4, show.height - 4,
+                         20, currentlyVisible ? card : std::array<std::uint8_t, 4>{27, 49, 76, 255});
+    DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                   currentlyVisible ? "HIDE PHONE" : "SHOW PHONE",
+                   340, 230, 4, text);
+
+    DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                   "FOLLOW MODE", 112, 334, 2, secondary);
+    FillImageRoundedRect(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                         18, 362, 644, 120, 18, segment);
+    constexpr std::array<const char*, 3> followLabels{"HEAD", "WORLD", "PIN"};
+    for (std::size_t index = 0; index < 3; ++index) {
+        const auto& target = kDashboardTargets[index + 1];
+        const bool selected =
+            (index == 0 && placementMode == phonecast::vr::PlacementMode::HeadLocked) ||
+            (index == 1 && placementMode == phonecast::vr::PlacementMode::WorldLocked);
+        if (selected)
+            FillImageRoundedRect(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                                 target.left, target.top, target.width, target.height,
+                                 16, primary);
+        DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                       followLabels[index], target.left + target.width / 2,
+                       target.top + target.height / 2, 3, selected ? header : secondary);
+    }
+
+    DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                   "QUICK ACTIONS", 122, 506, 2, secondary);
+    constexpr std::array<const char*, 4> quickLabels{
+        "GLANCE", "BACK", "LEFT DOCK", "RIGHT DOCK"};
+    for (std::size_t index = 0; index < quickLabels.size(); ++index) {
+        const auto& target = kDashboardTargets[index + 4];
+        FillImageRoundedRect(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                             target.left, target.top, target.width, target.height, 18, card);
+        const bool selected =
+            (index == 2 && placementMode == phonecast::vr::PlacementMode::LeftControllerLocked) ||
+            (index == 3 && placementMode == phonecast::vr::PlacementMode::RightControllerLocked);
+        DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                       quickLabels[index], target.left + target.width / 2,
+                       target.top + target.height / 2,
+                       std::string(quickLabels[index]).size() > 7 ? 2 : 3,
+                       selected ? accent : text);
+    }
+
+    FillImageRect(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                  8, 770, 664, 2, std::array<std::uint8_t, 4>{40, 69, 98, 255});
+    const auto& settings = kDashboardTargets[8];
+    const auto& quit = kDashboardTargets[9];
+    FillImageRoundedRect(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                         settings.left, settings.top, settings.width, settings.height, 18, card);
+    FillImageRoundedRect(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                         quit.left, quit.top, quit.width, quit.height, 18, card);
+    DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                   "SETTINGS", settings.left + settings.width / 2,
+                   settings.top + settings.height / 2, 3, text);
+    DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                   "QUIT", quit.left + quit.width / 2,
+                   quit.top + quit.height / 2, 3, danger);
+
+    std::string controlStatus = "CONTROL STATUS PENDING";
     if (remoteStatusKnown) {
         if (remoteAppEnabled && remoteAccessibilityEnabled)
-            remoteStatus = "REMOTE CONTROL READY";
+            controlStatus = "REMOTE CONTROL READY";
         else if (!remoteAppEnabled && !remoteAccessibilityEnabled)
-            remoteStatus = "ENABLE BOTH CONTROL GATES";
+            controlStatus = "ENABLE BOTH CONTROL GATES";
         else if (!remoteAppEnabled)
-            remoteStatus = "ENABLE APP CONTROL";
+            controlStatus = "ENABLE APP CONTROL";
         else
-            remoteStatus = "ENABLE ACCESSIBILITY";
+            controlStatus = "ENABLE ACCESSIBILITY";
     }
     DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
-                   remoteStatus, 760, 74, 2,
+                   controlStatus, 340, 910, 1,
                    remoteStatusKnown && remoteAppEnabled && remoteAccessibilityEnabled
-                       ? accent : std::array<std::uint8_t, 4>{255, 183, 77, 255});
-    for (int index = 0; index < kDashboardColumns * kDashboardRows; ++index) {
-        const int column = index % kDashboardColumns;
-        const int row = index / kDashboardColumns;
-        const int left = margin + column * (cellWidth + gap);
-        const int top = headerHeight + row * (cellHeight + gap);
-        FillImageRect(image, kDashboardTextureWidth, kDashboardTextureHeight,
-                      left, top, cellWidth, cellHeight, index == 0 ? primary : cell);
-        const std::string label = index == 0 && currentlyVisible
-            ? "HIDE" : kDashboardLabels[static_cast<std::size_t>(index)];
-        DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
-                       label, left + cellWidth / 2, top + cellHeight / 2,
-                       label.size() > 7 ? 3 : 4, text);
-    }
+                       ? accent : warning);
+    FillImageRoundedRect(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                         238, 932, 204, 10, 5, accent);
     return image;
 }
 
@@ -667,23 +787,13 @@ std::vector<std::uint8_t> MakeDashboardThumbnail() {
 }
 
 int DashboardCell(float mouseX, float mouseY) {
-    constexpr int margin = 20;
-    constexpr int gap = 12;
-    constexpr int headerHeight = 104;
     const int x = static_cast<int>(mouseX);
     const int y = static_cast<int>(kDashboardTextureHeight - mouseY);
-    if (y < headerHeight) return -1;
-    const int cellWidth = (static_cast<int>(kDashboardTextureWidth) - margin * 2 -
-                           gap * (kDashboardColumns - 1)) / kDashboardColumns;
-    const int cellHeight = (static_cast<int>(kDashboardTextureHeight) - headerHeight -
-                            margin - gap * (kDashboardRows - 1)) / kDashboardRows;
-    for (int row = 0; row < kDashboardRows; ++row) {
-        for (int column = 0; column < kDashboardColumns; ++column) {
-            const int left = margin + column * (cellWidth + gap);
-            const int top = headerHeight + row * (cellHeight + gap);
-            if (x >= left && x < left + cellWidth && y >= top && y < top + cellHeight)
-                return row * kDashboardColumns + column;
-        }
+    for (std::size_t index = 0; index < kDashboardTargets.size(); ++index) {
+        const auto& target = kDashboardTargets[index];
+        if (x >= target.left && x < target.left + target.width &&
+            y >= target.top && y < target.top + target.height)
+            return static_cast<int>(index);
     }
     return -1;
 }
@@ -775,9 +885,9 @@ public:
 
     void RenderDashboard() {
         if (dashboardOverlay == vr::k_ulOverlayHandleInvalid) return;
-        auto image = MakeDashboardTexture(desiredVisible, remoteStatusKnown,
-                                           remoteAppEnabled, remoteAccessibilityEnabled,
-                                           pairingCode);
+        auto image = MakeDashboardTexture(desiredVisible, currentSettings.placementMode,
+                                           remoteStatusKnown, remoteAppEnabled,
+                                           remoteAccessibilityEnabled, pairingCode);
         const auto result = overlayApi->SetOverlayRaw(
             dashboardOverlay, image.data(), kDashboardTextureWidth, kDashboardTextureHeight, 4);
         if (result != vr::VROverlayError_None)
@@ -844,9 +954,9 @@ public:
                                            static_cast<float>(kDashboardTextureHeight)}};
         const auto panelResult = overlayApi->SetOverlayRaw(
             dashboardOverlay,
-            MakeDashboardTexture(desiredVisible, remoteStatusKnown,
-                                 remoteAppEnabled, remoteAccessibilityEnabled,
-                                 pairingCode).data(),
+            MakeDashboardTexture(desiredVisible, currentSettings.placementMode,
+                                 remoteStatusKnown, remoteAppEnabled,
+                                 remoteAccessibilityEnabled, pairingCode).data(),
             kDashboardTextureWidth, kDashboardTextureHeight, 4);
         const auto thumbnailResult = overlayApi->SetOverlayRaw(
             dashboardThumbnail, thumbnail.data(),
@@ -889,20 +999,49 @@ public:
     }
 
     void QueueDashboardCell(int cell) {
-        if (cell == 8) {
+        if (cell < 0 || cell >= static_cast<int>(kDashboardTargets.size())) return;
+        const auto control = kDashboardTargets[static_cast<std::size_t>(cell)].control;
+        if (control == DashboardControl::AndroidBack) {
             pendingPointerEvents.push_back(interaction.Back());
             logger.Log(core::LogLevel::Info, "openvr-dashboard",
                        "Android Back requested from the dashboard.");
             return;
         }
-        if (cell == 9) {
+        if (control == DashboardControl::Quit) {
             quitRequested = true;
             logger.Log(core::LogLevel::Info, "openvr-dashboard",
                        "Intentional receiver shutdown requested from the dashboard.");
             return;
         }
-        if (cell < 0 || cell >= static_cast<int>(kMenuActions.size())) return;
-        pendingRadialMenuSelection.action = kMenuActions[static_cast<std::size_t>(cell)];
+        switch (control) {
+            case DashboardControl::ToggleVisible:
+                pendingRadialMenuSelection.action = phonecast::vr::RadialMenuAction::ToggleVisible;
+                break;
+            case DashboardControl::HeadLocked:
+                pendingRadialMenuSelection.action = phonecast::vr::RadialMenuAction::HeadLocked;
+                break;
+            case DashboardControl::WorldLocked:
+                pendingRadialMenuSelection.action = phonecast::vr::RadialMenuAction::WorldLocked;
+                break;
+            case DashboardControl::ShowPinned:
+                pendingRadialMenuSelection.action = phonecast::vr::RadialMenuAction::ShowPinned;
+                break;
+            case DashboardControl::ShowGlance:
+                pendingRadialMenuSelection.action = phonecast::vr::RadialMenuAction::ShowGlance;
+                break;
+            case DashboardControl::LeftControllerLocked:
+                pendingRadialMenuSelection.action = phonecast::vr::RadialMenuAction::LeftControllerLocked;
+                break;
+            case DashboardControl::RightControllerLocked:
+                pendingRadialMenuSelection.action = phonecast::vr::RadialMenuAction::RightControllerLocked;
+                break;
+            case DashboardControl::OpenSettings:
+                pendingRadialMenuSelection.action = phonecast::vr::RadialMenuAction::OpenSettings;
+                break;
+            case DashboardControl::AndroidBack:
+            case DashboardControl::Quit:
+                return;
+        }
         pendingRadialMenuSelection.hand =
             currentSettings.placementMode == phonecast::vr::PlacementMode::RightControllerLocked
                 ? phonecast::vr::GlanceInput::RightController
@@ -1005,6 +1144,8 @@ public:
     }
 
     bool ApplySettings(phonecast::vr::OverlaySettings settings, std::string& error) {
+        const bool dashboardPlacementChanged =
+            settings.placementMode != currentSettings.placementMode;
         auto notificationTransform = vr::HmdMatrix34_t{{
             {1.0F, 0.0F, 0.0F, settings.notificationOffsetXMeters},
             {0.0F, 1.0F, 0.0F, settings.notificationOffsetYMeters},
@@ -1056,6 +1197,7 @@ public:
                              "SetOverlayTransformAbsolute", error)) return false;
         }
         currentSettings = settings;
+        if (dashboardPlacementChanged) RenderDashboard();
         return true;
     }
 
@@ -1389,8 +1531,28 @@ public:
         radialAwaitRelease = false;
     }
 
-    int SettingsRow(float mouseY) const {
+    int SettingsRow(float mouseX, float mouseY) const {
+        const int x = static_cast<int>(mouseX);
         const int y = static_cast<int>(kSettingsTextureHeight - mouseY);
+        if (settingsMenuView.title == "PHONECAST SETTINGS") {
+            constexpr int firstCenter = 150;
+            constexpr int rowStep = 78;
+            for (int row = 0; row < 7; ++row) {
+                const int center = firstCenter + row * rowStep;
+                if (y >= center - 32 && y < center + 32 && x >= 16 && x < 496)
+                    return row;
+            }
+            constexpr std::array<int, 3> actionLeft{16, 174, 332};
+            constexpr std::array<int, 3> actionWidth{142, 142, 164};
+            for (int action = 0; action < 3; ++action) {
+                if (x >= actionLeft[static_cast<std::size_t>(action)] &&
+                    x < actionLeft[static_cast<std::size_t>(action)] +
+                        actionWidth[static_cast<std::size_t>(action)] &&
+                    y >= 730 && y < 808)
+                    return action + 7;
+            }
+            return -1;
+        }
         constexpr int rowHeight = 82;
         constexpr int firstRow = 126;
         for (std::size_t row = 0; row < settingsMenuView.labels.size(); ++row) {
@@ -1406,11 +1568,12 @@ public:
     }
 
     void QueueSettingsLaserClick(float mouseX, float mouseY) {
-        const int row = SettingsRow(mouseY);
+        const int row = SettingsRow(mouseX, mouseY);
         if (row < 0) return;
         settingsLaserTargetRow = row;
         const auto index = static_cast<std::size_t>(row);
-        const bool adjustable = index < settingsMenuView.values.size() &&
+        const bool adjustable = settingsMenuView.title != "PHONECAST SETTINGS" &&
+                                index < settingsMenuView.values.size() &&
                                 !settingsMenuView.values[index].empty() &&
                                 settingsMenuView.values[index] != ">";
         const bool slider = index < settingsMenuView.normalizedValues.size() &&
@@ -1419,9 +1582,9 @@ public:
             settingsLaserInput = {phonecast::vr::SettingsMenuCommand::Decrease, 0.0F};
         } else if (adjustable && mouseX > static_cast<float>(kSettingsTextureWidth) - 72.0F) {
             settingsLaserInput = {phonecast::vr::SettingsMenuCommand::Increase, 0.0F};
-        } else if (slider && mouseX >= 82.0F && mouseX <= 428.0F) {
+        } else if (slider && mouseX >= 88.0F && mouseX <= 424.0F) {
             settingsLaserInput = {phonecast::vr::SettingsMenuCommand::SetNormalized,
-                                  Clamp((mouseX - 82.0F) / 346.0F, 0.0F, 1.0F)};
+                                  Clamp((mouseX - 88.0F) / 336.0F, 0.0F, 1.0F)};
         } else {
             settingsLaserInput = {phonecast::vr::SettingsMenuCommand::Activate, 0.0F};
         }

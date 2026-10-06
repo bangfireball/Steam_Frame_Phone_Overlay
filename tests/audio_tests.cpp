@@ -308,7 +308,7 @@ void ChangingVideoSyncTests() {
 void SettingsTests() {
     using namespace phonecast::vr;
     OverlaySettings original; SettingsMenuController menu; menu.Open(original);
-    for (int i=0;i<9;++i) menu.Handle(SettingsMenuCommand::NextItem);
+    for (int i=0;i<6;++i) menu.Handle(SettingsMenuCommand::NextItem);
     menu.Handle(SettingsMenuCommand::Activate); Check(menu.View().title == "PHONE AUDIO","in-headset audio category");
     menu.Handle(SettingsMenuCommand::Activate); Check(menu.Draft().audioMuted,"mute toggle");
     menu.Handle(SettingsMenuCommand::NextItem); menu.Handle({SettingsMenuCommand::SetNormalized,0.25F});
