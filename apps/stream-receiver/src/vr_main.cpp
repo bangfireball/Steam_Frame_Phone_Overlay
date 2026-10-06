@@ -507,6 +507,16 @@ int main(int argc, char** argv) {
                     case phonecast::vr::RadialMenuAction::ToggleVisible:
                         glance.ToggleExpanded();
                         break;
+                    case phonecast::vr::RadialMenuAction::ShowBesideDashboard: {
+                        auto besideDashboard = controls.Settings();
+                        besideDashboard.placementMode = phonecast::vr::PlacementMode::HeadLocked;
+                        besideDashboard.offsetXMeters = 0.48F;
+                        besideDashboard.offsetYMeters = 0.0F;
+                        besideDashboard.distanceMeters = 0.85F;
+                        controls.ReplaceSettings(besideDashboard);
+                        glance.ShowExpanded();
+                        break;
+                    }
                     case phonecast::vr::RadialMenuAction::ShowGlance:
                         glance.ShowGlance(hand);
                         break;
@@ -633,6 +643,7 @@ int main(int argc, char** argv) {
                 controls.ReplaceSettings(settingsMenu.Draft());
             } else {
                 auto merged = controls.Settings();
+                merged.widthMeters = vrUpdate.widthMeters;
                 merged.placementMode = vrUpdate.placementMode;
                 merged.leftController = vrUpdate.leftController;
                 merged.rightController = vrUpdate.rightController;

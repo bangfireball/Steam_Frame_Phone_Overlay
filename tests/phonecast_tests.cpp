@@ -273,10 +273,14 @@ void TestOverlayInteraction() {
               !interaction.IsBackButton(100.0F, 50.0F) &&
               !interaction.IsBackButton(50.0F, 100.0F),
           "the lower-left handle corner is reserved for Android Back");
-    Check(interaction.IsCloseButton(950.0F, 50.0F) &&
-              !interaction.IsCloseButton(899.0F, 50.0F) &&
-              !interaction.IsCloseButton(950.0F, 100.0F),
-          "the lower-right handle corner is reserved for hiding the phone");
+    Check(interaction.IsCloseButton(150.0F, 50.0F) &&
+              !interaction.IsCloseButton(99.0F, 50.0F) &&
+              !interaction.IsCloseButton(150.0F, 100.0F),
+          "the footer keeps Close beside Android Back");
+    Check(interaction.IsResizeButton(950.0F, 50.0F) &&
+              !interaction.IsResizeButton(899.0F, 50.0F) &&
+              !interaction.IsResizeButton(950.0F, 100.0F),
+          "the lower-right handle corner is reserved for resizing the phone");
     Check(top.normalizedY == 0.0F && bottom.normalizedY == 1.0F,
           "the grab handle inset does not offset phone touch coordinates");
 }
@@ -446,12 +450,15 @@ void TestSettingsMenu() {
     Check(menu.IsOpen() && menu.View().title == "PHONECAST SETTINGS",
           "settings menu opens at its root");
     auto rendererUpdate = initial;
+    rendererUpdate.widthMeters = 0.80F;
     rendererUpdate.worldTransformValid = true;
     rendererUpdate.worldTransform[3] = 1.25F;
     menu.MergeRendererUpdate(rendererUpdate);
-    Check(menu.Draft().worldTransformValid && menu.Draft().worldTransform[3] == 1.25F &&
+    Check(menu.Draft().widthMeters == 0.80F && menu.Draft().worldTransformValid &&
+              menu.Draft().worldTransform[3] == 1.25F &&
+              menu.Original().widthMeters == initial.widthMeters &&
               !menu.Original().worldTransformValid,
-          "renderer-created anchors merge into the draft without changing cancel state");
+          "renderer resize and anchors merge into the draft without changing cancel state");
     menu.Handle(phonecast::vr::SettingsMenuCommand::Activate);
     Check(menu.View().title == "APPEARANCE", "settings menu opens Appearance");
     Check(menu.Handle(phonecast::vr::SettingsMenuCommand::Increase) ==

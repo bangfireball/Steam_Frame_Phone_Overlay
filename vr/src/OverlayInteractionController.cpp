@@ -28,6 +28,11 @@ bool OverlayInteractionController::IsBackButton(float overlayX, float overlayY) 
 }
 
 bool OverlayInteractionController::IsCloseButton(float overlayX, float overlayY) const noexcept {
+    return IsGrabHandle(overlayY) && overlayX >= static_cast<float>(bottomInset_) &&
+           overlayX < static_cast<float>(bottomInset_ * 2U);
+}
+
+bool OverlayInteractionController::IsResizeButton(float overlayX, float overlayY) const noexcept {
     return IsGrabHandle(overlayY) && overlayX >=
         static_cast<float>(width_ > bottomInset_ ? width_ - bottomInset_ : 0U) &&
         overlayX < static_cast<float>(width_);

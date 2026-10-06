@@ -2055,15 +2055,17 @@ The previous handoff above is historical implementation state.
 
 - `[x]` Local UI mockups reviewed and `_injest/` excluded from version control
 - `[x]` Framecorder dashboard-closed hotkey source research completed and documented
-- `[~]` Native-style portrait dashboard and settings visual refresh implemented for build validation
-- `[ ]` Consistent phone/settings/notification lower control areas and direct resize handle
+- `[~]` Mockup-derived settings refresh and landscape quick dashboard implemented for build validation
+- `[x]` Removed Glance/Pin from the primary dashboard after physical feedback found no useful visible distinction
+- `[x]` Dashboard Show now reveals the phone head-locked beside the quick panel before normal Show/Hide operation
+- `[~]` Phone lower control area now has Back, Close, Move, and a trigger-drag resize corner; settings/notification consistency remains pending
 - `[ ]` Trigger-drag depth adjustment and complete drag cancellation/release safety
 - `[ ]` Keyboard/text-entry path and PhoneCast-owned fallback decision
 - `[ ]` Portable opt-in gesture recognizer and gameplay false-activation evidence
 - `[ ]` Narrow opt-in hotkey experiment and game-input coexistence validation
 - `[ ]` Native Steam Frame physical validation in both launch orders
 
-The initial visual implementation follows the two owner-provided `_injest` mockups for panel hierarchy, dark navy cards, blue selection states, portrait layout, quick actions, settings categories, calibration sliders, transactional actions, and bottom move affordances. These local reference images are intentionally ignored rather than shipped. Compilation and automated tests do not constitute visual approval; the refreshed surfaces still require headset review and iteration.
+The initial visual implementation follows the two owner-provided `_injest` mockups for panel hierarchy, dark navy cards, blue selection states, settings categories, calibration sliders, transactional actions, and bottom move affordances. Physical feedback found the portrait quick panel too tall and found no useful visible distinction for its Glance and Pin actions. The quick panel is therefore landscape, exposes only Show/Hide, concrete placement choices, Android Back, Settings, and Quit, and positions a newly shown phone beside the dashboard. Glance/Pinned remain internal compatibility states for existing keyboard/dormant controller paths but are no longer presented as primary dashboard modes. The phone footer adds a dedicated lower-right resize corner while keeping Back, Close, and Move separate. These local reference images are intentionally ignored rather than shipped. Compilation and automated tests do not constitute visual approval; the refreshed surfaces still require headset review and iteration.
 
 Framecorder research at native commit `171a905006bb917e5a1677fa922a1d00cc1ec214` found a narrower hotkey implementation than the earlier overlay-global reference: one optional Boolean action, a left-thumbstick binding-layer long press, haptic feedback, and normal action-set priority `0`. PhoneCast will test a separate narrow opt-in action set rather than reactivating its dormant broad global set. See [`docs/framecorder-hotkey-research.md`](docs/framecorder-hotkey-research.md).
 

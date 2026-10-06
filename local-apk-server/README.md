@@ -15,11 +15,12 @@ It listens on port `8080` by default and offers whichever artifacts currently ex
 
 The APK path serves the current compatible sender. The stable
 `/phonecast-steam-frame-arm64.tar.gz` alias and curl bootstrap select the Sprint 14
-archive. This receiver bundle adds the mockup-driven portrait dashboard and
-settings refresh while retaining the owner-approved Sprint 13 audio path. If the
-current Android APK is already installed, update only the Frame bundle and quit
-PhoneCast first. Windows and ARM64 builds/tests pass; the refreshed UI still needs
-physical headset visual and laser-target approval.
+archive. This receiver bundle adds the landscape quick dashboard, reliable
+Show-beside-dashboard behavior, refreshed settings, and phone resize corner while
+retaining the owner-approved Sprint 13 audio path. If the current Android APK is
+already installed, update only the Frame bundle and quit PhoneCast first. Windows
+and ARM64 builds/tests pass; the refreshed UI still needs physical headset visual,
+resize, and laser-target approval.
 
 Override the port if needed:
 

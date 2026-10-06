@@ -15,6 +15,7 @@ public:
     bool IsGrabHandle(float overlayY) const noexcept;
     bool IsBackButton(float overlayX, float overlayY) const noexcept;
     bool IsCloseButton(float overlayX, float overlayY) const noexcept;
+    bool IsResizeButton(float overlayX, float overlayY) const noexcept;
     core::PointerEvent PointerDown(float overlayX, float overlayY) noexcept;
     core::PointerEvent PointerMove(float overlayX, float overlayY) noexcept;
     core::PointerEvent PointerUp(float overlayX, float overlayY) noexcept;

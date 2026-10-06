@@ -67,6 +67,7 @@ void SettingsMenuController::Open(const OverlaySettings& settings) {
 
 void SettingsMenuController::MergeRendererUpdate(const OverlaySettings& settings) noexcept {
     if (!open_) return;
+    draft_.widthMeters = settings.widthMeters;
     draft_.placementMode = settings.placementMode;
     draft_.leftController = settings.leftController;
     draft_.rightController = settings.rightController;
