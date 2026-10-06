@@ -2053,6 +2053,8 @@ The previous handoff above is historical implementation state.
 
 **Status:** `[~] In progress — mockup-driven dashboard/settings refresh started; hardware approval pending`
 
+Current working handoff: [`docs/sprint-14-handoff.md`](docs/sprint-14-handoff.md). The owner reported the latest Start Location iteration was “better” and requested a handoff while continuing work; this is positive placement feedback, not Sprint 14 closure or approval of every preview/shortcut/depth/lifecycle case.
+
 - `[x]` Local UI mockups reviewed and `_injest/` excluded from version control
 - `[x]` Framecorder dashboard-closed hotkey source research completed and documented
 - `[~]` Mockup-derived settings refresh and landscape quick dashboard implemented for build validation
