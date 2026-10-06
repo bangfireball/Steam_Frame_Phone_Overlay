@@ -3,6 +3,8 @@ package com.phonecastvr.sender;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -16,6 +18,7 @@ import android.media.projection.MediaProjectionManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.net.Uri;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
@@ -36,6 +39,7 @@ public final class MainActivity extends Activity {
     private static final int REQUEST_CAPTURE = 1001;
     private static final int REQUEST_NOTIFICATIONS = 1002;
     private static final int REQUEST_AUDIO = 1003;
+    private static final int REQUEST_WRITE_SETTINGS = 1004;
     private static final int COLOR_BACKGROUND = Color.rgb(7, 13, 23);
     private static final int COLOR_SURFACE = Color.rgb(17, 28, 43);
     private static final int COLOR_SURFACE_HIGH = Color.rgb(24, 40, 59);
@@ -50,6 +54,10 @@ public final class MainActivity extends Activity {
     private TextView audioStatusView;
     private CheckBox playbackAudioView;
     private CheckBox mutePhoneAudioView;
+    private CheckBox dimPhoneView;
+    private Spinner dimDelayView;
+    private Button brightnessAccessButton;
+    private Button restoreBrightnessButton;
     private TextView connectionHintView;
     private LinearLayout mainContent;
     private LinearLayout settingsContent;
@@ -103,6 +111,7 @@ public final class MainActivity extends Activity {
         refreshServiceState();
         updateAccessibilityButton();
         updateNotificationAccessButton();
+        updateBrightnessControls();
     }
 
     @Override protected void onResume() {
@@ -110,6 +119,7 @@ public final class MainActivity extends Activity {
         refreshServiceState();
         updateAccessibilityButton();
         updateNotificationAccessButton();
+        updateBrightnessControls();
         ScreenCaptureService.remoteControlStatusChanged(this);
         if (playbackAudioView != null && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
             playbackAudioView.setChecked(false);
@@ -250,7 +260,7 @@ public final class MainActivity extends Activity {
     private void buildSettingsContent() {
         TextView heading = text("Settings", 30, COLOR_TEXT, Gravity.START);
         settingsContent.addView(heading, matchWrap());
-        TextView intro = text("Optional features and privacy controls", 15,
+        TextView intro = text("Casting, display, and privacy controls", 15,
                 COLOR_SECONDARY, Gravity.START);
         LinearLayout.LayoutParams introParams = matchWrap();
         introParams.setMargins(0, dp(4), 0, dp(16));
@@ -283,6 +293,54 @@ public final class MainActivity extends Activity {
         });
         performanceCard.addView(streamProfileView, fieldParams());
         settingsContent.addView(performanceCard, cardParams());
+
+        LinearLayout brightnessCard = card();
+        brightnessCard.addView(sectionTitle(getString(R.string.dim_phone_title)), matchWrap());
+        brightnessCard.addView(text(getString(R.string.dim_phone_summary), 13,
+                COLOR_SECONDARY, Gravity.START), spaced(0, dp(6), 0, dp(10)));
+        dimPhoneView = checkBox(R.string.enable_dim_phone, preferences.getBoolean(
+                AndroidScreenBrightness.PREFERENCE_ENABLED,
+                AndroidScreenBrightness.DEFAULT_ENABLED));
+        brightnessCard.addView(dimPhoneView, matchWrap());
+        brightnessCard.addView(text("Dim after", 13, COLOR_SECONDARY, Gravity.START),
+                spaced(0, dp(8), 0, dp(4)));
+        dimDelayView = new Spinner(this);
+        String[] delayLabels = {"5 seconds", "15 seconds", "30 seconds", "60 seconds"};
+        int[] delayValues = {5, 15, 30, 60};
+        ArrayAdapter<String> delayAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, delayLabels);
+        delayAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        dimDelayView.setAdapter(delayAdapter);
+        int storedDelay = AndroidScreenBrightness.delaySeconds(preferences);
+        int selectedDelay = 1;
+        for (int index = 0; index < delayValues.length; ++index) {
+            if (delayValues[index] == storedDelay) selectedDelay = index;
+        }
+        dimDelayView.setSelection(selectedDelay);
+        dimDelayView.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view,
+                                                  int position, long id) {
+                preferences.edit().putInt(AndroidScreenBrightness.PREFERENCE_DELAY_SECONDS,
+                        delayValues[position]).apply();
+                ScreenCaptureService.brightnessPreferencesChanged();
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+        });
+        brightnessCard.addView(dimDelayView, fieldParams());
+        brightnessAccessButton = secondaryButton();
+        brightnessAccessButton.setOnClickListener(view -> openBrightnessSettings(false));
+        brightnessCard.addView(brightnessAccessButton, buttonParams());
+        restoreBrightnessButton = secondaryButton();
+        restoreBrightnessButton.setText(R.string.restore_brightness_now);
+        restoreBrightnessButton.setOnClickListener(view -> restoreBrightnessTemporarily());
+        brightnessCard.addView(restoreBrightnessButton, buttonParams());
+        dimPhoneView.setOnCheckedChangeListener((button, checked) -> {
+            preferences.edit().putBoolean(
+                    AndroidScreenBrightness.PREFERENCE_ENABLED, checked).apply();
+            ScreenCaptureService.brightnessPreferencesChanged();
+            updateBrightnessControls();
+        });
+        settingsContent.addView(brightnessCard, cardParams());
 
         LinearLayout audioCard = card();
         audioCard.addView(sectionTitle("Phone playback audio"),matchWrap());
@@ -394,6 +452,7 @@ public final class MainActivity extends Activity {
         if (show) {
             updateAccessibilityButton();
             updateNotificationAccessButton();
+            updateBrightnessControls();
         }
     }
 
@@ -436,11 +495,24 @@ public final class MainActivity extends Activity {
             return;
         }
         CaptureConfig.StreamProfile profile = selectedStreamProfile();
-        senderPreferences().edit()
+        SharedPreferences preferences = senderPreferences();
+        preferences.edit()
                 .putString("receiver_host", receiverHost)
                 .putString("pair_code", pairCode)
                 .putString("stream_profile", profile.name())
                 .apply();
+        if (preferences.getBoolean(AndroidScreenBrightness.PREFERENCE_ENABLED,
+                AndroidScreenBrightness.DEFAULT_ENABLED) &&
+                !Settings.System.canWrite(this) &&
+                !preferences.getBoolean(AndroidScreenBrightness.PREFERENCE_PERMISSION_PROMPTED,
+                        false)) {
+            showBrightnessAccessExplanation();
+            return;
+        }
+        continueCaptureRequest();
+    }
+
+    private void continueCaptureRequest() {
         if (Build.VERSION.SDK_INT >= 33 &&
                 checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
                         PackageManager.PERMISSION_GRANTED) {
@@ -450,6 +522,44 @@ public final class MainActivity extends Activity {
             return;
         }
         launchCaptureConsent();
+    }
+
+    private void showBrightnessAccessExplanation() {
+        new AlertDialog.Builder(this)
+                .setTitle("Allow phone dimming?")
+                .setMessage("Dim phone while casting is enabled by default. Android requires Modify system settings access so PhoneCast can lower and restore device brightness. You can cast without it or turn dimming off at any time.")
+                .setPositiveButton("Allow dimming", (dialog, which) -> {
+                    senderPreferences().edit().putBoolean(
+                            AndroidScreenBrightness.PREFERENCE_PERMISSION_PROMPTED, true).apply();
+                    openBrightnessSettings(true);
+                })
+                .setNegativeButton("Cast without dimming", (dialog, which) -> {
+                    senderPreferences().edit().putBoolean(
+                            AndroidScreenBrightness.PREFERENCE_PERMISSION_PROMPTED, true).apply();
+                    continueCaptureRequest();
+                })
+                .setNeutralButton("Turn off", (dialog, which) -> {
+                    senderPreferences().edit()
+                            .putBoolean(AndroidScreenBrightness.PREFERENCE_ENABLED, false)
+                            .putBoolean(AndroidScreenBrightness.PREFERENCE_PERMISSION_PROMPTED, true)
+                            .apply();
+                    dimPhoneView.setChecked(false);
+                    continueCaptureRequest();
+                })
+                .show();
+    }
+
+    private void openBrightnessSettings(boolean continueAfter) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS,
+                    Uri.parse("package:" + getPackageName()));
+            if (continueAfter) startActivityForResult(intent, REQUEST_WRITE_SETTINGS);
+            else startActivity(intent);
+        } catch (ActivityNotFoundException error) {
+            updateState(running, "Android could not open Modify system settings",
+                    0, 0, 0, 0, 0, -1);
+            if (continueAfter) continueCaptureRequest();
+        }
     }
 
     private void launchCaptureConsent() {
@@ -474,6 +584,11 @@ public final class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_WRITE_SETTINGS) {
+            updateBrightnessControls();
+            continueCaptureRequest();
+            return;
+        }
         if (requestCode != REQUEST_CAPTURE) return;
         if (resultCode != RESULT_OK || data == null) {
             updateState(false, "Screen sharing was not approved", 0, 0, 0, 0, 0, -1);
@@ -525,6 +640,8 @@ public final class MainActivity extends Activity {
         receiverHostView.setEnabled(!isRunning);
         pairCodeView.setEnabled(!isRunning);
         if (streamProfileView != null) streamProfileView.setEnabled(!isRunning);
+        if (restoreBrightnessButton != null) restoreBrightnessButton.setEnabled(
+                isRunning && dimPhoneView != null && dimPhoneView.isChecked());
         connectionHintView.setText(isRunning ? "Connection details are locked while casting."
                 : "Saved details make the next cast a two-step start.");
     }
@@ -536,6 +653,26 @@ public final class MainActivity extends Activity {
         }
         return CaptureConfig.StreamProfile.fromStoredName(senderPreferences().getString(
                 "stream_profile", CaptureConfig.StreamProfile.STANDARD.name()));
+    }
+
+    private void updateBrightnessControls() {
+        if (brightnessAccessButton == null) return;
+        boolean enabled = dimPhoneView.isChecked();
+        boolean granted = Settings.System.canWrite(this);
+        brightnessAccessButton.setText(granted
+                ? R.string.brightness_access_enabled : R.string.grant_brightness_access);
+        brightnessAccessButton.setEnabled(enabled && !granted);
+        dimDelayView.setEnabled(enabled);
+        restoreBrightnessButton.setEnabled(enabled && running);
+    }
+
+    private void restoreBrightnessTemporarily() {
+        if (running) {
+            startService(new Intent(this, ScreenCaptureService.class)
+                    .setAction(ScreenCaptureService.ACTION_RESTORE_BRIGHTNESS));
+        } else {
+            AndroidScreenBrightness.create(this).restoreAndRelease();
+        }
     }
 
     private void updateAccessibilityButton() {

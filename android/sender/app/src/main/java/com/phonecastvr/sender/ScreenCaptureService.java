@@ -22,6 +22,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Surface;
@@ -35,6 +36,8 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class ScreenCaptureService extends Service {
     static final String ACTION_START = "com.phonecastvr.sender.action.START";
     static final String ACTION_STOP = "com.phonecastvr.sender.action.STOP";
+    static final String ACTION_RESTORE_BRIGHTNESS =
+            "com.phonecastvr.sender.action.RESTORE_BRIGHTNESS";
     static final String ACTION_STATUS = "com.phonecastvr.sender.action.STATUS";
     static final String EXTRA_RESULT_CODE = "result_code";
     static final String EXTRA_RESULT_DATA = "result_data";
@@ -57,6 +60,17 @@ public final class ScreenCaptureService extends Service {
     private static final int NOTIFICATION_ID = 100;
     private static volatile NetworkStreamer activeNetworkStreamer;
     private static volatile ScreenCaptureService activeService;
+
+    static void brightnessPreferencesChanged() {
+        ScreenCaptureService service = activeService;
+        if (service != null) service.mainHandler.post(service::reconcileBrightnessPreference);
+    }
+
+    static void physicalTouchObserved() {
+        ScreenCaptureService service = activeService;
+        if (service != null) service.mainHandler.post(() ->
+                service.restoreBrightnessTemporarily("Physical touch restored brightness"));
+    }
 
     static void audioPreferencesChanged() {
         ScreenCaptureService service = activeService;
@@ -121,8 +135,17 @@ public final class ScreenCaptureService extends Service {
     private boolean audioEnabledForSession;
     private PlaybackAudioCapture audioCapture;
     private PhoneAudioMuteController phoneAudioMute;
+    private ScreenBrightnessController brightnessController;
+    private PowerManager.WakeLock screenWakeLock;
     private long audioGeneration;
     private String audioStatus = "Audio off";
+
+    private final Runnable dimScreen = () -> {
+        if (!brightnessRequested() || projection == null || stopping) return;
+        if (!brightnessController.dim()) {
+            Log.w(TAG, "Phone dimming is enabled but Modify system settings access is unavailable");
+        }
+    };
 
     private void setAudioStatus(String value) {
         audioStatus = value;
@@ -189,6 +212,7 @@ public final class ScreenCaptureService extends Service {
         activeService = this;
         createNotificationChannel();
         phoneAudioMute = AndroidPhoneAudioMute.create(this);
+        brightnessController = AndroidScreenBrightness.create(this);
         phoneAudioMute.setRequested(getSharedPreferences(PREFERENCES,MODE_PRIVATE)
                 .getBoolean(AndroidPhoneAudioMute.PREFERENCE_ENABLED,false));
         codecThread = new HandlerThread("phonecast-avc-output");
@@ -202,6 +226,11 @@ public final class ScreenCaptureService extends Service {
         String action = intent == null ? null : intent.getAction();
         if (ACTION_STOP.equals(action)) {
             stopCapture("Capture stopped");
+            return START_NOT_STICKY;
+        }
+        if (ACTION_RESTORE_BRIGHTNESS.equals(action)) {
+            restoreBrightnessTemporarily("Brightness restored temporarily");
+            if (projection == null) stopSelf(startId);
             return START_NOT_STICKY;
         }
         if (!ACTION_START.equals(action)) {
@@ -313,6 +342,8 @@ public final class ScreenCaptureService extends Service {
                     encoderSession.surface, null, mainHandler);
             if (virtualDisplay == null) throw new IllegalStateException("Virtual display creation failed");
 
+            acquireScreenWakeLock();
+            scheduleDim();
             setRunningPreference(true);
             String message = "Casting with " + streamProfile.label + " at " +
                     streamProfile.frameRate + " FPS";
@@ -527,6 +558,58 @@ public final class ScreenCaptureService extends Service {
         return metrics;
     }
 
+    private boolean brightnessRequested() {
+        return getSharedPreferences(PREFERENCES, MODE_PRIVATE).getBoolean(
+                AndroidScreenBrightness.PREFERENCE_ENABLED,
+                AndroidScreenBrightness.DEFAULT_ENABLED);
+    }
+
+    private void reconcileBrightnessPreference() {
+        mainHandler.removeCallbacks(dimScreen);
+        if (brightnessRequested()) scheduleDim();
+        else if (!brightnessController.restoreAndRelease())
+            Log.w(TAG, "Could not restore brightness after dimming was disabled");
+        updateNotification(projection == null ? "Preparing H.264 encoder…" :
+                "Casting · phone dimming " + (brightnessRequested() ? "on" : "off"));
+    }
+
+    private void scheduleDim() {
+        mainHandler.removeCallbacks(dimScreen);
+        if (!brightnessRequested() || projection == null || stopping ||
+                !brightnessController.canWrite()) return;
+        int seconds = AndroidScreenBrightness.delaySeconds(
+                getSharedPreferences(PREFERENCES, MODE_PRIVATE));
+        mainHandler.postDelayed(dimScreen, seconds * 1000L);
+    }
+
+    private void restoreBrightnessTemporarily(String message) {
+        if (projection == null || stopping || !brightnessRequested()) return;
+        mainHandler.removeCallbacks(dimScreen);
+        if (brightnessController.ownsOverride() &&
+                !brightnessController.restoreTemporarily()) {
+            Log.w(TAG, "Could not restore brightness temporarily");
+            return;
+        }
+        scheduleDim();
+        updateNotification(message);
+    }
+
+    @SuppressWarnings("deprecation")
+    private void acquireScreenWakeLock() {
+        if (screenWakeLock != null && screenWakeLock.isHeld()) return;
+        PowerManager power = (PowerManager) getSystemService(POWER_SERVICE);
+        screenWakeLock = power.newWakeLock(
+                PowerManager.SCREEN_DIM_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE,
+                "PhoneCast:casting-screen");
+        screenWakeLock.setReferenceCounted(false);
+        screenWakeLock.acquire();
+    }
+
+    private void releaseScreenWakeLock() {
+        if (screenWakeLock != null && screenWakeLock.isHeld()) screenWakeLock.release();
+        screenWakeLock = null;
+    }
+
     private void stopCapture(String message) {
         if (stopping) return;
         stopping = true;
@@ -539,6 +622,10 @@ public final class ScreenCaptureService extends Service {
     }
 
     private void stopCaptureResources(boolean stopProjection) {
+        mainHandler.removeCallbacks(dimScreen);
+        if (brightnessController != null && !brightnessController.restoreAndRelease())
+            Log.w(TAG, "Could not restore brightness while stopping capture");
+        releaseScreenWakeLock();
         stopAudio();
         audioEnabledForSession = false;
         audioStatus = "Audio off";
@@ -611,16 +698,24 @@ public final class ScreenCaptureService extends Service {
         Intent stopIntent = new Intent(this, ScreenCaptureService.class).setAction(ACTION_STOP);
         PendingIntent stop = PendingIntent.getService(this, 1, stopIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        return new Notification.Builder(this, CHANNEL_ID)
+        Intent restoreIntent = new Intent(this, ScreenCaptureService.class)
+                .setAction(ACTION_RESTORE_BRIGHTNESS);
+        PendingIntent restore = PendingIntent.getService(this, 2, restoreIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        Notification.Builder builder = new Notification.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_phonecast)
                 .setContentTitle(getString(R.string.capture_notification_title))
                 .setContentText(text)
                 .setContentIntent(open)
                 .setOngoing(true)
-                .setCategory(Notification.CATEGORY_SERVICE)
-                .addAction(new Notification.Action.Builder(null,
-                        getString(R.string.stop_casting), stop).build())
-                .build();
+                .setCategory(Notification.CATEGORY_SERVICE);
+        if (brightnessRequested() && brightnessController != null &&
+                brightnessController.canWrite()) {
+            builder.addAction(new Notification.Action.Builder(null,
+                    getString(R.string.restore_brightness), restore).build());
+        }
+        return builder.addAction(new Notification.Action.Builder(null,
+                getString(R.string.stop_casting), stop).build()).build();
     }
 
     private void updateNotification(String text) {

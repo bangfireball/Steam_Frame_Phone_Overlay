@@ -4,6 +4,13 @@
     <string name="capture_channel_description">Shows when PhoneCast is capturing the screen</string>
     <string name="capture_notification_title">PhoneCast is capturing your screen</string>
     <string name="stop_casting">Stop casting</string>
+    <string name="restore_brightness">Restore brightness</string>
+    <string name="dim_phone_title">Dim phone while casting</string>
+    <string name="dim_phone_summary">Enabled by default. PhoneCast temporarily uses minimum nonzero brightness while keeping the captured stream unchanged. Android requires separate Modify system settings approval. If the optional PhoneCast Accessibility service is enabled, a physical touch temporarily restores brightness; otherwise use the restore action here or in the casting notification. Turning this off restores the previous brightness policy.</string>
+    <string name="enable_dim_phone">Dim phone while casting</string>
+    <string name="grant_brightness_access">Allow brightness changes</string>
+    <string name="brightness_access_enabled">Modify system settings enabled</string>
+    <string name="restore_brightness_now">Restore brightness temporarily</string>
     <string name="sprint_two_explanation">Enter the receiver address and pairing code, then approve screen capture to stream H.264 over your local network.</string>
     <string name="notification_listener_label">PhoneCast notification bridge</string>
     <string name="notification_forwarding_disclosure">Optional notification forwarding sends brief cards only while casting. It is off by default. Message titles and text stay hidden unless you explicitly enable content. Package allow/block lists accept comma-separated Android package names. The current trusted-LAN connection is not encrypted.</string>
@@ -12,8 +19,8 @@
     <string name="open_notification_access_settings">Grant Android notification access</string>
     <string name="notification_access_enabled">Android notification access enabled</string>
     <string name="remote_control_service_label">PhoneCast remote control</string>
-    <string name="remote_control_service_description">Injects only the taps, swipes, scrolls, and Back actions you request from your paired PhoneCast VR receiver. It does not read app text or inspect window content.</string>
-    <string name="remote_control_disclosure">Optional remote control uses Android Accessibility to inject taps, swipes, scrolls, and Back requested from the connected VR receiver. PhoneCast does not inspect app text or window content. Commands and video use the current unencrypted trusted-LAN connection.</string>
+    <string name="remote_control_service_description">Injects only the taps, swipes, scrolls, and Back actions you request from your paired PhoneCast VR receiver. While casting with dimming enabled, it also observes the system touch-start signal to restore local brightness temporarily. It receives no touch coordinates and does not read app text or inspect window content.</string>
+    <string name="remote_control_disclosure">Optional remote control uses Android Accessibility to inject taps, swipes, scrolls, and Back requested from the connected VR receiver. While casting with Dim phone enabled, the same service observes only Android\'s touch-start signal so a physical touch can restore brightness temporarily. It receives no touch coordinates and does not inspect app text or window content. Commands and video use the current unencrypted trusted-LAN connection.</string>
     <string name="enable_remote_control">Allow remote control while casting</string>
     <string name="open_accessibility_settings">Enable PhoneCast in Accessibility settings</string>
     <string name="remote_control_service_enabled">PhoneCast Accessibility service enabled</string>

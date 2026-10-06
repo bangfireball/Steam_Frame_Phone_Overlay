@@ -4,7 +4,7 @@
 
 This document records whether PhoneCast can continue capturing an Android phone while its physical display is off, and how Samsung Link to Windows / Microsoft Phone Link handles this experience.
 
-Research date: 2026-10-02
+Research dates: 2026-10-02; updated 2026-10-06 for Sprint 15
 
 ## Summary
 
@@ -160,45 +160,160 @@ No currently reviewed public Samsung or Android API establishes such a path, so 
 
 ## Recommended product decision
 
-For the initial PhoneCast release:
+For Sprint 15:
 
-- support **Keep screen awake while casting**;
-- provide guidance to use minimum brightness;
-- investigate safe brightness assistance separately;
+- enable **Dim phone while casting** by default, with a clear opt-out;
+- require Android's explicit Modify system settings approval before applying it;
+- keep the display logically awake and use a safe nonzero minimum brightness;
+- restore the prior manual/adaptive behavior on every reachable exit path;
 - clearly explain that locking the phone ends capture;
 - detect `MediaProjection.Callback.onStop()` and present a clean restart flow;
 - do not claim Samsung Phone Link-style screen-off support.
 
 Track an optional **Advanced panel-off mode** as a separate experiment using ADB/Shizuku. Do not make it part of the normal architecture until it is physically validated and its permission, recovery, and security implications are acceptable.
 
-## Backlog UX: automatic dim and temporary wake
+## Sprint 15 research update: automatic dim and temporary wake
 
-Sprint 15 tracks an opt-in **Dim phone while casting** mode. The intended user
-experience is:
+### Product decision
 
-1. casting begins and PhoneCast records the current manual/adaptive brightness
-   state;
-2. after an idle delay, the physical panel moves to its lowest safe brightness;
-3. physical interaction temporarily restores the previous brightness;
-4. the panel dims again after the configured delay while casting continues;
-5. stopping or losing projection restores the original brightness behavior.
+**Dim phone while casting is opt-out and enabled by default.** A fresh install,
+and an existing install with no saved Sprint 15 preference, starts with the
+preference enabled. The user can turn it off before or during casting, and doing
+so restores any PhoneCast-owned brightness change immediately.
 
-Implementing the physical-interaction trigger requires a focused experiment.
-A touchable full-screen application overlay receives the touch instead of
-passing that same event to the underlying app, while an untouchable overlay
-cannot observe the tap. Accessibility-dispatched remote gestures may also hit a
-touch guard. The implementation must not enable touch exploration, consume
-ordinary input unexpectedly, or block VR remote control merely to detect idle
-activity. If a dependable public signal is unavailable, provide explicit
-wake/dim controls and safe timed behavior rather than overclaiming automatic tap
-recognition.
+Default-on does not bypass Android consent. Device-wide dimming requires the
+separate **Modify system settings** special access. When the preference is on but
+access is absent, PhoneCast must explain the purpose in context and offer the
+system approval screen. Declining must leave casting functional and undimmed,
+without repeated coercive prompts. The implementation should model these states
+separately:
 
-The stronger requested privacy mode would blank the local view and discourage
-physical interaction without altering the stream. It remains research. A real
-Android lock is prohibited because it terminates projection on current Android;
-a capture-visible black overlay is also not useful. Dimming is the accepted
-fallback if an excluded local-only surface and safe physical-input guard cannot
-be implemented with supported APIs.
+```text
+Preference: enabled / disabled
+Capability: granted / unavailable
+Session: original / dimmed / temporarily restored / recovery needed
+```
+
+### Public API findings
+
+`WindowManager.LayoutParams.screenBrightness` is insufficient for PhoneCast's
+normal flow. Android documents it as a per-window override that applies while
+that window is in front; it cannot keep another foreground application's panel
+dimmed while PhoneCast captures it.
+
+The applicable public device-wide path is `Settings.System`:
+
+- declare `android.permission.WRITE_SETTINGS`;
+- check `Settings.System.canWrite(context)`;
+- direct the user to `Settings.ACTION_MANAGE_WRITE_SETTINGS` for explicit special
+  access on API 23 and newer;
+- read and write `SCREEN_BRIGHTNESS` and `SCREEN_BRIGHTNESS_MODE` only after that
+  approval.
+
+Android documents `SCREEN_BRIGHTNESS` as 1–255 and separately exposes automatic
+and manual modes. A predictable minimum therefore requires temporarily using
+manual mode. PhoneCast should persist the original mode and brightness before
+its first write, leave the automatic-brightness adjustment itself untouched,
+and restore brightness before restoring the original mode. The initial dim value
+must be nonzero and physically validated on the target phone; it must not assume
+that every OEM maps the same numeric value to the same usable luminance.
+
+### Restoration and failure model
+
+Before changing a system setting, synchronously persist a recovery record with:
+
+- original brightness;
+- original automatic/manual mode;
+- whether PhoneCast currently owns the override;
+- a session/generation identifier so stale cleanup cannot overwrite a later user
+  choice.
+
+Restore on explicit Stop, preference opt-out, projection `onStop()`, service
+teardown, permission loss, and normal disconnect policy. Attempt recovery at the
+next PhoneCast process start and from a boot receiver where Android permits it.
+Observe brightness-setting changes while the override is active: a deliberate
+user change should cancel PhoneCast ownership or become the new baseline rather
+than being silently overwritten later.
+
+This recovery is necessarily best-effort. Android 15 keeps a force-stopped app in
+the stopped state until direct or indirect user action, so PhoneCast cannot run
+cleanup at the instant of Force Stop or rely on a boot callback while still
+stopped. The safety design therefore also requires a nonblack dim value, an
+in-app and foreground-notification **Restore brightness** action, clear guidance
+that Android Quick Settings remains the emergency recovery path, and startup
+recovery before another dim attempt. Documentation and tests must not claim
+instant force-stop restoration.
+
+### Physical-interaction detection
+
+Android's accessibility API defines `TYPE_TOUCH_INTERACTION_START` and
+`TYPE_TOUCH_INTERACTION_END` as system-generated events for the user starting and
+ending a screen touch. PhoneCast's existing optional remote-control accessibility
+service can subscribe without retrieving window content, so this is the most
+credible public experiment for temporarily restoring brightness after physical
+interaction.
+
+It is not yet accepted behavior:
+
+- the service is optional and cannot be silently enabled for a default-on dim
+  preference;
+- the events provide no raw coordinates or trustworthy physical-versus-injected
+  source marker;
+- the target device must establish whether PhoneCast's own `dispatchGesture()`
+  calls also produce these events;
+- using accessibility for dim/wake must be added to PhoneCast's prominent
+  disclosure and Play Console declaration because the service is explicitly not
+  an accessibility tool.
+
+Do not request touch-exploration mode, install a touch-consuming full-screen
+overlay, inspect UI content, or claim raw global touch input. If the accessibility
+service is unavailable, the supported baseline is default-on timed dimming plus
+explicit temporary-restore controls; automatic physical-touch wake must be shown
+as unavailable rather than inferred.
+
+### Implemented baseline — awaiting physical validation
+
+The Android sender now implements the researched baseline:
+
+1. The persisted preference defaults to enabled and can be turned off at any
+   time. A 5, 15, 30, or 60 second idle delay is selectable; 15 seconds is the
+   default.
+2. First cast explains Modify system settings access. The user can open Android's
+   approval screen, cast undimmed, or turn the feature off. A declined prompt is
+   not repeated automatically; Settings retains an explicit capability button.
+3. A testable controller commits the original brightness/mode and expected
+   PhoneCast state before writing global settings. Dimming switches to manual
+   mode and brightness value 1. Temporary and final restoration write brightness
+   before restoring the original mode.
+4. If brightness differs from PhoneCast's expected value at final restoration,
+   the current level is preserved as a deliberate user change while the original
+   automatic/manual policy is restored.
+5. Recovery runs at application startup and `BOOT_COMPLETED` where Android allows
+   it. Force Stop remains an unavoidable gap until the user starts/interacts with
+   PhoneCast again, and revoked Modify system settings access prevents restoration
+   until access returns.
+6. The capture service holds a screen-dim wake lock while projection is active,
+   releases it on teardown, restores brightness on reachable stop paths, and
+   offers **Restore brightness** in both Settings and the foreground notification.
+   Temporary restoration restarts the configured idle timer.
+7. The existing optional accessibility service subscribes to the system-only
+   touch-start event. It does not request touch exploration or receive coordinates.
+   A bounded suppression interval surrounds PhoneCast's own `dispatchGesture()`
+   calls; target-device testing must still determine whether injected and physical
+   events can be distinguished reliably.
+
+JVM tests cover default nonzero dimming, adaptive/manual restoration, repeat
+callbacks, temporary restore/redim, denied capability, preservation of user
+brightness changes, interrupted-process recovery, and failed restoration. Android
+unit tests, debug APK assembly, and lint pass. None of these software checks proves
+panel luminance, MediaProjection isolation, wake behavior, accessibility event
+delivery, or recovery on the physical target phone.
+
+The stronger requested privacy mode remains research. A real Android lock is
+prohibited because Android 15 QPR1 and newer stop MediaProjection and invalidate
+the session. A capture-visible black overlay is also not useful. No supported
+public API reviewed here provides Phone Link-style local-only blanking for a
+normal application.
 
 ## Suggested validation matrix
 
@@ -206,15 +321,55 @@ Test at least:
 
 | Case | Expected result |
 |---|---|
-| Minimum panel brightness | Remote stream remains normally visible |
-| `FLAG_KEEP_SCREEN_ON` during capture | Screen does not time out while PhoneCast activity is visible |
-| User switches to another app | Keep-awake and brightness behavior is recorded |
+| Default preference with special access granted | Phone dims after the configured delay |
+| Default preference with access declined | Casting continues undimmed without repeated prompts |
+| Manual brightness before casting | Exact prior brightness and manual mode return on stop |
+| Adaptive brightness before casting | Adaptive mode and prior brightness behavior return on stop |
+| Minimum nonzero panel brightness | Remote stream remains normally visible and the local UI remains recoverable |
+| Physical touch with accessibility service enabled | Temporary wake behavior is measured without consuming the touch |
+| VR-injected gesture | Determine whether it emits the same accessibility touch event |
+| Accessibility service disabled | Explicit restore works; automatic touch wake is not claimed |
+| Projection revoke, permission removal, process death, reboot | Each reachable path restores or records recovery independently |
+| Force Stop | Limitation is visible; subsequent user launch restores before another dim |
+| User changes brightness while dimmed | PhoneCast does not later overwrite the deliberate choice |
 | User presses power/locks phone | Projection stops on Android 15 QPR1+ and restart UI appears |
-| ADB `display power-off` during projection | Determine whether stream continues without a lock event |
-| Restore display through ADB and physical power button | Device always remains recoverable |
-| Orientation change while panel is off | Stream and encoder reconfiguration remain functional |
+| Portrait/landscape transition while dimmed | Stream, brightness ownership, and encoder reconfiguration remain functional |
 | Protected/`FLAG_SECURE` application | Protected content remains excluded as required |
+| ADB/Shizuku/panel-off integration | Explicitly rejected and out of scope |
+
+## Sprint 15 closure — 2026-10-06
+
+The project owner physically used the implemented default-on dimming flow and
+approved Sprint 15. The owner reports that ordinary dimming, temporary
+restoration, and casting behavior are working as intended. This approval closes
+the supported public-API brightness baseline; it does not claim every row of the
+expanded failure matrix was separately witnessed or that minimum brightness is a
+measured panel-power benchmark.
+
+The proposed advanced Developer Options / ADB / Shizuku panel-off approach was
+reviewed after implementation and **explicitly rejected by the project owner**.
+Do not add, expose, document as a product option, or treat as a pending Sprint 15
+requirement any ADB, Shizuku, shell, display-power, or panel-off integration.
+PhoneCast remains limited to its approved public-API, awake-and-unlocked,
+minimum-brightness mode. Android locking continues to terminate MediaProjection
+as documented.
+
+Known platform constraint retained at closure: Force Stop cannot run immediate
+brightness cleanup. PhoneCast records recovery before changing brightness and
+attempts restoration on a later app start or boot when it retains Modify system
+settings access. Android Quick Settings remains the recovery route if that
+best-effort path cannot run.
+
+## Primary references for the Sprint 15 update
+
+- [Android `Settings.System`](https://developer.android.com/reference/android/provider/Settings.System) — `canWrite`, `SCREEN_BRIGHTNESS`, and brightness mode.
+- [Android `Settings.ACTION_MANAGE_WRITE_SETTINGS`](https://developer.android.com/reference/android/provider/Settings#ACTION_MANAGE_WRITE_SETTINGS) — user-managed special access.
+- [Android `WindowManager.LayoutParams.screenBrightness`](https://developer.android.com/reference/android/view/WindowManager.LayoutParams#screenBrightness) — foreground-window-only override.
+- [Android `AccessibilityEvent.TYPE_TOUCH_INTERACTION_START`](https://developer.android.com/reference/android/view/accessibility/AccessibilityEvent#TYPE_TOUCH_INTERACTION_START) — system touch-interaction signal.
+- [Google Play AccessibilityService policy](https://support.google.com/googleplay/android-developer/answer/10964491) — declaration, prominent disclosure, and consent requirements for non-accessibility tools.
+- [Android 15 behavior changes](https://developer.android.com/about/versions/15/behavior-changes-all) — force-stop/stopped-state behavior.
+- [Android media projection](https://developer.android.com/media/grow/media-projection) — lock-screen termination and invalid projection lifecycle.
 
 ## Conclusion
 
-Samsung Phone Link does not appear to solve this by merely dimming the phone. It offers a special black/hidden local-display state while remote mirroring continues. Public documentation confirms the behavior but does not disclose its implementation. PhoneCast must therefore treat minimum-brightness, awake-and-unlocked operation as the supported baseline, with panel-off operation limited to future privileged or advanced experiments.
+Samsung Phone Link does not appear to solve this by merely dimming the phone. It offers a special black/hidden local-display state while remote mirroring continues. Public documentation confirms the behavior but does not disclose its implementation. PhoneCast will therefore use default-on, user-disableable minimum-brightness operation as the supported Sprint 15 baseline, subject to explicit Android special-access approval and best-effort recovery. Panel-off operation remains limited to future privileged or advanced experiments.

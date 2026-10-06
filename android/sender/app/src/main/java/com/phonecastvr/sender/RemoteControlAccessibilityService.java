@@ -15,6 +15,7 @@ public final class RemoteControlAccessibilityService extends AccessibilityServic
     static final String PREFERENCE_REMOTE_CONTROL = "remote_control_enabled";
     private static final String TAG = "PhoneCastRemote";
     private static volatile RemoteControlAccessibilityService instance;
+    private static volatile long injectedTouchSuppressionUntil;
 
     private float downX;
     private float downY;
@@ -64,7 +65,13 @@ public final class RemoteControlAccessibilityService extends AccessibilityServic
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
-        // PhoneCast injects only user-requested gestures and does not inspect UI content.
+        // This event carries no coordinates or window content. Suppress the short
+        // interval around PhoneCast's own injected gestures so VR interaction does
+        // not normally wake the physical panel.
+        if (event.getEventType() == AccessibilityEvent.TYPE_TOUCH_INTERACTION_START &&
+                SystemClock.uptimeMillis() > injectedTouchSuppressionUntil) {
+            ScreenCaptureService.physicalTouchObserved();
+        }
     }
 
     @Override public void onInterrupt() {
@@ -145,6 +152,7 @@ public final class RemoteControlAccessibilityService extends AccessibilityServic
         GestureDescription gesture = new GestureDescription.Builder()
                 .addStroke(activeStroke)
                 .build();
+        suppressInjectedTouchEvents();
         boolean accepted = dispatchGesture(gesture, new GestureResultCallback() {
             @Override public void onCompleted(GestureDescription description) {
                 if (generation != pointerGestureGeneration) return;
@@ -209,9 +217,14 @@ public final class RemoteControlAccessibilityService extends AccessibilityServic
         GestureDescription gesture = new GestureDescription.Builder()
                 .addStroke(new GestureDescription.StrokeDescription(path, 0, durationMillis))
                 .build();
+        suppressInjectedTouchEvents();
         if (!dispatchGesture(gesture, null, null)) {
             Log.w(TAG, "Android rejected a remote gesture");
         }
+    }
+
+    private static void suppressInjectedTouchEvents() {
+        injectedTouchSuppressionUntil = SystemClock.uptimeMillis() + 1000L;
     }
 
     private DisplayMetrics displayMetrics() {

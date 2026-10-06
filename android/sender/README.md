@@ -35,6 +35,8 @@ Start `phonecast-stream-receiver.exe --pair-code 123456` for desktop video or `p
 
 Optional features are under the main screen's menu button so the launch screen remains focused on connection and Start/Stop. Remote control is optional. Read the in-app disclosure, check **Allow remote control while casting**, open Accessibility settings, and explicitly enable **PhoneCast remote control**. Casting does not require remote control. The service can inject user-requested taps, swipes, scrolls, and Back, but is configured not to retrieve window content. Disable either gate to stop control. See `docs/remote-control.md` for alternatives, Google Play policy implications, and security limits.
 
+**Dim phone while casting** is enabled by default and can be turned off in Settings. On first use, Android requires separate **Modify system settings** approval before PhoneCast can change device-wide brightness. If access is declined, casting continues undimmed. The default 15-second delay can be changed to 5, 30, or 60 seconds. Settings and the casting notification provide **Restore brightness**; when the optional PhoneCast Accessibility service is enabled, a physical touch also attempts temporary restoration without collecting touch coordinates. PhoneCast restores the prior brightness mode on reachable stop paths and records recovery state before changing it. Force Stop cannot run immediate cleanup; reopen PhoneCast or use Android Quick Settings if recovery is needed. This is minimum-brightness operation, not panel-off or lock-screen capture.
+
 Notification forwarding is also optional and off by default. Enable **Forward notifications to VR while casting**, grant Android notification access, and optionally enter comma-separated package allow/block lists. Selecting a VR card reveals the phone and invokes the original notification tap action when the source supplied one and it remains valid. Cards hide titles and message text unless **Include notification titles and message text (sensitive)** is explicitly enabled. Notification data is sent only through the active casting connection. See `docs/notifications.md` for the privacy model and physical-validation checklist.
 
 Useful diagnostics:
@@ -60,6 +62,7 @@ adb logcat -s PhoneCastCapture
 - Refreshes the main Start/Stop state when the activity resumes, so an externally ended projection does not leave stale controls.
 - Reports the in-app remote-control consent and Accessibility-service gate independently to the receiver.
 - Provides a home-screen Quick connect widget that reuses the saved receiver address, pairing code, and streaming profile before showing Android's mandatory capture-consent prompt.
+- Defaults to opt-out phone dimming after 15 seconds when Modify system settings access is granted, with durable restoration state and explicit temporary-restore controls.
 
 ## Optional phone playback audio
 

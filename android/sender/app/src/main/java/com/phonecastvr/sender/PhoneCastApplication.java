@@ -8,5 +8,6 @@ public final class PhoneCastApplication extends Application {
         // If the prior process died after muting global media volume, repair it
         // before any new activity or capture service starts.
         AndroidPhoneAudioMute.recoverAfterUncleanShutdown(this);
+        AndroidScreenBrightness.recoverAfterUncleanShutdown(this);
     }
 }

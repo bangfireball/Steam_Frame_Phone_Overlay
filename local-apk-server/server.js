@@ -59,7 +59,7 @@ return http.createServer((request, response) => {
 <h1>PhoneCast Downloads</h1>
 <h2>Android phone</h2>
 ${apkAvailable
-  ? '<p><a href="/phonecast-sender.apk">Download the current Android APK</a></p><p>The sender remains compatible with the Sprint 14 receiver and adds the resizable 1 × 1 Quick connect widget and PhoneCast app mark. Optional phone playback audio is off by default.</p>'
+  ? '<p><a href="/phonecast-sender.apk">Download the current Android APK</a></p><p>The sender remains compatible with the Sprint 14 receiver. Dim phone while casting is enabled by default; approve Android\'s separate Modify system settings access to use it, or cast undimmed. Settings and the casting notification can restore brightness temporarily. Optional phone playback audio is off by default.</p>'
   : "<p>The debug APK has not been built yet.</p>"}
 <h2>Steam Frame</h2>
 ${steamFrameAvailable

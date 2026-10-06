@@ -2184,7 +2184,19 @@ Candidate shortcuts include show/hide, glance, pin/unpin, and opening PhoneCast 
 
 # Sprint 15 — Android Privacy Display Mode
 
-**Status:** `[ ] Backlog`
+**Status:** `[x] Complete — project-owner approved after physical use`
+
+- `[x]` Public brightness, permission, touch-signal, recovery, and policy research
+- `[x]` Product decision: Dim phone while casting is opt-out and enabled by default
+- `[x]` Default-on preference, explicit opt-out, and Modify system settings capability UX
+- `[x]` Configurable idle delay, nonzero minimum brightness, and casting wake lock
+- `[x]` Durable brightness ownership plus process-start and boot recovery
+- `[x]` In-app and foreground-notification temporary restore controls
+- `[x]` Accessibility touch-start experiment without coordinates, content retrieval, or touch exploration
+- `[x]` Android JVM tests, debug APK assembly, and lint
+- `[x]` Project-owner physical validation and approval: normal dimming, temporary restoration, and ordinary casting behavior work as intended
+- `[!]` Force Stop cannot run immediate cleanup; subsequent app start/boot recovery is best-effort and requires retained Modify system settings access
+- `[!]` Advanced ADB/Shizuku/panel-off integration was considered and explicitly rejected; it is out of scope
 
 ## Objective
 
@@ -2193,8 +2205,13 @@ streaming, without dimming or obscuring the VR stream.
 
 ## Supported baseline
 
-Implement an explicit, optional **Dim phone while casting** mode using public
-Android APIs where device behavior permits it:
+Implement **Dim phone while casting** as an opt-out setting that is enabled by
+default. It remains user-disableable and must not bypass Android's explicit
+**Modify system settings** special-access approval. If that access is declined or
+unavailable, casting continues undimmed and the app reports the capability state
+without coercive repeated prompts.
+
+Use public Android APIs where device behavior permits it:
 
 1. Save the user's brightness and adaptive-brightness state before changing it.
 2. After casting starts, wait for a configurable idle delay and reduce physical
@@ -2206,10 +2223,15 @@ Android APIs where device behavior permits it:
 6. Provide a persistent notification action and an obvious in-app recovery path
    that immediately restores brightness.
 
-The feature must be separately opt-in and explain any required Android
-**Modify system settings** access. It must not silently disable adaptive
-brightness, leave the display unreadable after a crash, or log brightness and
-interaction history unnecessarily.
+The preference is enabled by default but must clearly explain the required
+Android **Modify system settings** access before opening the system approval
+screen. Preference state, Android capability, and active session state must be
+reported separately. It must not silently disable adaptive brightness, leave the
+display unreadable after a crash, repeatedly pressure a user who declines access,
+or log brightness and interaction history unnecessarily. Recovery is
+best-effort: Android force-stop can prevent immediate cleanup, so use a safe
+nonzero dim level, durable ownership state, explicit restore controls, and
+next-process/boot recovery without claiming instant force-stop restoration.
 
 Brightness is normally applied after display composition and therefore may dim
 the physical panel without affecting MediaProjection output, but this must be
@@ -2242,7 +2264,9 @@ control, ship dimming only and document the limitation.
 
 ## Acceptance Criteria
 
-- Dimming is opt-in and active only during an authorized casting session.
+- Dimming is enabled by default, can be opted out of at any time, and is active
+  only during an authorized casting session after Android grants Modify system
+  settings access.
 - The VR stream retains normal brightness and content while the physical panel
   is dimmed.
 - Physical interaction restores the exact prior brightness behavior promptly,
@@ -2260,7 +2284,7 @@ control, ship dimming only and document the limitation.
 - Physical validation covers the target phone, screen rotation, reconnect,
   notification shade use, casting stop/restart, and at least one failure path.
 
-Detailed existing research and the validation matrix are in
+Detailed existing research, closure notes, and the validation matrix are in
 [`docs/android-screen-off.md`](docs/android-screen-off.md).
 
 ---
