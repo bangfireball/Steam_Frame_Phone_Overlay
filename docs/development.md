@@ -319,8 +319,13 @@ decent audible playback but severely reduced video FPS with audio enabled. The
 receiver-only playout correction now retains bounded pictures through independent
 100 ms deadlines and releases only due pictures; its continuous-cadence and
 clock-stall/overflow regressions pass. The new console/CSV `video_sync_*` fields
-support the pending physical retest (see `phone-audio.md`). The existing Sprint 13
-APK needs no change for this correction. Sprint 12 decoder fault and Vulkan
+support the pending physical retest (see `phone-audio.md`). The second receiver-only
+correction also bounds dispatch, preserves each decoded picture's presentation
+opportunity, interpolates a bounded monotonic audio clock, and flushes/reanchors
+rather than recreating healthy outputs for forward packet gaps. Additional CSV
+fields expose dispatch/loop/submission gaps and audio gap/flush/open/drop counters.
+Windows/ARM64 software tests and private Pulse flush tests pass; physical jitter,
+sync and game mixing remain unapproved. The existing Sprint 13 APK needs no change. Sprint 12 decoder fault and Vulkan
 reliability follow-ups remain separate.
 
 ## CMake options

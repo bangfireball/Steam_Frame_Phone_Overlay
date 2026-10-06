@@ -1,4 +1,5 @@
 #include "phonecast/core/audio/AudioPlayback.h"
+#include "phonecast/core/audio/MediaClock.h"
 #include <algorithm>
 #include <cmath>
 #include <condition_variable>
@@ -32,7 +33,7 @@ struct AudioPlayback::Implementation {
         auto output = factory();
         bool opened = false;
         unsigned attempts = 0;
-        std::uint64_t localRevision = 0;
+        std::uint64_t localRevision = 0, localTimeline = 0;
         std::uint64_t endPts = 0;
         Clock::time_point retryAt{}, startAt{}, lastWrite{};
         std::unique_lock<std::mutex> lock(mutex);
@@ -41,8 +42,25 @@ struct AudioPlayback::Implementation {
                 localRevision = revision;
                 lock.unlock(); output->Close(); lock.lock();
                 opened = false; attempts = 0; endPts = 0;
-                audible = 0; stats.latencyMicros = 0;
+                localTimeline = timeline;
+                mediaClock.Reset(); stats.latencyMicros = 0;
                 retryAt = {}; startAt = Clock::now() + std::chrono::milliseconds(20);
+            }
+            if (localTimeline != timeline) {
+                localTimeline = timeline;
+                const auto flushingRevision = revision;
+                mediaClock.Reset(); endPts = 0; stats.latencyMicros = 0;
+                if (opened) {
+                    lock.unlock(); std::string error; const bool ok = output->Flush(error); lock.lock();
+                    if (flushingRevision != revision) continue;
+                    if (ok) { ++stats.flushes; }
+                    else {
+                        ++stats.failures; stats.status = "Audio flush failed: " + error;
+                        opened = false;
+                        lock.unlock(); output->Close(); lock.lock();
+                        retryAt = Clock::now()+std::chrono::seconds(1);
+                    }
+                }
             }
             if (epoch == 0 || muted) {
                 stats.status = muted ? "Phone audio muted" : "Audio off";
@@ -51,13 +69,16 @@ struct AudioPlayback::Implementation {
             }
             const auto now = Clock::now();
             while (!queue.empty() && now - queue.front().arrival > std::chrono::milliseconds(100)) {
-                queue.pop_front(); ++stats.dropped;
+                queue.pop_front(); ++stats.dropped; ++stats.staleDrops;
             }
             if (!opened && !queue.empty() && attempts < 3 && now >= retryAt) {
                 const auto selected = device;
                 const auto openingRevision = revision;
-                ++attempts;
+                ++attempts; ++stats.opens;
+                const auto openStarted = Clock::now();
                 lock.unlock(); std::string error; const bool ok = output->Open(selected,error); lock.lock();
+                stats.maximumOpenMicros = std::max(stats.maximumOpenMicros,static_cast<std::uint64_t>(
+                    std::chrono::duration_cast<std::chrono::microseconds>(Clock::now()-openStarted).count()));
                 if (openingRevision != revision) continue;
                 opened = ok;
                 if (ok) { stats.status = output->Description(); startAt = Clock::now() + std::chrono::milliseconds(20); }
@@ -66,12 +87,13 @@ struct AudioPlayback::Implementation {
             if (opened && now >= startAt && !queue.empty()) {
                 auto block = queue.front().block;
                 const auto writingRevision = revision;
+                const auto writingTimeline = timeline;
                 Scale(block.samples,volume);
                 lock.unlock(); std::string error; const bool accepted = output->Write(block.samples,error); lock.lock();
-                if (writingRevision != revision) continue;
+                if (writingRevision != revision || writingTimeline != timeline) continue;
                 if (!error.empty()) {
                     ++stats.failures; stats.status = "Audio output failed: " + error;
-                    opened = false; audible = 0; endPts = 0;
+                    opened = false; mediaClock.Reset(); endPts = 0;
                     lock.unlock(); output->Close(); lock.lock();
                     retryAt = Clock::now() + std::chrono::seconds(1);
                 } else if (accepted) {
@@ -84,14 +106,14 @@ struct AudioPlayback::Implementation {
             }
             if (opened) {
                 const auto observingRevision = revision;
+                const auto observingTimeline = timeline;
                 lock.unlock(); const auto latency = output->LatencyMicros(); lock.lock();
-                if (observingRevision != revision) continue;
+                if (observingRevision != revision || observingTimeline != timeline) continue;
                 stats.latencyMicros = latency;
                 // No extrapolation past the last submitted sample. If the source
                 // stalls, return to video-only presentation rather than freeze it.
-                audible = endPts > latency && Clock::now() - lastWrite < std::chrono::milliseconds(100)
-                    ? endPts - latency : 0;
-                audibleObserved = Clock::now();
+                if (endPts > latency && Clock::now() - lastWrite < std::chrono::milliseconds(100))
+                    mediaClock.Observe(endPts-latency,endPts,Clock::now());
             }
             wake.wait_for(lock,std::chrono::milliseconds(2));
         }
@@ -103,8 +125,8 @@ struct AudioPlayback::Implementation {
     bool running{true}, muted{false}, haveSequence{false};
     float volume{0.7F};
     std::string device;
-    std::uint64_t epoch{}, revision{1}, sequence{}, lastPts{}, audible{};
-    Clock::time_point audibleObserved{};
+    std::uint64_t epoch{}, revision{1}, timeline{1}, sequence{}, lastPts{};
+    MediaClock mediaClock;
     std::deque<Queued> queue;
     PlaybackStats stats;
     std::thread worker;
@@ -114,14 +136,14 @@ AudioPlayback::~AudioPlayback() = default;
 void AudioPlayback::Configure(std::uint64_t epoch) {
     auto& s = *impl_; std::lock_guard<std::mutex> lock(s.mutex);
     s.epoch = epoch; ++s.revision; s.stats.dropped += s.queue.size(); s.queue.clear();
-    s.haveSequence = false; s.lastPts = 0; s.audible = 0; s.wake.notify_all();
+    s.haveSequence = false; s.lastPts = 0; s.mediaClock.Reset(); s.wake.notify_all();
 }
 void AudioPlayback::Reset() { Configure(0); }
 void AudioPlayback::SetControls(bool muted, float volume, std::string device) {
     auto& s = *impl_; std::lock_guard<std::mutex> lock(s.mutex);
     volume = std::isfinite(volume) ? std::clamp(volume,0.0F,1.0F) : 0.0F;
     if (muted != s.muted || device != s.device) {
-        ++s.revision; s.stats.dropped += s.queue.size(); s.queue.clear(); s.audible = 0;
+        ++s.revision; s.stats.dropped += s.queue.size(); s.queue.clear(); s.mediaClock.Reset();
     }
     s.muted = muted; s.volume = volume; s.device = std::move(device); s.wake.notify_all();
 }
@@ -130,14 +152,20 @@ void AudioPlayback::Enqueue(Block block) {
     if (block.epoch != s.epoch || s.epoch == 0 || block.samples.size() != BytesPerBlock ||
         block.timestampMicros == 0 || s.muted || !s.running ||
         (s.haveSequence && (block.sequence <= s.sequence || block.timestampMicros <= s.lastPts))) {
-        ++s.stats.dropped; return;
+        ++s.stats.dropped; ++s.stats.rejectedDrops; return;
     }
-    // A long discontinuity must not concatenate old output with a new timeline.
+    if (s.haveSequence) {
+        if (block.sequence - s.sequence > 1) ++s.stats.sequenceGaps;
+        if (block.timestampMicros - s.lastPts > 20000) ++s.stats.timestampGaps;
+    }
+    // Missing packets are not device failure. Large forward gaps discard both
+    // application and backend sound on the worker, retaining the healthy device.
     if (s.haveSequence && block.timestampMicros - s.lastPts > 100000) {
-        s.stats.dropped += s.queue.size(); s.queue.clear(); ++s.revision; s.audible = 0;
+        s.stats.dropped += s.queue.size(); s.queue.clear(); ++s.timeline; s.mediaClock.Reset();
+        ++s.stats.reanchors;
     }
     s.sequence = block.sequence; s.lastPts = block.timestampMicros; s.haveSequence = true;
-    if (s.queue.size() >= 10) { s.queue.pop_front(); ++s.stats.dropped; }
+    if (s.queue.size() >= 10) { s.queue.pop_front(); ++s.stats.dropped; ++s.stats.overflowDrops; }
     s.queue.push_back({std::move(block),Clock::now()}); s.wake.notify_all();
 }
 PlaybackStats AudioPlayback::Stats() const {
@@ -146,7 +174,7 @@ PlaybackStats AudioPlayback::Stats() const {
 }
 std::uint64_t AudioPlayback::AudibleTimestamp() const {
     auto& s = *impl_; std::lock_guard<std::mutex> lock(s.mutex);
-    return Clock::now() - s.audibleObserved < std::chrono::milliseconds(50) ? s.audible : 0;
+    return s.mediaClock.Timestamp(Clock::now());
 }
 void AudioPlayback::Stop() { impl_->Stop(); }
 void AudioVideoQueue::Add(VideoFrame frame, Clock::time_point now) {

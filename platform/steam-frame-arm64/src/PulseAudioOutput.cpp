@@ -22,6 +22,8 @@ struct PulseAudioOutput::Implementation {
     PULSE_FUNCTION(stream_write); PULSE_FUNCTION(stream_get_latency);
     PULSE_FUNCTION(stream_get_device_name); PULSE_FUNCTION(stream_disconnect);
     PULSE_FUNCTION(stream_unref); PULSE_FUNCTION(strerror);
+    PULSE_FUNCTION(stream_flush); PULSE_FUNCTION(operation_get_state);
+    PULSE_FUNCTION(operation_cancel); PULSE_FUNCTION(operation_unref);
 #undef PULSE_FUNCTION
     bool Load(std::string& error) {
         if (library) return true;
@@ -35,6 +37,7 @@ struct PulseAudioOutput::Implementation {
         LOAD(context_disconnect); LOAD(context_unref); LOAD(stream_new); LOAD(stream_connect_playback);
         LOAD(stream_get_state); LOAD(stream_writable_size); LOAD(stream_write); LOAD(stream_get_latency);
         LOAD(stream_get_device_name); LOAD(stream_disconnect); LOAD(stream_unref); LOAD(strerror);
+        LOAD(stream_flush); LOAD(operation_get_state); LOAD(operation_cancel); LOAD(operation_unref);
 #undef LOAD
         return true;
     }
@@ -99,6 +102,26 @@ bool PulseAudioOutput::Write(const std::vector<std::uint8_t>& samples, std::stri
         error = s.Error(); return false;
     }
     return true;
+}
+bool PulseAudioOutput::Flush(std::string& error) {
+    auto& s = *impl_; error.clear();
+    if (!s.Pump() || !s.stream) { error = "Pulse output unavailable during flush"; return false; }
+    bool succeeded = false;
+    auto* operation = s.stream_flush(s.stream,[](pa_stream*, int success, void* userdata) {
+        *static_cast<bool*>(userdata) = success != 0;
+    },&succeeded);
+    if (!operation) { error = s.Error(); return false; }
+    const auto deadline = std::chrono::steady_clock::now()+std::chrono::milliseconds(100);
+    while (s.operation_get_state(operation) == PA_OPERATION_RUNNING) {
+        if (!s.Pump() || std::chrono::steady_clock::now() >= deadline) {
+            s.operation_cancel(operation); s.operation_unref(operation);
+            error = "Pulse flush failed or exceeded 100 ms"; return false;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    s.operation_unref(operation);
+    if (!succeeded) error = "Pulse rejected playback flush";
+    return succeeded;
 }
 std::uint64_t PulseAudioOutput::LatencyMicros() {
     auto& s = *impl_; if (!s.Pump() || !s.stream) return 0;

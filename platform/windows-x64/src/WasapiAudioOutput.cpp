@@ -93,6 +93,17 @@ bool WasapiAudioOutput::Write(const std::vector<std::uint8_t>& samples, std::str
     if (FAILED(hr)) { error = Failure(hr); return false; }
     return true;
 }
+bool WasapiAudioOutput::Flush(std::string& error) {
+    auto& s = *impl_; error.clear();
+    if (!s.client) { error = "Audio output is closed"; return false; }
+    // Reset requires a stopped stream and discards padding without changing
+    // the shared endpoint or other applications' sessions.
+    HRESULT hr = s.client->Stop();
+    if (SUCCEEDED(hr)) hr = s.client->Reset();
+    if (SUCCEEDED(hr)) hr = s.client->Start();
+    if (FAILED(hr)) { error = Failure(hr); return false; }
+    return true;
+}
 std::uint64_t WasapiAudioOutput::LatencyMicros() {
     UINT32 padding = 0;
     if (!impl_->client || FAILED(impl_->client->GetCurrentPadding(&padding))) return 0;

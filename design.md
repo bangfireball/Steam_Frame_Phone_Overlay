@@ -1982,6 +1982,26 @@ Sprint 12 decoder-fault validation and Vulkan hang/recovery remain separate work
 
 ---
 
+## Sprint 13 implementation continuation — review branch
+
+The previously uncommitted Sprint 13 baseline and first cadence correction are
+preserved as `fece424` on `review/sprint-13-av-timing`. The next receiver-only
+correction now implements bounded video/audio dispatch, a presentation opportunity
+for every decoded picture, bounded monotonic audible-clock interpolation, and
+worker-side backend flush/reanchor instead of stream recreation for forward audio
+gaps above 100 ms. New aggregate diagnostics expose dispatch/loop/submission gaps,
+audio sequence/PTS gaps, flushes/opens, and classified drops.
+
+Windows build/all 12 CTest tests pass; ARM64 build and QEMU portable/audio/runtime
+tests pass. Private Pulse null-sink tests pass including flush/write-after-flush.
+The rebuilt receiver bundle and hashes are recorded in `docs/phone-audio.md`.
+No hardware receiver, SteamVR, or audio service was restarted. Physical smoothness,
+lip-sync, routing and game mixing remain pending; stable fallback scheduling and
+clock-state hysteresis remain further tuning work. This does not close Sprint 13
+or begin Sprint 14. The previous handoff above is historical implementation state.
+
+---
+
 # Sprint 14 — Gestures and UI
 
 **Status:** `[ ] Not started`

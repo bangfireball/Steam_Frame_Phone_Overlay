@@ -56,6 +56,11 @@ Recorded receiver measurements include:
   and last dequeued picture's hold time and estimated picture-minus-audible PTS
   skew (only when `video_sync_skew_valid=1`; a media-time estimate, not measured
   glass-to-glass delay or verified lip-sync);
+- cooperative dispatch message/time maxima, submission-gap maximum, and event/input/
+  media loop maximum (before diagnostics/logging/sleep); gaps include idle/static
+  content and are not photon-level measurements;
+- audio sequence/PTS gap, reanchor, backend flush/open, classified stale/overflow/
+  rejected-drop counters, and maximum backend-open duration;
 - PhoneCast process CPU, working set, and private memory;
 - OpenVR's latest scene/compositor frame timing, including total/compositor GPU time, compositor CPU time, dropped/mispresented frames, and reprojection flags.
 

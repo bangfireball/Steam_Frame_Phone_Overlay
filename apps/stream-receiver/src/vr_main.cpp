@@ -1,6 +1,7 @@
 #include "phonecast/core/logging/ConsoleLogger.h"
 #include "phonecast/core/protocol/StreamProtocol.h"
 #include "phonecast/core/streaming/DecoderRecoveryController.h"
+#include "phonecast/core/streaming/DispatchBudget.h"
 #include "phonecast/core/audio/AudioPlayback.h"
 #include "phonecast/platform/openvr/OpenVrOverlayRenderer.h"
 #include "phonecast/platform/network/TcpVideoServer.h"
@@ -322,7 +323,7 @@ int main(int argc, char** argv) {
                           "decoder_recovery_failed_attempts,audio_submitted,audio_dropped,audio_failures,"
                           "audio_queued,audio_output_latency_ms,audio_bitrate_mbps,"
                           "video_sync_queued,video_sync_deadline_releases,video_sync_overflow_releases,"
-                          "video_sync_coalesced,video_sync_last_hold_ms,video_sync_skew_valid,video_sync_estimated_skew_ms\n";
+                          "video_sync_coalesced,video_sync_last_hold_ms,video_sync_skew_valid,video_sync_estimated_skew_ms,dispatch_max_messages,dispatch_max_ms,presentation_max_gap_ms,loop_max_ms,audio_sequence_gaps,audio_timestamp_gaps,audio_reanchors,audio_flushes,audio_opens,audio_stale_drops,audio_overflow_drops,audio_rejected_drops,audio_max_open_ms\n";
         std::cout << "Writing performance samples to " << performanceLogPath.string() << ".\n";
     }
 
@@ -425,6 +426,9 @@ int main(int argc, char** argv) {
     double windowQueueMillis = 0.0;
     double maximumQueueMillis = 0.0;
     std::uint64_t windowMessages = 0;
+    std::size_t maximumDispatchMessages = 0;
+    double maximumDispatchMillis = 0.0, maximumPresentationGapMillis = 0.0, maximumLoopMillis = 0.0;
+    std::chrono::steady_clock::time_point previousPresentation{};
     phonecast::platform::network::VideoServerStats previousServerStats{};
     auto lastStats = std::chrono::steady_clock::now();
     auto connectionStarted = lastStats;
@@ -455,7 +459,9 @@ int main(int argc, char** argv) {
             std::cerr << "[decoder] Warning: " << resyncError << '\n';
     };
 
-    while (running && renderer.PumpEvents()) {
+    while (running) {
+        const auto loopStarted = std::chrono::steady_clock::now();
+        if (!renderer.PumpEvents()) break;
 #ifndef _WIN32
         if (standaloneRuntime.TakeDashboardFocusRequest() &&
             !renderer.FocusDashboard(error))
@@ -615,7 +621,7 @@ int main(int argc, char** argv) {
         }
 
         phonecast::core::PointerEvent pointerEvent;
-        while (renderer.TakePointerEvent(pointerEvent)) {
+        for (unsigned i = 0; i < 32 && renderer.TakePointerEvent(pointerEvent); ++i) {
             if (!server.Send(pointerEvent, error))
                 std::cerr << "[input] " << error << '\n';
         }
@@ -721,7 +727,7 @@ int main(int argc, char** argv) {
         }
 
         Message audioMessage;
-        while (server.PopAudio(audioMessage)) {
+        for (unsigned i = 0; i < 12 && server.PopAudio(audioMessage); ++i) {
             using namespace phonecast::core::audio;
             if (audioMessage.type == MessageType::AudioConfig) {
                 if (ParseConfiguration(audioMessage,audioEpoch)) {
@@ -744,9 +750,11 @@ int main(int argc, char** argv) {
 
         Message message;
         phonecast::core::VideoFrame latestFrame;
-        bool haveFrame = false;
         std::chrono::microseconds queueAge{};
-        while (server.Pop(message, &queueAge)) {
+        const auto dispatchStarted = std::chrono::steady_clock::now();
+        phonecast::core::DispatchBudget dispatchBudget(dispatchStarted);
+        while (dispatchBudget.CanDispatch(std::chrono::steady_clock::now()) && server.Pop(message, &queueAge)) {
+            dispatchBudget.Dispatched();
             const double queueMillis = queueAge.count() / 1000.0;
             windowQueueMillis += queueMillis;
             maximumQueueMillis = std::max(maximumQueueMillis, queueMillis);
@@ -829,12 +837,16 @@ int main(int argc, char** argv) {
             } else if (produced) {
                 windowDecodeMillis += std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now() - decodeStarted).count();
-                latestFrame = std::move(frame);
-                haveFrame = true;
+                videoPlayout.Add(std::move(frame),std::chrono::steady_clock::now());
                 ++windowDecodedFrames;
+                // Give every decoded picture a presentation opportunity and
+                // return to interaction before consuming more transport work.
+                break;
             }
         }
-        if (haveFrame) videoPlayout.Add(std::move(latestFrame),std::chrono::steady_clock::now());
+        maximumDispatchMessages = std::max(maximumDispatchMessages,dispatchBudget.Count());
+        maximumDispatchMillis = std::max(maximumDispatchMillis,std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - dispatchStarted).count());
         if (videoPlayout.Take(audio.AudibleTimestamp(),std::chrono::steady_clock::now(),latestFrame)) {
             const auto renderStarted = std::chrono::steady_clock::now();
             if (!renderer.SubmitFrame(latestFrame, error)) {
@@ -844,6 +856,11 @@ int main(int argc, char** argv) {
             windowRenderMillis += std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now() - renderStarted).count();
             ++windowRenderedFrames;
+            const auto presentedAt = std::chrono::steady_clock::now();
+            if (previousPresentation != std::chrono::steady_clock::time_point{})
+                maximumPresentationGapMillis = std::max(maximumPresentationGapMillis,
+                    std::chrono::duration<double, std::milli>(presentedAt - previousPresentation).count());
+            previousPresentation = presentedAt;
             if (!firstFrameReported) {
                 firstSubmittedMillis = std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now() - connectionStarted).count();
@@ -853,6 +870,8 @@ int main(int argc, char** argv) {
         }
 
         const auto now = std::chrono::steady_clock::now();
+        maximumLoopMillis = std::max(maximumLoopMillis,
+            std::chrono::duration<double, std::milli>(now - loopStarted).count());
         if (notificationShowing && now >= notificationDeadline) {
             if (!renderer.HideNotification(error))
                 std::cerr << "[notification] " << error << '\n';
@@ -921,6 +940,15 @@ int main(int argc, char** argv) {
                       << " audio-submitted=" << audioStats.submitted
                       << " audio-dropped=" << audioStats.dropped + server.AudioDropped()
                       << " audio-failures=" << audioStats.failures
+                      << " audio-sequence-gaps=" << audioStats.sequenceGaps
+                      << " audio-timestamp-gaps=" << audioStats.timestampGaps
+                      << " audio-reanchors=" << audioStats.reanchors
+                      << " audio-flushes=" << audioStats.flushes
+                      << " audio-opens=" << audioStats.opens
+                      << " audio-stale-drops=" << audioStats.staleDrops
+                      << " audio-overflow-drops=" << audioStats.overflowDrops
+                      << " audio-rejected-drops=" << audioStats.rejectedDrops
+                      << " audio-max-open-ms=" << audioStats.maximumOpenMicros / 1000.0
                       << " audio-queued=" << audioStats.queued
                       << " audio-output-latency-ms=" << audioStats.latencyMicros / 1000.0
                       << " audio-bitrate-mbps=" << audioBitrateMbps
@@ -931,6 +959,10 @@ int main(int argc, char** argv) {
                       << " video-sync-last-hold-ms=" << videoSyncStats.lastHoldMicros / 1000.0
                       << " video-sync-skew-valid=" << (videoSyncStats.haveEstimatedSkew ? 1 : 0)
                       << " video-sync-estimated-skew-ms=" << videoSyncStats.estimatedSkewMicros / 1000.0
+                      << " dispatch-max-messages=" << maximumDispatchMessages
+                      << " dispatch-max-ms=" << maximumDispatchMillis
+                      << " presentation-max-gap-ms=" << maximumPresentationGapMillis
+                      << " loop-max-ms=" << maximumLoopMillis
                       << " process-cpu-percent=" << processStats.cpuPercent
                       << " working-set-mb=" << processStats.workingSetMegabytes;
             if (haveVrStats) {
@@ -972,7 +1004,13 @@ int main(int argc, char** argv) {
                     << videoPlayout.Size() << ',' << videoSyncStats.deadlineReleases << ','
                     << videoSyncStats.overflowReleases << ',' << videoSyncStats.coalescedFrames << ','
                     << videoSyncStats.lastHoldMicros / 1000.0 << ',' << (videoSyncStats.haveEstimatedSkew ? 1 : 0) << ','
-                    << videoSyncStats.estimatedSkewMicros / 1000.0 << '\n';
+                    << videoSyncStats.estimatedSkewMicros / 1000.0 << ','
+                    << maximumDispatchMessages << ',' << maximumDispatchMillis << ','
+                    << maximumPresentationGapMillis << ',' << maximumLoopMillis << ','
+                    << audioStats.sequenceGaps << ',' << audioStats.timestampGaps << ','
+                    << audioStats.reanchors << ',' << audioStats.flushes << ',' << audioStats.opens << ','
+                    << audioStats.staleDrops << ',' << audioStats.overflowDrops << ','
+                    << audioStats.rejectedDrops << ',' << audioStats.maximumOpenMicros / 1000.0 << '\n';
                 performanceLog.flush();
             }
 
@@ -984,6 +1022,8 @@ int main(int argc, char** argv) {
             windowQueueMillis = 0.0;
             maximumQueueMillis = 0.0;
             windowMessages = 0;
+            maximumDispatchMessages = 0;
+            maximumDispatchMillis = maximumPresentationGapMillis = maximumLoopMillis = 0.0;
             lastStats = now;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(2));

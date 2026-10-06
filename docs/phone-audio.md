@@ -106,8 +106,9 @@ and queues ensure audio drops never invalidate the H.264 prediction chain.
 - Receiver transport: at most ten blocks plus config/latest status; blocks older than
   100 ms are discarded before application dispatch. Config/stop clears stale audio.
 - Output worker: at most ten blocks, independently age-limited to 100 ms. Mute clears
-  its queue and closes/discards backend buffers. Device changes and large timestamp
-  discontinuities reset output. Three total open attempts per configuration/control
+  its queue and closes/discards backend buffers. Device changes reset output.
+  Forward timestamp discontinuities above 100 ms flush queued application/backend
+  sound and reanchor the clock without recreating a healthy output. Three total open attempts per configuration/control
   reset, one-second failure backoff, and truthful unavailable status prevent busy-loop
   retries. New session or routing/mute change permits a new bounded attempt budget.
 - Application queues do not remove TCP head-of-line blocking, especially during large
@@ -153,7 +154,10 @@ frames use zero. Android video/audio clock-domain compatibility still needs hard
 verification; units alone do not establish a common epoch.
 
 The worker estimates audible media time from the end of the last submitted audio
-block minus observed output latency. The VR loop retains at most eight decoded
+block minus observed output latency. A monotonic steady-clock mapping interpolates
+only through submitted samples, bounds each observation correction to 2 ms, and
+expires after 100 ms without a valid observation. Session/control reset, device
+failure, and large forward packet gaps invalidate that mapping. The VR loop retains at most eight decoded
 frames (enough for a 100 ms wait at 30/60 FPS) and picks/coalesces those matching
 that clock with 10 ms tolerance. It never waits on a sound device on the render
 thread. Each picture has an independent 100 ms arrival-based deadline. When audio
@@ -216,6 +220,59 @@ The rebuilt Sprint 13 Frame archive is served by the existing download routes;
 the current Sprint 13 Android APK does not need reinstalling for this receiver-only
 correction. Quit PhoneCast before updating. Physical retest of smooth audio-enabled
 video, skew, memory, and game coexistence remains pending; Sprint 13 stays open.
+
+## Second timing correction — review branch implementation
+
+Branch: `review/sprint-13-av-timing`. Commit `fece424` preserves the previously
+uncommitted Sprint 13 implementation and first cadence correction. This receiver-only
+follow-up does not change Android, PCM framing, Vulkan, or headset services.
+
+- Video dispatch now checks a portable four-message/8 ms cooperative budget before
+  each transport pop and yields immediately after a decoded picture. Every produced
+  picture enters playout; it is no longer silently overwritten by the next decode.
+  Compressed prediction packets are left queued in order, not arbitrarily discarded.
+  One decoder/start/control call can exceed the soft budget.
+- Audio dispatch is limited to twelve messages per pass; pointer forwarding to 32
+  events per pass. Remaining work is retained for the next event loop.
+- The bounded audible media-clock mapping above avoids backward observations and
+  unlimited extrapolation. It is not proof of Android clock-domain compatibility.
+- Audio sequence and PTS gaps are separately counted. Small losses retain the output;
+  forward PTS gaps above 100 ms clear application sound and request a worker-side
+  backend flush before fresh writes. Flush requests coalesce; no silence is inserted.
+  Pulse flush completion has a 100 ms timeout; WASAPI uses Stop/Reset/Start on its
+  existing shared session. Failure follows the existing bounded reopen policy.
+  Mute, opt-out, session change, and route change retain immediate invalidation.
+- Added console/CSV window maxima: `dispatch_max_messages`, `dispatch_max_ms`,
+  `presentation_max_gap_ms`, `loop_max_ms`. Presentation gaps include static content
+  and idle periods; they are submission intervals, not photon-level measurements.
+  Loop maximum includes event/input and media work before diagnostics, not sleep or
+  the CSV/logging work itself. Added lifetime `audio_sequence_gaps`,
+  `audio_timestamp_gaps`, `audio_reanchors`, `audio_flushes`, `audio_opens`, classified
+  stale/overflow/rejected drop counters and `audio_max_open_ms`. Session/control
+  queue clears still contribute to total drops, not those three classified counters.
+- Tests simulate bursty transport with multiple decoded pictures, non-picture work,
+  interaction cost, and cooperative decode budgets; check no silent picture loss,
+  order, queue bounds, and regular interaction opportunities. Clock tests cover
+  jitter, expiry, submitted-sample caps, timeline reset, and integer saturation.
+  Worker tests exercise packet gaps without a stream-recreation storm.
+
+Validation: Windows build/all 12 CTest tests pass; Linux ARM64 build and QEMU
+portable/audio/standalone-runtime tests pass. A private Docker Pulse null sink
+passes flush, write-after-flush, unavailable server, and reopen checks. Both live download aliases were hash-verified and download-page/bootstrap tests
+pass. Package permissions are normalized to owner-writable files/directories, with
+executable bits on binaries/scripts. No physical receiver/runtime/audio service
+was restarted. The served Sprint 13 bundle was rebuilt:
+
+- archive SHA-256: `1577b549079fcf547c72d9be0a31a048c96fbe1072ef7fa99353e4726f0e4d09`;
+- packaged receiver SHA-256: `f5d4904a7effb79a37dfa940129d782f6894000e020f7aa63fd0d6f1810dae32`.
+
+Next: physical audio-off/on retest with scrolling, notification and rotation load,
+then click/flash sync and game mixing. Compare new gap/dispatch/reset counters,
+FPS, memory, and owner feedback. Stable video fallback scheduling/hysteresis when
+sound timing is unreliable remains further tuning work; the existing immediate
+video-only fallback and 100 ms per-picture ceiling are unchanged. The synthetic
+bursty test is not the actual V4L2/OpenVR path and does not claim smooth headset
+cadence or measured lip-sync. Sprint 13 remains open.
 
 ## Automated validation
 

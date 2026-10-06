@@ -25,6 +25,10 @@ int main(int argc, char** argv) {
         output.LatencyMicros();
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
+    if (!output.Flush(error)) { std::cerr << error << '\n'; return 1; }
+    if (!output.Write(silence,error) || !error.empty()) {
+        std::cerr << "Null sink write after flush failed: " << error << '\n'; return 1;
+    }
     output.Close();
     if (submitted != 30) { std::cerr << "Null sink PCM streaming stalled\n"; return 1; }
     if (output.Open("phonecast-sink-does-not-exist",error)) return 1;

@@ -1,4 +1,6 @@
 #include "phonecast/core/audio/AudioPlayback.h"
+#include "phonecast/core/streaming/DispatchBudget.h"
+#include "phonecast/core/audio/MediaClock.h"
 #include "phonecast/platform/network/TcpVideoServer.h"
 #include "phonecast/vr/overlay/SettingsMenuController.h"
 #include "phonecast/vr/overlay/OverlaySettingsStore.h"
@@ -64,7 +66,7 @@ void ProtocolTests() {
     CaptureStatus state{}; Check(ParseStatus(status,epoch,state) && state == CaptureStatus::Silent,"status roundtrip");
     status.payload[2] = 1; Check(!ParseStatus(status,epoch,state),"status reserved");
 }
-struct FakeState { std::atomic<int> opens{}, closes{}, writes{}; bool fail{false}; bool full{false}; std::mutex mutex; std::vector<std::uint8_t> samples; };
+struct FakeState { std::atomic<int> opens{}, closes{}, writes{}, flushes{}; bool fail{false}; bool full{false}; std::mutex mutex; std::vector<std::uint8_t> samples; };
 class FakeOutput : public IAudioOutput {
 public:
     explicit FakeOutput(std::shared_ptr<FakeState> state) : s(std::move(state)) {}
@@ -73,6 +75,7 @@ public:
         error.clear(); if (s->full) return false;
         std::lock_guard<std::mutex> lock(s->mutex); s->samples = samples; ++s->writes; return true;
     }
+    bool Flush(std::string& error) override { error.clear(); ++s->flushes; return true; }
     std::uint64_t LatencyMicros() override { return 20000; }
     std::string Description() const override { return "Playing: fake"; }
     void Close() noexcept override { ++s->closes; }
@@ -93,7 +96,25 @@ void PlaybackTests() {
     player.SetControls(false,1.0F,""); player.Enqueue(BlockFrom(2));
     Check(Wait([&] { return player.Stats().submitted == submitted + 1; }),"unmute fresh audio");
     player.Enqueue(BlockFrom(2)); Check(player.Stats().dropped > 0,"duplicate rejected");
-    player.Reset(); player.Enqueue(BlockFrom(3)); Check(player.Stats().queued == 0,"old epoch after reset");
+    // Ordinary losses and larger forward discontinuities must not create a
+    // fresh device/server stream for every missing block.
+    const auto beforeGaps = player.Stats();
+    const auto opensBeforeGaps = state->opens.load();
+    for (unsigned seq : {20U,40U,60U}) {
+        const auto before = player.Stats().submitted;
+        const auto previousFlushes = state->flushes.load();
+        player.Enqueue(BlockFrom(seq));
+        Check(Wait([&] { return player.Stats().submitted == before+1 && state->flushes > previousFlushes; }),
+            "forward timeline gaps flush backend and resume");
+    }
+    Check(state->opens == opensBeforeGaps && player.Stats().reanchors == beforeGaps.reanchors+3 &&
+        player.Stats().sequenceGaps == beforeGaps.sequenceGaps+3,
+        "packet gaps retain healthy output rather than reopen storm");
+    const auto beforeSmallGap = player.Stats().submitted;
+    player.Enqueue(BlockFrom(63));
+    Check(Wait([&] { return player.Stats().submitted == beforeSmallGap+1; }),"small loss remains playable");
+    Check(state->opens == opensBeforeGaps && state->flushes == 3,"ordinary small gap needs no output reset");
+    player.Reset(); player.Enqueue(BlockFrom(64)); Check(player.Stats().queued == 0,"old epoch after reset");
     player.Stop();
     state = std::make_shared<FakeState>(); state->full = true;
     AudioPlayback blocked([state] { return std::make_unique<FakeOutput>(state); }); blocked.Configure(9);
@@ -180,6 +201,73 @@ void ContinuousVideoSyncTests() {
             std::cout << "Video sync simulation: " << fps << " FPS, audio lag " << lag/1000
                       << " ms, " << presented << '/' << input << " pictures, max gap " << maximumGap.count() << " ms\n";
         }
+    }
+}
+
+void MediaClockTests() {
+    MediaClock clock; const auto start=Clock::now();
+    Check(clock.Timestamp(start)==0,"unobserved media clock invalid");
+    clock.Observe(1000000,1020000,start);
+    Check(clock.Timestamp(start+std::chrono::milliseconds(10))==1010000,"clock interpolates known playable samples");
+    clock.Observe(1005000,1030000,start+std::chrono::milliseconds(10));
+    Check(clock.Timestamp(start+std::chrono::milliseconds(10))>=1010000,"latency jitter cannot reverse clock");
+    Check(clock.Timestamp(start+std::chrono::milliseconds(90))==1030000,"clock cannot invent unsubmitted sound");
+    Check(clock.Timestamp(start+std::chrono::milliseconds(110))==0,"missing observations expire clock");
+    clock.Reset(); Check(clock.Timestamp(start)==0,"timeline reset invalidates clock");
+    clock.Observe(UINT64_MAX-10000,UINT64_MAX,start);
+    Check(clock.Timestamp(start+std::chrono::milliseconds(20))==UINT64_MAX,"clock interpolation saturates without overflow");
+    clock.Reset(); clock.Observe(1000000,2000000,start);
+    clock.Observe(1200000,2000000,start+std::chrono::milliseconds(2));
+    Check(clock.Timestamp(start+std::chrono::milliseconds(2))==1004000,"forward timing correction is bounded");
+    clock.Observe(500000,510000,start+std::chrono::milliseconds(4));
+    Check(clock.Timestamp(start+std::chrono::milliseconds(4))==500000,"new sample epoch cannot violate clock bounds");
+}
+
+void BurstyDispatchTests() {
+    const auto start = Clock::now();
+    DispatchBudget packetLimit(start);
+    for (unsigned i=0;i<DispatchBudget::MaximumMessages;++i) {
+        Check(packetLimit.CanDispatch(start),"packet budget permits work"); packetLimit.Dispatched();
+    }
+    Check(!packetLimit.CanDispatch(start),"packet budget terminates even cheap notification/config work");
+    DispatchBudget timeLimit(start);
+    Check(!timeLimit.CanDispatch(start+std::chrono::milliseconds(8)),"soft deadline checked before next pop");
+    // A synthetic application loop, not just an evenly spaced Add/Take source:
+    // transport batches, non-picture dispatch, decoder cost, and interaction
+    // work share the same cooperative budget as the VR receiver.
+    for (bool audioOn : {false,true}) {
+        AudioVideoQueue playout;
+        std::deque<std::uint64_t> transport;
+        std::uint64_t us=0, nextBatch=0, nextPts=10000000, lastPts=0, lastPresentation=0, maxGap=0;
+        unsigned decoded=0, submitted=0, passes=0;
+        while (us < 10000000) {
+            if (us >= nextBatch) {
+                transport.push_back(0); // Notification/config-like work, no picture.
+                for (unsigned i=0;i<3;++i) { transport.push_back(nextPts); nextPts+=33333; }
+                nextBatch += 100000;
+            }
+            us += 1000; // Event/input work serviced every pass, including bursts.
+            DispatchBudget budget(start+std::chrono::microseconds(us));
+            while (budget.CanDispatch(start+std::chrono::microseconds(us)) && !transport.empty()) {
+                const auto pts=transport.front(); transport.pop_front(); budget.Dispatched();
+                us += pts ? 4000 : 1000; // Variable work stays on the application thread.
+                if (pts) {
+                    playout.Add(Video(pts),start+std::chrono::microseconds(us)); ++decoded;
+                    break; // The actual receiver yields after each produced picture.
+                }
+            }
+            VideoFrame result;
+            if (playout.Take(audioOn ? 10000000+us-60000 : 0,start+std::chrono::microseconds(us),result)) {
+                Check(result.timestampMicros>lastPts,"bursty dispatch preserves prediction/picture order");
+                if (submitted) maxGap=std::max(maxGap,us-lastPresentation);
+                lastPts=result.timestampMicros; lastPresentation=us; ++submitted;
+            }
+            Check(playout.Size()<=AudioVideoQueue::MaxPendingFrames,"bursty runtime memory bound");
+            ++passes; us+=2000;
+        }
+        Check(decoded>=297 && submitted>=decoded-4,"bursty runtime no longer overwrites intermediate pictures");
+        Check(maxGap<=110000,"bounded dispatch prevents additional starvation under bursts");
+        Check(passes>1000,"interaction receives regular opportunities during media work");
     }
 }
 
@@ -300,7 +388,7 @@ int main() {
 #ifdef _WIN32
     WSADATA data{}; WSAStartup(MAKEWORD(2,2),&data);
 #endif
-    try { ProtocolTests(); PlaybackTests(); SyncTests(); ContinuousVideoSyncTests(); ChangingVideoSyncTests(); SettingsTests(); NetworkTests(true); NetworkTests(false); }
+    try { ProtocolTests(); PlaybackTests(); SyncTests(); ContinuousVideoSyncTests(); MediaClockTests(); BurstyDispatchTests(); ChangingVideoSyncTests(); SettingsTests(); NetworkTests(true); NetworkTests(false); }
     catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 #ifdef _WIN32
     WSACleanup();

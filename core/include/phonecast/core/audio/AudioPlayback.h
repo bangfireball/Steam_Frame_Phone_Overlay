@@ -16,12 +16,16 @@ public:
     virtual ~IAudioOutput() = default;
     virtual bool Open(const std::string& device, std::string& error) = 0;
     virtual bool Write(const std::vector<std::uint8_t>& samples, std::string& error) = 0;
+    // Worker-only discard, not drain. Implementations bound completion time.
+    virtual bool Flush(std::string& error) = 0;
     virtual std::uint64_t LatencyMicros() = 0;
     virtual std::string Description() const = 0;
     virtual void Close() noexcept = 0;
 };
 struct PlaybackStats {
     std::uint64_t submitted{}, dropped{}, failures{};
+    std::uint64_t sequenceGaps{}, timestampGaps{}, reanchors{}, flushes{}, opens{};
+    std::uint64_t staleDrops{}, overflowDrops{}, rejectedDrops{}, maximumOpenMicros{};
     std::size_t queued{};
     std::uint64_t latencyMicros{};
     std::string status{"Audio off"};
