@@ -76,6 +76,13 @@ intentionally advertises no audio support.
 - Silence does not reveal why capture is silent. After two seconds of zero PCM,
   status reads **No capturable playback; source may be silent or disallow capture**.
   Nonzero samples restore active status. This is not a DRM/permission detector.
+- Android's capture selection is documented in terms of usage, source UID, and the
+  source's allowed-capture policy; it does not provide PhoneCast with a source app's
+  UI mute state. Physical testing found that Reddit can continue producing eligible,
+  nonzero capturable audio for an embedded video whose Reddit UI shows muted. This
+  appears to be source-app/mixer behavior; PhoneCast cannot infer that per-video mute
+  from PCM. A future package/UID audio blocklist could exclude Reddit entirely, but
+  cannot selectively recover the state of one embedded player.
 - Audio is copied, not redirected: the phone may still play through its own output.
   PhoneCast never requests audio focus or reroutes source playback. The separately
   opt-in local-mute setting changes only Android's global media-stream volume. It
@@ -330,10 +337,32 @@ and failed mute/restore behavior. Android JVM tests, APK assembly, and lint pass
 The rebuilt APK is served by the live download route and has SHA-256
 `ffbd2304ef73c6314ee9976bb589d25a5930cc6c3a75c137ff1bc037496d5ea9`.
 
-This remains physically unvalidated. The target phone must confirm that Android
-continues providing captured PCM when its local media stream is at zero, and that
-disconnect, Stop, projection revoke, checkbox disable, and unclean-restart recovery
-restore the exact saved value. Software tests cannot establish device mixer behavior.
+### Extended playback follow-up — 2026-10-06
+
+The project owner subsequently confirmed that the local-phone mute works while
+headset audio continues, that streaming remained stable, and that a YouTube video
+was watchable. This physically validates the central device-mixer assumption for
+the tested phone: setting local media volume to zero does not silence PhoneCast's
+playback capture. It does not yet validate every restoration path or measured sync.
+
+Read-only review of the current approximately 1,619-second CSV found 1,047 connected
+audio samples and 546 dynamic audio/video samples (`rx_fps >= 20`). Dynamic samples
+averaged 29.62 received, 29.61 decoded, and 29.57 submitted FPS, 62.26 ms reported
+audio-output latency, 2.28% process CPU, and 112.94 MiB working set. There were zero
+dynamic audio-output failures and zero sampled OpenVR dropped/mispresented frames;
+only three dynamic samples submitted below 20 FPS. Five output opens occurred across
+the longer run, with no reanchor/flush event or observed recreation storm. Internal
+estimated skew averaged 26.57 ms but is not measured audible lip-sync. Audio queue
+drops accumulated under burst/backlog conditions without a reported audible or video
+failure. Raw evidence is ignored under
+`out/diagnostics/frame-audio-youtube-reddit-followup/`; review did not restart any
+process, runtime, or audio service.
+
+The same test exposed the Reddit muted-video limitation above: some videos produced
+headset audio despite appearing muted in Reddit. Do not treat source UI mute as part
+of Android's playback-capture contract. Exact saved-volume restoration on receiver
+disconnect, Stop, projection revoke, checkbox disable, and unclean process restart
+still requires physical checks.
 
 Next: a longer physical run with scrolling, notifications, rotation and a standalone
 game, then click/flash sync and game-audio coexistence. Stable fallback scheduling/

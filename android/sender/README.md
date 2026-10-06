@@ -76,9 +76,15 @@ commits a recovery marker before muting; after an unclean process exit, the next
 PhoneCast process start attempts restoration before another component starts.
 Android cannot execute restoration at the instant its process is forcibly killed,
 so that last recovery is delayed until PhoneCast runs again. The setting changes
-media volume only, never call/ring volume. Physical validation must confirm that
-the target phone continues supplying playback capture while local media volume is
-zero.
+media volume only, never call/ring volume. Physical testing confirms the target phone
+continues supplying playback capture while local media volume is zero; individual
+restore/failure paths remain to be exercised.
+
+Source-app UI mute is not reliably visible to playback capture. In physical testing,
+Reddit produced captured audio for some embedded videos shown as muted. PhoneCast
+receives PCM selected by Android usage/capture policy and cannot infer that per-video
+UI state. Disabling phone playback audio stops it; a future package-level blocklist
+could exclude an application entirely.
 
 Turning the playback-audio toggle off stops current audio immediately; enabling
 applies to the next capture session. Video continues on older receivers and on

@@ -1766,7 +1766,7 @@ Optional dashboard-closed hotkeys are not required for Sprint 12 standalone UX.
 - `[x]` Initial PCM baseline, capability-negotiation requirement, bounded queues, A/V timing, and validation matrix documented in `docs/phone-audio.md`
 - `[x]` Negotiated audio protocol and tested cross-version video-only fallback
 - `[x]` Explicit default-off Android opt-in, permission, playback-only recorder, and cleanup implementation
-- `[~]` Optional local-phone media mute implemented with disconnect/stop restoration and persisted next-process-start recovery; physical capture/restore validation pending
+- `[~]` Optional local-phone media mute implemented; local mute with continued headset capture physically works, while disconnect/stop/revoke/unclean-exit restoration paths remain pending
 - `[x]` Independent bounded audio transport and output workers with stale-sound rejection
 - `[x]` WASAPI shared-mode and runtime-loaded PulseAudio/PipeWire output implementations; transactional headset mute/volume/route controls and explicit CLI device selection
 - `[x]` Read-only native audio-server/library/sink probe and isolated Pulse null-sink backend tests
@@ -2010,11 +2010,20 @@ copies eligible sound, and PhoneCast intentionally does not change phone media
 volume or audio focus. An optional local-phone mute is now implemented behind a separate Android setting:
 it saves media volume before muting, restores on disconnect/stop/teardown, and uses
 a persisted marker for next-process-start recovery after an unclean exit. Android
-cannot execute cleanup at the instant its process is forcibly killed. Physical
-validation must confirm that local media volume zero does not silence capture on
-the target phone and that all restoration paths return the exact prior value.
-Lip-sync, routing, protected playback, game mixing, longer load, and lifecycle
-validation remain pending; stable fallback scheduling and clock-state hysteresis
+cannot execute cleanup at the instant its process is forcibly killed. A later physical test confirmed that local media volume zero does not silence capture
+on the target phone: the mute worked, streaming remained stable, and YouTube playback
+was watchable. The approximately 1,619-second CSV included 546 dynamic audio/video
+samples averaging 29.62 received, 29.61 decoded, and 29.57 submitted FPS, with no
+dynamic audio-output failure or sampled OpenVR dropped/mispresented frame. Exact
+restoration across disconnect, Stop, projection revoke, checkbox disable, and an
+unclean process restart remains pending.
+
+The same test found that muted embedded Reddit videos can still produce captured
+audio. Android selects playback capture by usage, source UID, and capture policy and
+does not expose the source UI's per-video mute state. PhoneCast therefore cannot
+infer this state from nonzero PCM; a future package/UID blocklist could exclude an
+application entirely. Lip-sync, routing, protected playback, game mixing, and the
+remaining lifecycle validation remain pending; stable fallback scheduling and clock-state hysteresis
 remain possible further tuning. This does not close Sprint 13 or begin Sprint 14.
 The previous handoff above is historical implementation state.
 
