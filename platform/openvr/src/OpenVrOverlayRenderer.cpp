@@ -1,6 +1,7 @@
 #include "phonecast/platform/openvr/OpenVrOverlayRenderer.h"
 #include "phonecast/vr/interaction/OverlayInteractionController.h"
 #include "phonecast/vr/interaction/PanelDepth.h"
+#include "phonecast/vr/interaction/StartLocation.h"
 #include "phonecast/vr/overlay/WristMenuGesture.h"
 
 #include <openvr.h>
@@ -971,6 +972,38 @@ public:
                        "Failed to update the PhoneCast dashboard panel.");
     }
 
+    void UpdateStartLocationPreview(bool visible) {
+        if (gestureOverlay == vr::k_ulOverlayHandleInvalid) return;
+        if (!visible) {
+            if (startLocationPreviewVisible) overlayApi->HideOverlay(gestureOverlay);
+            startLocationPreviewVisible = false;
+            return;
+        }
+        if (!startLocationPreviewVisible) {
+            if (!DevicePose(vr::k_unTrackedDeviceIndex_Hmd, startPreviewHead)) return;
+            constexpr std::uint32_t width = 256;
+            const auto phoneHeight = compositeFrame.height > kGrabHandleHeightPixels
+                ? compositeFrame.height - kGrabHandleHeightPixels : 512U;
+            const auto height = static_cast<std::uint32_t>(Clamp(
+                width * static_cast<float>(phoneHeight) / std::max(1U, compositeFrame.width), 128, 768));
+            std::vector<std::uint8_t> image(width * height * 4U, 0);
+            FillImageRoundedRect(image, width, height, 0, 0, width, height, 16, {48,153,245,255});
+            FillImageRoundedRect(image, width, height, 4, 4, width-8, height-8, 12, {10,25,42,230});
+            DrawImageLabel(image, width, height, "PHONE PREVIEW", 128, height/2, 2, {224,235,249,255});
+            if (overlayApi->SetOverlayRaw(gestureOverlay, image.data(), width, height, 4) !=
+                vr::VROverlayError_None) return;
+        }
+        float width = currentSettings.widthMeters;
+        overlayApi->GetOverlayWidthInMeters(overlay, &width);
+        const auto transform = Multiply(startPreviewHead, FromArray(phonecast::vr::StartLocation(
+            currentSettings.startOffsetXMeters, currentSettings.startOffsetYMeters,
+            currentSettings.startDistanceMeters)));
+        overlayApi->SetOverlayWidthInMeters(gestureOverlay, width);
+        overlayApi->SetOverlayTransformAbsolute(gestureOverlay, vr::TrackingUniverseStanding, &transform);
+        overlayApi->ShowOverlay(gestureOverlay);
+        startLocationPreviewVisible = true;
+    }
+
     void UpdateNotificationPreview(bool visible) {
         if (notificationOverlay == vr::k_ulOverlayHandleInvalid) return;
         if (!visible) {
@@ -1273,6 +1306,7 @@ public:
                              "SetOverlayTransformAbsolute", error)) return false;
         }
         currentSettings = settings;
+        if (startLocationPreviewVisible) UpdateStartLocationPreview(true);
         if (dashboardPlacementChanged) RenderDashboard();
         return true;
     }
@@ -2079,6 +2113,8 @@ public:
     vr::VROverlayHandle_t notificationOverlay{vr::k_ulOverlayHandleInvalid};
     vr::VROverlayHandle_t dashboardOverlay{vr::k_ulOverlayHandleInvalid};
     vr::VROverlayHandle_t dashboardThumbnail{vr::k_ulOverlayHandleInvalid};
+    bool startLocationPreviewVisible{false};
+    vr::HmdMatrix34_t startPreviewHead{};
     bool gestureProgressVisible{false};
     int gestureProgressStep{-1};
     bool settingsMenuVisible{false};
@@ -2419,10 +2455,8 @@ bool OpenVrOverlayRenderer::PlaceBesideDashboard(
             ? static_cast<float>(impl_->compositeFrame.width) / phoneHeight : 1.0F;
         settings.widthMeters = phoneWidth / presentationScale;
     }
-    float dashboardWidth = 1.0F;
-    impl_->overlayApi->GetOverlayWidthInMeters(impl_->dashboardOverlay, &dashboardWidth);
-    const float offset = dashboardWidth * 0.5F + phoneWidth * 0.5F + 0.08F;
-    const vr::HmdMatrix34_t local{{{1,0,0,offset},{0,1,0,0},{0,0,1,-0.85F}}};
+    const auto local = FromArray(phonecast::vr::StartLocation(
+        settings.startOffsetXMeters, settings.startOffsetYMeters, settings.startDistanceMeters));
     const auto panel = Multiply(hmd, local);
     settings.placementMode = phonecast::vr::PlacementMode::WorldLocked;
     settings.worldTransform = ToArray(panel);
@@ -2632,6 +2666,7 @@ bool OpenVrOverlayRenderer::ShowSettingsMenu(
     impl_->settingsMenuLeft = impl_->radialMenuLeft;
     impl_->settingsMenuVisible = true;
     impl_->UpdateNotificationPreview(view.showNotificationPreview);
+    impl_->UpdateStartLocationPreview(view.showStartLocationPreview);
     impl_->logger.Log(core::LogLevel::Info, "openvr-settings", "In-headset settings menu shown.");
     error.clear();
     return true;
@@ -2647,6 +2682,7 @@ bool OpenVrOverlayRenderer::HideSettingsMenu(std::string& error) {
                             "Hide settings overlay", error)) return false;
     impl_->settingsMenuVisible = false;
     impl_->UpdateNotificationPreview(false);
+    impl_->UpdateStartLocationPreview(false);
     impl_->settingsAxisLatched = false;
     impl_->hasPendingSettingsMenuCommand = false;
     impl_->settingsLaserTargetRow = -1;
@@ -2869,6 +2905,7 @@ void OpenVrOverlayRenderer::Stop() noexcept {
     impl_->lastDragUpdate = {};
     impl_->hasPendingSettingsMenuCommand = false;
     impl_->gestureProgressVisible = false;
+    impl_->startLocationPreviewVisible = false;
     impl_->gestureProgressStep = -1;
     impl_->settingsMenuVisible = false;
     impl_->settingsWorldTransformValid = false;

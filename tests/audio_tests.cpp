@@ -324,7 +324,7 @@ void SettingsTests() {
         loaded.audioVolume == 0.25F && loaded.audioUseSystemDefault,"audio persistence");
     // Older settings have no audio fields and use safe, independent defaults.
     std::ifstream input(path); std::string text((std::istreambuf_iterator<char>(input)),{}); input.close();
-    text.replace(text.find("version=4"),9,"version=3");
+    text.replace(text.find("version=5"),9,"version=3");
     std::ofstream output(path); output << text; output.close();
     Check(store.Load(loaded,found,error) && !loaded.audioMuted && loaded.audioVolume == 0.7F,"v3 migration");
     std::filesystem::remove(path);

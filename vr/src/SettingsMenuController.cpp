@@ -79,7 +79,8 @@ std::size_t SettingsMenuController::ItemCount() const noexcept {
     switch (page_) {
         case Page::Root: return 10;
         case Page::Appearance: return 4;
-        case Page::Placement: return 5;
+        case Page::Placement: return 6;
+        case Page::StartLocation: return 4;
         case Page::LeftController:
         case Page::RightController: return 9;
         case Page::Glance: return 3;
@@ -117,11 +118,11 @@ SettingsMenuView SettingsMenuController::View() const {
             break;
         case Page::Placement:
             view.title = "PLACEMENT";
-            view.labels = {"MODE", "HORIZONTAL", "VERTICAL", "RESET POSITION", "BACK"};
+            view.labels = {"MODE", "HORIZONTAL", "VERTICAL", "RESET POSITION", "START LOCATION", "BACK"};
             view.values = {PlacementName(draft_.placementMode), Decimal(draft_.offsetXMeters) + " M",
-                           Decimal(draft_.offsetYMeters) + " M", "", ""};
+                           Decimal(draft_.offsetYMeters) + " M", "", ">", ""};
             view.normalizedValues = {-1.0F, Normalize(draft_.offsetXMeters, -2.0F, 2.0F),
-                                     Normalize(draft_.offsetYMeters, -2.0F, 2.0F), -1.0F, -1.0F};
+                                     Normalize(draft_.offsetYMeters, -2.0F, 2.0F), -1.0F, -1.0F, -1.0F};
             break;
         case Page::LeftController:
         case Page::RightController: {
@@ -167,6 +168,17 @@ SettingsMenuView SettingsMenuController::View() const {
                 Normalize(draft_.notificationDistanceMeters, 0.40F, 2.00F),
                 Normalize(draft_.notificationOffsetXMeters, -1.00F, 1.00F),
                 Normalize(draft_.notificationOffsetYMeters, -0.75F, 0.75F), -1.0F};
+            break;
+        case Page::StartLocation:
+            view.title = "START LOCATION";
+            view.showStartLocationPreview = true;
+            view.labels = {"DISTANCE", "HORIZONTAL", "VERTICAL", "BACK"};
+            view.values = {Decimal(draft_.startDistanceMeters) + " M",
+                           Decimal(draft_.startOffsetXMeters) + " M",
+                           Decimal(draft_.startOffsetYMeters) + " M", ""};
+            view.normalizedValues = {Normalize(draft_.startDistanceMeters, 0.30F, 2.50F),
+                                    Normalize(draft_.startOffsetXMeters, -1.00F, 1.00F),
+                                    Normalize(draft_.startOffsetYMeters, -0.75F, 0.75F), -1.0F};
             break;
         case Page::Audio:
             view.title = "PHONE AUDIO";
@@ -244,6 +256,15 @@ SettingsMenuResult SettingsMenuController::Adjust(int direction) {
                     std::max(250, std::min(1500, value)));
             } else return SettingsMenuResult::None;
             return SettingsMenuResult::Updated;
+        case Page::StartLocation:
+            if (selected_ == 0)
+                draft_.startDistanceMeters = Clamp(draft_.startDistanceMeters + direction * 0.05F, 0.30F, 2.50F);
+            else if (selected_ == 1)
+                draft_.startOffsetXMeters = Clamp(draft_.startOffsetXMeters + direction * 0.02F, -1.00F, 1.00F);
+            else if (selected_ == 2)
+                draft_.startOffsetYMeters = Clamp(draft_.startOffsetYMeters + direction * 0.02F, -0.75F, 0.75F);
+            else return SettingsMenuResult::None;
+            return SettingsMenuResult::Updated;
         case Page::Notifications:
             if (selected_ == 0)
                 draft_.notificationWidthMeters = Clamp(
@@ -305,6 +326,12 @@ SettingsMenuResult SettingsMenuController::SetNormalized(float value) {
                 static_cast<std::uint32_t>(std::lround(FromNormalized(value, 250.0F, 1500.0F)));
             else return SettingsMenuResult::None;
             break;
+        case Page::StartLocation:
+            if (selected_ == 0) draft_.startDistanceMeters = FromNormalized(value, 0.30F, 2.50F);
+            else if (selected_ == 1) draft_.startOffsetXMeters = FromNormalized(value, -1.00F, 1.00F);
+            else if (selected_ == 2) draft_.startOffsetYMeters = FromNormalized(value, -0.75F, 0.75F);
+            else return SettingsMenuResult::None;
+            break;
         case Page::Notifications:
             if (selected_ == 0) draft_.notificationWidthMeters = FromNormalized(value, 0.20F, 1.20F);
             else if (selected_ == 1) draft_.notificationDistanceMeters = FromNormalized(value, 0.40F, 2.00F);
@@ -348,6 +375,11 @@ SettingsMenuResult SettingsMenuController::Activate() {
         return SettingsMenuResult::Updated;
     }
 
+    if (page_ == Page::Placement && selected_ == 4) {
+        page_ = Page::StartLocation;
+        selected_ = 0;
+        return SettingsMenuResult::None;
+    }
     const auto count = ItemCount();
     if (selected_ == count - 1) {
         page_ = Page::Root;

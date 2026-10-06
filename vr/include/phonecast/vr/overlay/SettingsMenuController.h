@@ -34,7 +34,8 @@ private:
         RightController,
         Glance,
         Notifications,
-        Audio
+        Audio,
+        StartLocation
     };
 
     [[nodiscard]] std::size_t ItemCount() const noexcept;

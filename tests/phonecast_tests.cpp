@@ -5,6 +5,7 @@
 #include "phonecast/core/streaming/GeneratedVideoSource.h"
 #include "phonecast/vr/interaction/OverlayInteractionController.h"
 #include "phonecast/vr/interaction/PanelDepth.h"
+#include "phonecast/vr/interaction/StartLocation.h"
 #include "phonecast/vr/overlay/GlanceController.h"
 #include "phonecast/vr/overlay/OverlayController.h"
 #include "phonecast/vr/overlay/OverlaySettingsStore.h"
@@ -13,6 +14,9 @@
 
 #include <chrono>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <cmath>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -250,6 +254,11 @@ void TestStreamProtocol() {
 }
 
 void TestOverlayInteraction() {
+    const auto start = phonecast::vr::StartLocation(0.35F, 0.1F, 0.85F);
+    const float length = std::sqrt(0.35F*0.35F + 0.1F*0.1F + 0.85F*0.85F);
+    Check(start[3] == 0.35F && start[7] == 0.1F && start[11] == -0.85F &&
+          std::fabs(start[2]*(-0.35F) + start[6]*(-0.1F) + start[10]*0.85F - length) < 0.001F,
+          "start location retains position and its normal faces the snapshot user");
     Check(phonecast::vr::AdjustPanelDepth(1.0F, 1.0F, 0.04F) > 1.0F &&
           phonecast::vr::AdjustPanelDepth(1.0F, -1.0F, 0.04F) < 1.0F &&
           phonecast::vr::AdjustPanelDepth(1.0F, 0.1F, 0.04F) == 1.0F &&
@@ -423,6 +432,9 @@ void TestOverlaySettingsPersistence() {
     saved.notificationDistanceMeters = 0.65F;
     saved.notificationOffsetXMeters = -0.15F;
     saved.notificationOffsetYMeters = 0.05F;
+    saved.startDistanceMeters = 1.1F;
+    saved.startOffsetXMeters = 0.22F;
+    saved.startOffsetYMeters = -0.12F;
     std::string error;
     Check(store.Save(saved, error), "overlay settings save");
     phonecast::vr::OverlaySettings loaded;
@@ -444,8 +456,28 @@ void TestOverlaySettingsPersistence() {
               loaded.notificationWidthMeters == 0.75F &&
               loaded.notificationDistanceMeters == 0.65F &&
               loaded.notificationOffsetXMeters == -0.15F &&
-              loaded.notificationOffsetYMeters == 0.05F,
+              loaded.notificationOffsetYMeters == 0.05F &&
+              loaded.startDistanceMeters == 1.1F &&
+              loaded.startOffsetXMeters == 0.22F && loaded.startOffsetYMeters == -0.12F,
           "overlay settings round trip");
+    std::ifstream source(path);
+    std::string text((std::istreambuf_iterator<char>(source)), std::istreambuf_iterator<char>());
+    source.close();
+    text.replace(text.find("version=5"), 9, "version=4");
+    { std::ofstream output(path); output << text; }
+    Check(store.Load(loaded, found, error) && found && loaded.startOffsetXMeters == 0.35F &&
+          loaded.startDistanceMeters == 0.85F,
+          "version four migrates with safer start-location defaults");
+    Check(store.Save(saved, error), "restore version five settings");
+    std::ifstream current(path);
+    text.assign(std::istreambuf_iterator<char>(current), std::istreambuf_iterator<char>());
+    current.close();
+    const auto key = text.find("start_distance=");
+    text.replace(key, text.find('\n', key) - key, "start_distance=nan");
+    { std::ofstream output(path); output << text; }
+    const float before = loaded.startDistanceMeters;
+    Check(!store.Load(loaded, found, error) && loaded.startDistanceMeters == before,
+          "nonfinite start location is rejected without replacing live settings");
     std::filesystem::remove(path, ignored);
 }
 
@@ -483,6 +515,24 @@ void TestSettingsMenu() {
     Check(menu.Handle(phonecast::vr::SettingsMenuCommand::Activate) ==
               phonecast::vr::SettingsMenuResult::Applied && !menu.IsOpen(),
           "settings can be applied explicitly");
+
+    menu.Open(initial);
+    menu.Handle(phonecast::vr::SettingsMenuCommand::NextItem);
+    menu.Handle(phonecast::vr::SettingsMenuCommand::Activate);
+    for (int i = 0; i < 4; ++i) menu.Handle(phonecast::vr::SettingsMenuCommand::NextItem);
+    menu.Handle(phonecast::vr::SettingsMenuCommand::Activate);
+    Check(menu.View().showStartLocationPreview && menu.View().title == "START LOCATION",
+          "Placement Start Location requests a separate dummy preview");
+    menu.Handle({phonecast::vr::SettingsMenuCommand::SetNormalized, 1.0F});
+    menu.Handle(phonecast::vr::SettingsMenuCommand::NextItem);
+    menu.Handle({phonecast::vr::SettingsMenuCommand::SetNormalized, 0.0F});
+    Check(menu.Draft().startDistanceMeters == 2.5F && menu.Draft().startOffsetXMeters == -1.0F &&
+          menu.Original().startDistanceMeters == initial.startDistanceMeters,
+          "start-location sliders are bounded and preserve the cancel snapshot");
+    menu.Handle(phonecast::vr::SettingsMenuCommand::Back);
+    Check(!menu.View().showStartLocationPreview, "leaving Start Location removes its dummy preview");
+    menu.Handle(phonecast::vr::SettingsMenuCommand::Back);
+    Check(!menu.IsOpen(), "start location changes can be cancelled");
 
     menu.Open(initial);
     menu.Handle(phonecast::vr::SettingsMenuCommand::NextItem);

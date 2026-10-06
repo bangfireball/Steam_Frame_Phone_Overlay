@@ -80,7 +80,7 @@ sh "$HOME/install-phonecast.sh" 'http://YOUR_PC_LAN_IP:${port}'</code></pre>
 <button type="button" data-copy="curl-install">Copy commands</button>
 <p>The script checks Linux/ARM64 and refuses root installation. It downloads and extracts the bundle in a temporary directory, cleans up, and stops on failure. No remote script is piped into a shell. The downloaded script remains at <code>~/install-phonecast.sh</code> for inspection or removal.</p>
 <p>After installation, open the SteamVR dashboard <strong>+ app launcher</strong> and select <strong>PhoneCast VR</strong>. Quit PhoneCast before updating an existing installation; settings and pairing are retained.</p>
-<p>This Sprint 14 build preserves phone size during the beside-panel world reset, uses explicit dashboard-only stick axes for move-handle depth, and adds either-stick hold-to-toggle plus double-click-to-dock shortcuts. Dashboard Back remains removed. Software tests pass; corrected behavior and hotkey/game coexistence still need headset approval.</p>
+<p>This Sprint 14 build adds Settings → Placement → Start Location with live dummy preview and saved distance/horizontal/vertical controls. Show keeps the phone size, resets closer to center, and faces the user. Either-stick hold toggles visibility; double click opens on that controller. Software tests pass; physical approval remains pending.</p>
 <p><strong>Trusted LAN only:</strong> this development server uses unencrypted HTTP. Install only from your own trusted PC.</p>`
   : "<p>The Steam Frame ARM64 bundle has not been packaged yet.</p>"}
 <script>

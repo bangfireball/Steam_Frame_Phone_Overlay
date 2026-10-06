@@ -2057,7 +2057,7 @@ The previous handoff above is historical implementation state.
 - `[x]` Framecorder dashboard-closed hotkey source research completed and documented
 - `[~]` Mockup-derived settings refresh and landscape quick dashboard implemented for build validation
 - `[x]` Removed Glance/Pin from the primary dashboard after physical feedback found no useful visible distinction
-- `[~]` Dashboard Show resets the phone world anchor beside the quick panel; corrected after head-lock/movement/docking regression feedback, physical retest pending
+- `[~]` Dashboard Show preserves physical size and resets a user-facing world anchor closer to center; Settings → Placement → Start Location adds persisted offsets/distance and live dummy preview, physical approval pending
 - `[~]` Phone lower control area now has Back, Close, Move, and a trigger-drag resize corner; settings/notification consistency remains pending
 - `[~]` Trigger-drag analog-stick depth adjustment, pointer-device fallback, release/tracking-loss handling implemented; physical retest pending
 - `[ ]` Keyboard/text-entry path and PhoneCast-owned fallback decision

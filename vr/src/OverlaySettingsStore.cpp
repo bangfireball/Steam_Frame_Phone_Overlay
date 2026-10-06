@@ -102,7 +102,8 @@ bool OverlaySettingsStore::Load(OverlaySettings& settings, bool& found, std::str
     const bool versionTwo = values["version"] == "2";
     const bool versionThree = values["version"] == "3";
     const bool versionFour = values["version"] == "4";
-    if (!legacy && !versionTwo && !versionThree && !versionFour) {
+    const bool versionFive = values["version"] == "5";
+    if (!legacy && !versionTwo && !versionThree && !versionFour && !versionFive) {
         error = "Unsupported overlay settings version.";
         return false;
     }
@@ -154,7 +155,7 @@ bool OverlaySettingsStore::Load(OverlaySettings& settings, bool& found, std::str
         error = "Overlay settings contain an invalid radial-menu long-press duration.";
         return false;
     }
-    if ((versionThree || versionFour) &&
+    if ((versionThree || versionFour || versionFive) &&
         (!ParseFloat(values["notification_width"], 0.20F, 1.20F,
                      loaded.notificationWidthMeters) ||
          !ParseFloat(values["notification_distance"], 0.40F, 2.00F,
@@ -166,7 +167,14 @@ bool OverlaySettingsStore::Load(OverlaySettings& settings, bool& found, std::str
         error = "Overlay settings contain an invalid notification placement.";
         return false;
     }
-    if (versionFour) {
+    if (versionFive &&
+        (!ParseFloat(values["start_distance"], 0.30F, 2.50F, loaded.startDistanceMeters) ||
+         !ParseFloat(values["start_offset_x"], -1.00F, 1.00F, loaded.startOffsetXMeters) ||
+         !ParseFloat(values["start_offset_y"], -0.75F, 0.75F, loaded.startOffsetYMeters))) {
+        error = "Overlay settings contain an invalid start location.";
+        return false;
+    }
+    if (versionFour || versionFive) {
         if ((values["audio_muted"] != "0" && values["audio_muted"] != "1") ||
             (values["audio_system_default"] != "0" && values["audio_system_default"] != "1") ||
             !ParseFloat(values["audio_volume"],0.0F,1.0F,loaded.audioVolume)) {
@@ -204,7 +212,7 @@ bool OverlaySettingsStore::Save(const OverlaySettings& settings, std::string& er
         return false;
     }
     output << std::setprecision(9)
-           << "version=4\n"
+           << "version=5\n"
            << "mode=" << ModeName(settings.placementMode) << '\n'
            << "width=" << settings.widthMeters << '\n'
            << "distance=" << settings.distanceMeters << '\n'
@@ -217,6 +225,9 @@ bool OverlaySettingsStore::Save(const OverlaySettings& settings, std::string& er
            << "notification_distance=" << settings.notificationDistanceMeters << '\n'
            << "notification_offset_x=" << settings.notificationOffsetXMeters << '\n'
            << "notification_offset_y=" << settings.notificationOffsetYMeters << '\n'
+           << "start_distance=" << settings.startDistanceMeters << '\n'
+           << "start_offset_x=" << settings.startOffsetXMeters << '\n'
+           << "start_offset_y=" << settings.startOffsetYMeters << '\n'
            << "audio_muted=" << (settings.audioMuted ? 1 : 0) << '\n'
            << "audio_volume=" << settings.audioVolume << '\n'
            << "audio_system_default=" << (settings.audioUseSystemDefault ? 1 : 0) << '\n';

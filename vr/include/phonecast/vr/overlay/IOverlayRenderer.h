@@ -71,6 +71,7 @@ struct SettingsMenuView {
     // an action, category, or discrete value controlled only by -/+.
     std::vector<float> normalizedValues;
     bool showNotificationPreview{false};
+    bool showStartLocationPreview{false};
     std::size_t selectedIndex{0};
 };
 
@@ -119,6 +120,9 @@ struct OverlaySettings {
     float notificationDistanceMeters{0.75F};
     float notificationOffsetXMeters{0.18F};
     float notificationOffsetYMeters{0.12F};
+    float startDistanceMeters{0.85F};
+    float startOffsetXMeters{0.35F};
+    float startOffsetYMeters{0.0F};
     bool audioMuted{false};
     float audioVolume{0.7F};
     bool audioUseSystemDefault{false};
