@@ -88,8 +88,9 @@ could exclude an application entirely.
 
 Turning the playback-audio toggle off stops current audio immediately; enabling
 applies to the next capture session. Video continues on older receivers and on
-handled audio failures. See `docs/phone-audio.md` for the pending physical
-validation matrix and receiver controls.
+handled audio failures. Supported native playback, perceived sync, game mixing,
+local mute, controls, and sustained playback are owner-approved. See
+`docs/phone-audio.md` for closure evidence, deferred cases, and receiver controls.
 
 ## Security limitation
 

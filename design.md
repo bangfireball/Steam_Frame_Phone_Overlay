@@ -1758,7 +1758,7 @@ Optional dashboard-closed hotkeys are not required for Sprint 12 standalone UX.
 
 # Sprint 13 — Optional Phone Audio
 
-**Status:** `[~] Implemented — Windows/Android/ARM64 automated validation passes; physical audio, A/V sync, routing, and game-mixing approval pending`
+**Status:** `[x] Complete — native headset playback, lip-sync, local mute, standalone-game mixing, controls, lifecycle, and sustained stability owner-approved`
 
 - `[x]` Project owner chose Sprint 13 next; Sprint 12 decoder fault validation and Vulkan recovery/investigation remain deferred follow-ups
 - `[x]` Android playback-capture restrictions and timestamp APIs researched
@@ -1766,17 +1766,18 @@ Optional dashboard-closed hotkeys are not required for Sprint 12 standalone UX.
 - `[x]` Initial PCM baseline, capability-negotiation requirement, bounded queues, A/V timing, and validation matrix documented in `docs/phone-audio.md`
 - `[x]` Negotiated audio protocol and tested cross-version video-only fallback
 - `[x]` Explicit default-off Android opt-in, permission, playback-only recorder, and cleanup implementation
-- `[~]` Optional local-phone media mute implemented; local mute with continued headset capture physically works, while disconnect/stop/revoke/unclean-exit restoration paths remain pending
+- `[x]` Optional local-phone media mute works with continued headset capture and restores when the stream closes; projection-revoke and unclean-exit recovery remain documented follow-ups
 - `[x]` Independent bounded audio transport and output workers with stale-sound rejection
 - `[x]` WASAPI shared-mode and runtime-loaded PulseAudio/PipeWire output implementations; transactional headset mute/volume/route controls and explicit CLI device selection
 - `[x]` Read-only native audio-server/library/sink probe and isolated Pulse null-sink backend tests
 - `[x]` Decoded picture timestamp preservation and tested bounded A/V synchronization/fallback policy
 - `[x]` Audio-enabled video starvation reproduced and corrected with per-picture deadlines, sufficient bounded retention, overflow progress, and new timing diagnostics; continuous-cadence regressions pass
-- `[~]` Corrected receiver received a short positive physical retest: owner reports audio is “way better” and video looks good; longer load, measured sync, routing, and game-mixing approval remain pending
+- `[x]` Corrected receiver physically approved after flawless 15–20 minute two-video playback, seeking/pause/resume/2× playback, and standalone-game coexistence
 - `[x]` Windows build/all 12 CTest tests, Android JVM tests/APK/lint, ARM64 build and QEMU portable/audio/runtime tests
-- `[~]` Initial supported playback is audible and improved; blocked playback, game-audio coexistence, measured sync, reconnect, and lifecycle validation remain pending
+- `[x]` Supported playback, perceived lip-sync, game-audio coexistence, reconnect/rotation lifecycle, receiver controls, and stream-close volume restoration owner-approved
+- `[~]` Protected/capture-blocked sources and every local-volume failure/recovery path retain design/automated coverage but were not each physically exercised before owner-approved closure
 
-The implementation uses PCM S16LE at 48 kHz stereo in 10 ms blocks: 1.536 Mbps of samples, approximately 1.571 Mbps with audio framing before TCP/IP overhead. Combined Wi-Fi/VR load, audible output selection, game mixing, and actual A/V skew remain physical acceptance gates. Native PipeWire/PulseAudio environment availability is probed and a software null sink is tested. Initial headset audibility is now user-reported, but the original audio-enabled video regression prevents acceptance. The receiver-only cadence correction and its regression evidence are recorded in `docs/phone-audio.md`; smooth video, A/V skew, routing, and game mixing still need physical approval. Sprint 13 remains open until that matrix is accepted; builds alone do not establish synchronization or headset audibility.
+The implementation uses PCM S16LE at 48 kHz stereo in 10 ms blocks: 1.536 Mbps of samples, approximately 1.571 Mbps with audio framing before TCP/IP overhead. The project owner closed Sprint 13 after physically confirming perfect perceived lip-sync through pause/resume, seeking, and 2× playback; simultaneous standalone-game and phone audio; working local-phone mute and stream-close restoration; receiver controls and lifecycle behavior; and flawless playback of two videos over approximately 15–20 minutes. Read-only diagnostics corroborate sustained near-30 FPS video with no audio-output failures or sampled compositor drops. This approval is qualitative rather than an external click/flash skew distribution and does not claim every protected-source or failure-recovery case was physically exercised. Native PipeWire/PulseAudio environment evidence, cadence corrections, remaining limitations, and exact closure diagnostics are recorded in `docs/phone-audio.md`.
 
 ## Objective
 
@@ -1801,6 +1802,25 @@ Do not capture microphone input or protected audio, and do not imply that every 
 - Audio remains acceptably synchronized with the phone picture.
 - Unsupported or protected playback fails clearly without breaking video streaming.
 - Phone audio does not unexpectedly replace or mute game audio.
+
+## Sprint 13 closure — 2026-10-06
+
+The project owner explicitly approved Sprint 13 after perfect perceived lip-sync
+through seeking, pause/resume, and 2× playback; simultaneous phone video/audio over
+a standalone VR game; working receiver controls and reconnect/rotation lifecycle;
+local-phone mute with stream-close volume restoration; and two flawless videos over
+approximately 15–20 minutes. A final read-only 1,257-second snapshot contained 871
+dynamic samples averaging 29.78 received/decoded and 29.70 submitted FPS, with no
+audio-output failure, decoder recovery, or sampled OpenVR drop/mispresent.
+
+Closure does not convert untested protected-source behavior, external skew
+measurement, Windows audio, unavailable-device recovery, projection-revoke restore,
+headset sleep/wake, or Android force-kill recovery into tested claims. Reddit can
+produce capturable audio for embedded videos shown muted because source UI mute is
+not exposed by Android playback capture. Those limitations remain documented in
+`docs/phone-audio.md` and do not block progression. The next planned sprint is
+Sprint 14 — Gestures and UI; Sprint 12 decoder/Vulkan reliability follow-ups remain
+separate deferred work.
 
 ---
 

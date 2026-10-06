@@ -114,7 +114,8 @@ policy. Both sender and receiver retain at most ten audio blocks and discard
 stale blocks; audio config/latest status have separate control handling.
 
 See [`phone-audio.md`](phone-audio.md) for output buffering, timing limitations,
-privacy, compatibility tests, and pending physical validation.
+privacy, compatibility tests, owner-approved native playback evidence, and deferred
+physical cases.
 
 A `REMOTE_INPUT` payload is exactly 16 bytes: one event-type byte (`DOWN`, `MOVE`, `UP`, `SCROLL`, or `BACK`), three reserved zero bytes, then network-byte-order IEEE-754 float32 values for normalized X, normalized Y, and scroll delta. Coordinates are top-left-origin and limited to `[0, 1]`; scroll is limited to `[-1, 1]`. The common header sequence field orders input within a connection. Both endpoints reject malformed types, lengths, non-finite values, and out-of-range values.
 

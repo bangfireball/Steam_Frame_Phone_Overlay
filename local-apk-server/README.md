@@ -17,14 +17,15 @@ The APK path serves the latest rebuilt sender. Sprint 13 adds default-off phone
 playback audio; install both builds, enable playback audio in Android Settings,
 and start a new cast. The Android settings also offer a separate local-phone mute
 that saves/restores media volume around active receiver audio; its capture and
-recovery paths require physical validation. Physical audio/sync/game-mixing
-acceptance remains pending.
+recovery paths require physical validation. Native supported playback, perceived
+sync, standalone-game mixing, local mute, controls, and sustained playback are now
+owner-approved; deferred failure/lifecycle cases remain in `docs/phone-audio.md`.
 The stable `/phonecast-steam-frame-arm64.tar.gz` alias and curl bootstrap select
 the Sprint 13 archive too. The current bundle includes the receiver-only
 video-cadence correction for audio-enabled playback: independent frame deadlines
 replace the starvation-prone three-frame sync queue. If the Sprint 13 APK is
 already installed, update only the Frame bundle, quitting PhoneCast first.
-Software regressions pass; physical smoothness and A/V sync still need retesting.
+Software regressions pass and native smoothness/perceived A/V sync are owner-approved.
 
 Override the port if needed:
 

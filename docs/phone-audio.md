@@ -1,13 +1,14 @@
 # Sprint 13 — Optional phone playback audio
 
-**Status: implemented and automatically tested; physical audio acceptance pending.**
+**Status: complete — native headset audio/video behavior physically approved by the project owner.**
 
-The project owner chose Sprint 13 next. Sprint 12 decoder fault validation and
-Vulkan device-loss recovery/investigation remain deferred, not fixed by audio.
-No receiver, SteamVR, audio service, or game was restarted on physical hardware
-while implementing this sprint. The owner subsequently reported audible, decent
-phone audio but a severe audio-enabled video slowdown. The cadence correction
-below is software-tested; physical audio/video acceptance remains open.
+Sprint 12 decoder fault validation and Vulkan device-loss recovery/investigation
+remain separate deferred work, not fixed by audio. Sprint 13 was initially blocked
+by severe audio-enabled video slowdown; the bounded dispatch/timing correction below
+was subsequently physically approved. Closure covers supported playback, perceived
+lip-sync, standalone-game mixing, local-phone mute, receiver controls, reconnect/
+rotation lifecycle, and a sustained two-video run. Untested protected-source and
+failure-recovery cases remain explicitly documented rather than implied complete.
 
 ## Use
 
@@ -364,13 +365,40 @@ of Android's playback-capture contract. Exact saved-volume restoration on receiv
 disconnect, Stop, projection revoke, checkbox disable, and unclean process restart
 still requires physical checks.
 
-Next: a longer physical run with scrolling, notifications, rotation and a standalone
-game, then click/flash sync and game-audio coexistence. Stable fallback scheduling/
-hysteresis when sound timing is unreliable remains possible further tuning; the
-existing immediate video-only fallback and 100 ms per-picture ceiling are unchanged.
-The short owner report and internal timing estimate do not yet approve lip-sync,
-routing, game mixing, protected playback, or lifecycle behavior. Sprint 13 remains
-open.
+### Sprint 13 closure — 2026-10-06
+
+The project owner approved Sprint 13 after the following physical native-headset
+checks:
+
+- perceived lip-sync remained perfect through ordinary playback, pause/resume,
+  seeking, and 2× playback speed;
+- phone video/audio coexisted with an audible standalone VR game without reported
+  ducking, replacement, stutter, or interaction issue;
+- local-phone mute worked and the saved phone volume returned when the stream closed;
+- reconnect/rotation streaming lifecycle and headset receiver controls worked;
+- two videos played for approximately 15–20 minutes and were reported flawless.
+
+A final read-only snapshot covers approximately 1,257 seconds, including 1,252
+connected audio samples and 871 dynamic samples (`rx_fps >= 20`). Dynamic samples
+averaged 29.78 received, 29.78 decoded, and 29.70 submitted FPS, 1.99 Mbps video,
+1.57 Mbps audio, 61.80 ms reported output latency, 2.32% process CPU, and 114.00 MiB
+working set. Dynamic transport drops ended at zero; audio-output failures, decoder
+recovery triggers, and sampled OpenVR dropped/mispresented frames were zero. Three
+dynamic samples submitted below 20 FPS. Two output opens, two reanchors, and one
+backend flush occurred without a reported defect. Internal estimated picture-minus-
+audible-media skew averaged 62.04 ms and peaked at 105.56 ms; this estimate is not
+an external audible skew measurement and does not contradict the owner's perceived
+sync approval. Cumulative bounded audio drops occurred without reported audible or
+video failure.
+
+Evidence is ignored under `out/diagnostics/frame-audio-final-approval/`. Logs were
+copied read-only; no receiver, runtime, game, or audio service was restarted.
+Closure accepts the tested native path and owner-observed quality. It does not claim
+physical coverage of a protected/capture-blocked source, Windows/VRLink audio,
+projection-revoke restoration, unavailable output devices, headset sleep/wake, or
+force-kill/next-process volume recovery. The Reddit muted-video source limitation
+remains documented. Stable fallback hysteresis and compressed audio remain optional
+future improvements, not Sprint 13 blockers.
 
 ## Automated validation
 
@@ -389,35 +417,35 @@ open.
   writes, bounded buffering, missing server/invalid sink errors, teardown and reopen.
   It did not play to physical hardware or validate Frame/PipeWire audibility.
 
-Build/runtime procedures are in `development.md`. Initial audibility is user-reported;
-the complete hardware acceptance matrix is not approved.
+Build/runtime procedures are in `development.md`. Native supported-playback behavior
+is owner-approved; the matrix below records accepted and deferred coverage.
 
-## Physical acceptance matrix (all pending)
+## Physical acceptance matrix and closure disposition
 
 Record device/OS, source app/version, output route/backend, requested/actual buffering,
 audible startup, audio drops/underruns, signed A/V skew, CPU/memory, combined bandwidth,
 and VR timing. Do not retain sample payloads by default.
 
-1. Default-off cast requests no audio permission and sends no audio. Permission deny,
+1. `[~]` Default-off cast requests no audio permission and sends no audio. Permission deny,
    opt-out, permission revocation, projection revoke/phone lock, and fresh capture.
    Test local-phone mute separately: capture remains audible in VR at phone media
    volume zero; receiver disconnect, Stop, projection revoke, service teardown, and
    next-process-start recovery restore the exact saved volume. Confirm call/ring
    volume is untouched and a failed restoration retains its recovery marker.
-2. Eligible playback on Windows VR output and native Frame output while game audio
+2. `[~]` Eligible playback on Windows VR output and native Frame output while game audio
    remains audible; no ducking, default-device replacement, or exclusivity.
-3. Capture-blocked/protected app and idle playback: healthy video/input and truthful
+3. `[ ]` Capture-blocked/protected app and idle playback: healthy video/input and truthful
    silence status, no microphone/call capture or policy bypass.
-4. Mute/unmute, volume/Apply/Cancel/persistence, explicit/system/VR routing, unavailable
+4. `[~]` Mute/unmute, volume/Apply/Cancel/persistence, explicit/system/VR routing, unavailable
    output device/server, default-device change, and bounded recovery.
-5. Audio + dynamic video + notification + touch load on VRLink and standalone games,
+5. `[~]` Audio + dynamic video + notification + touch load on VRLink and standalone games,
    both launch orders, compared with audio-off diagnostics.
-6. External click/flash or beep/video test at startup and for at least ten minutes:
-   measure A/V skew/delay distributions. Provisional steady-state goal: absolute skew
-   within 80 ms, subject to actual measurements and owner approval.
-7. Repeated rotation, reconnect, old receiver, Stop/Quit, headset sleep/wake and app
+6. `[~]` A 15–20 minute video test with pause/resume, seeking, and 2× playback retained
+   owner-approved perceived lip-sync. External click/flash skew distributions remain
+   deferred; internal estimated skew is not a substitute for that measurement.
+7. `[~]` Repeated rotation, reconnect, old receiver, Stop/Quit, headset sleep/wake and app
    switching; no stale replay, stuck worker, or unbounded queue.
-8. Downloads/congestion/stalls and existing decoder/GPU faults: log separately. Audio
+8. `[ ]` Downloads/congestion/stalls and existing decoder/GPU faults: log separately. Audio
    cannot guarantee game survival during a global GPU reset or close Sprint 12 risks.
 
 ## Primary sources

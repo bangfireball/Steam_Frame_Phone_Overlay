@@ -295,8 +295,8 @@ See `android/sender/README.md`, `docs/android-capture.md`, `docs/remote-control.
 
 ## Sprint 13 optional playback audio
 
-[`phone-audio.md`](phone-audio.md) describes the implemented default-off playback
-capture/PCM path, restrictions, and pending physical acceptance matrix. Install the
+[`phone-audio.md`](phone-audio.md) describes the owner-approved default-off playback
+capture/PCM path, restrictions, closure evidence, and deferred physical cases. Install the
 new Android APK and VR receiver, enable **Phone playback audio** in Android Settings,
 grant audio permission, then start a new cast. The headset **Settings → Phone Audio**
 category provides live transactional Mute, Volume, and VR/System Default routing.
@@ -313,25 +313,22 @@ restart, or reconfigure headset audio services to force a test.
 Windows build/all 12 CTest tests and Android JVM tests/APK/lint pass; the ARM64
 receiver and portable/audio/runtime tests cross-build and pass under QEMU. Optional
 `phonecast-pulse-audio-tests` exercises a private Pulse **null sink** or the
-`--unavailable` error path; do not point this fixture at a physical output. That
-software test does not approve native headset audio. The owner has since reported
-decent audible playback but severely reduced video FPS with audio enabled. The
-receiver-only playout correction now retains bounded pictures through independent
-100 ms deadlines and releases only due pictures; its continuous-cadence and
-clock-stall/overflow regressions pass. The new console/CSV `video_sync_*` fields
-support the pending physical retest (see `phone-audio.md`). The second receiver-only
-correction also bounds dispatch, preserves each decoded picture's presentation
-opportunity, interpolates a bounded monotonic audio clock, and flushes/reanchors
-rather than recreating healthy outputs for forward packet gaps. Additional CSV
-fields expose dispatch/loop/submission gaps and audio gap/flush/open/drop counters.
-Windows/ARM64 software tests and private Pulse flush tests pass; physical jitter,
-sync and game mixing remain unapproved. The later optional **Mute phone while
-streaming audio** setting requires the rebuilt APK. It stores media volume before
-muting and restores on receiver disconnect, audio/capture stop, projection revoke,
-and service teardown; a persisted marker is recovered on the next PhoneCast process
-start after an unclean exit. Android cannot restore at the instant its process is
-forcibly killed. Confirm physically that capture remains audible at local volume
-zero and every restoration path returns the prior value. Sprint 12 decoder fault
+`--unavailable` error path; do not point this fixture at a physical output.
+
+The receiver corrections retain bounded pictures, yield after each decoded picture,
+interpolate a bounded monotonic audio clock, and flush/reanchor rather than recreating
+healthy outputs for forward packet gaps. The owner physically approved perceived
+lip-sync through pause/resume, seeking and 2× playback; simultaneous standalone-game
+and phone audio; receiver controls and reconnect/rotation lifecycle; local-phone
+mute with stream-close volume restoration; and flawless playback of two videos for
+approximately 15–20 minutes. Final diagnostics sustained 29.78 decoded and 29.70
+submitted FPS over 871 dynamic samples with no audio-output failure or sampled
+OpenVR drop/mispresent. See `phone-audio.md` for exact evidence and limitations.
+
+The optional **Mute phone while streaming audio** setting requires the rebuilt APK.
+Android cannot restore at the instant its process is forcibly killed; next-process
+recovery and projection-revoke restoration remain physically deferred, as do
+protected-source behavior and external skew distributions. Sprint 12 decoder fault
 and Vulkan reliability follow-ups remain separate.
 
 ## CMake options
