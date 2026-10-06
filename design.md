@@ -1771,9 +1771,9 @@ Optional dashboard-closed hotkeys are not required for Sprint 12 standalone UX.
 - `[x]` Read-only native audio-server/library/sink probe and isolated Pulse null-sink backend tests
 - `[x]` Decoded picture timestamp preservation and tested bounded A/V synchronization/fallback policy
 - `[x]` Audio-enabled video starvation reproduced and corrected with per-picture deadlines, sufficient bounded retention, overflow progress, and new timing diagnostics; continuous-cadence regressions pass
-- `[~]` Owner reports decent audible playback, but original audio-on video fell to 5.2 submitted FPS despite 29.5 decoded FPS; corrected receiver needs physical retest
+- `[~]` Corrected receiver received a short positive physical retest: owner reports audio is “way better” and video looks good; longer load, measured sync, routing, and game-mixing approval remain pending
 - `[x]` Windows build/all 12 CTest tests, Android JVM tests/APK/lint, ARM64 build and QEMU portable/audio/runtime tests
-- `[ ]` Physical supported/blocked playback, game-audio coexistence, sync, reconnect, and lifecycle validation
+- `[~]` Initial supported playback is audible and improved; blocked playback, game-audio coexistence, measured sync, reconnect, and lifecycle validation remain pending
 
 The implementation uses PCM S16LE at 48 kHz stereo in 10 ms blocks: 1.536 Mbps of samples, approximately 1.571 Mbps with audio framing before TCP/IP overhead. Combined Wi-Fi/VR load, audible output selection, game mixing, and actual A/V skew remain physical acceptance gates. Native PipeWire/PulseAudio environment availability is probed and a software null sink is tested. Initial headset audibility is now user-reported, but the original audio-enabled video regression prevents acceptance. The receiver-only cadence correction and its regression evidence are recorded in `docs/phone-audio.md`; smooth video, A/V skew, routing, and game mixing still need physical approval. Sprint 13 remains open until that matrix is accepted; builds alone do not establish synchronization or headset audibility.
 
@@ -1995,10 +1995,22 @@ audio sequence/PTS gaps, flushes/opens, and classified drops.
 Windows build/all 12 CTest tests pass; ARM64 build and QEMU portable/audio/runtime
 tests pass. Private Pulse null-sink tests pass including flush/write-after-flush.
 The rebuilt receiver bundle and hashes are recorded in `docs/phone-audio.md`.
-No hardware receiver, SteamVR, or audio service was restarted. Physical smoothness,
-lip-sync, routing and game mixing remain pending; stable fallback scheduling and
-clock-state hysteresis remain further tuning work. This does not close Sprint 13
-or begin Sprint 14. The previous handoff above is historical implementation state.
+No hardware receiver, SteamVR, or audio service was restarted during implementation.
+In a subsequent short native-headset test, the project owner reported audio was
+“way better” and video looked good. Read-only review of 33 dynamic audio-enabled
+CSV samples averaged 28.63 received, 28.60 decoded, and 28.57 submitted FPS, with
+zero dynamic transport drops/resyncs, audio failures, or sampled OpenVR dropped/
+mispresented frames. The run used one output open with no reanchor/flush/recreation
+storm. This is encouraging initial physical evidence, not final smoothness or
+lip-sync approval.
+
+Simultaneous sound from the phone and headset is expected: Android playback capture
+copies eligible sound, and PhoneCast intentionally does not change phone media
+volume or audio focus. An optional local-phone mute would be separate lifecycle
+work. Lip-sync, routing, protected playback, game mixing, longer load, and lifecycle
+validation remain pending; stable fallback scheduling and clock-state hysteresis
+remain possible further tuning. This does not close Sprint 13 or begin Sprint 14.
+The previous handoff above is historical implementation state.
 
 ---
 

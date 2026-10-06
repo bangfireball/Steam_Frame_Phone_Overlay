@@ -266,13 +266,46 @@ was restarted. The served Sprint 13 bundle was rebuilt:
 - archive SHA-256: `1577b549079fcf547c72d9be0a31a048c96fbe1072ef7fa99353e4726f0e4d09`;
 - packaged receiver SHA-256: `f5d4904a7effb79a37dfa940129d782f6894000e020f7aa63fd0d6f1810dae32`.
 
-Next: physical audio-off/on retest with scrolling, notification and rotation load,
-then click/flash sync and game mixing. Compare new gap/dispatch/reset counters,
-FPS, memory, and owner feedback. Stable video fallback scheduling/hysteresis when
-sound timing is unreliable remains further tuning work; the existing immediate
-video-only fallback and 100 ms per-picture ceiling are unchanged. The synthetic
-bursty test is not the actual V4L2/OpenVR path and does not claim smooth headset
-cadence or measured lip-sync. Sprint 13 remains open.
+### Initial physical follow-up — 2026-10-06
+
+The project owner installed the correction and reported that audio was “way better”
+and video looked good in a short native-headset test. Read-only log review confirmed
+the installed receiver hash matched the corrected package. The current CSV spans
+approximately 237 seconds, with 33 dynamic audio-enabled samples (`rx_fps >= 20`):
+
+- 28.63 received, 28.60 decoded, and 28.57 submitted FPS on average;
+- 62.99 ms average reported output latency (79.82 ms maximum);
+- 1.79% average process CPU and 110.34 MiB average working set;
+- zero dynamic transport drops/resyncs, audio failures, or sampled OpenVR
+  dropped/mispresented frames;
+- one audio output open and no output reanchors/flushes or recreation storm;
+- average estimated picture-minus-audible-media skew 16.10 ms. This is an internal
+  estimate, not measured lip-sync.
+
+The full run accumulated audio queue drops, mostly overflow, while video was static
+or arrived sparsely; it did not report output failure. Dynamic samples retained
+near one-for-one receive/decode/submit cadence. A maximum submission gap from these
+short dynamic windows is not treated as a smoothness distribution because Android
+screen capture can legitimately be sparse and the owner reported no visible defect.
+Raw read-only evidence is ignored under
+`out/diagnostics/frame-audio-lite-followup/`. No process, runtime, or audio service
+was restarted during review.
+
+The owner also heard playback simultaneously on the phone and headset. This is
+expected baseline behavior, not receiver duplication: Android playback capture
+copies eligible playback and PhoneCast deliberately does not request audio focus,
+change phone media volume, or redirect the source. The Android settings disclosure
+already says the phone may continue playing sound. A separately opt-in local-phone
+mute/volume-restore feature would require its own safe lifecycle and physical
+validation; it is not part of the current Sprint 13 implementation.
+
+Next: a longer physical run with scrolling, notifications, rotation and a standalone
+game, then click/flash sync and game-audio coexistence. Stable fallback scheduling/
+hysteresis when sound timing is unreliable remains possible further tuning; the
+existing immediate video-only fallback and 100 ms per-picture ceiling are unchanged.
+The short owner report and internal timing estimate do not yet approve lip-sync,
+routing, game mixing, protected playback, or lifecycle behavior. Sprint 13 remains
+open.
 
 ## Automated validation
 
