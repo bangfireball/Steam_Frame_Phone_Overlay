@@ -13,7 +13,7 @@ It listens on port `8080` by default and offers whichever artifacts currently ex
 - Android APK: `android/sender/app/build/outputs/apk/debug/app-debug.apk`
 - Steam Frame ARM64 Sprint 14 bundle: `out/packages/phonecast-steam-frame-arm64-sprint14.tar.gz`
 
-The APK path serves the current compatible sender, including the Android home-screen Quick connect widget. The stable
+The APK path serves the current compatible sender, including the resizable Android home-screen Quick connect widget with a compact 1 × 1 layout. The stable
 `/phonecast-steam-frame-arm64.tar.gz` alias and curl bootstrap select the Sprint 14
 archive. This receiver bundle adds the landscape quick dashboard, reliable
 Show-beside-dashboard behavior, refreshed settings, and phone resize corner while

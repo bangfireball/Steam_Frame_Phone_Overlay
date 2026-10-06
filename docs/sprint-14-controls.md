@@ -25,7 +25,7 @@ Latest owner feedback physically approves repeated double-click docking/world pi
 
 1. Start Location persistence and lifecycle edge cases beyond the approved normal settings/preview flow.
 2. Phone and settings Move with both controllers, off-surface release, tracking loss, and dashboard closure.
-3. Research and replace or correct the dashboard-focused farther/closer input route; then validate both controllers and clamps.
+3. Test the supported overlay-scroll-event depth route proposed in [`sprint-14-depth-input-research.md`](sprint-14-depth-input-research.md), then validate both controllers and clamps.
 4. Left/right docking with tracking initially unavailable or lost.
 5. Footer controls across repeated portrait/landscape transitions and lifecycle recovery beyond the approved normal use.
 6. Either-stick hold reliability, dashboard suppression/transitions, and real-game control coexistence in both launch orders.

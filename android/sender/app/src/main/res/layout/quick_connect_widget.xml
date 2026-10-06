@@ -1,15 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Button xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/quick_connect_button"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/quick_connect_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:layout_margin="4dp"
-    android:backgroundTint="@color/phonecast_dark"
+    android:layout_margin="3dp"
+    android:background="@drawable/widget_background"
     android:contentDescription="@string/widget_quick_connect_description"
     android:gravity="center"
-    android:padding="8dp"
-    android:text="@string/widget_quick_connect"
-    android:textAllCaps="false"
-    android:textColor="@color/phonecast_blue"
-    android:textSize="16sp"
-    android:textStyle="bold" />
+    android:orientation="horizontal"
+    android:padding="4dp">
+
+    <ImageView
+        android:id="@+id/quick_connect_icon"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:contentDescription="@null"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_phonecast" />
+
+    <TextView
+        android:id="@+id/quick_connect_label"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:gravity="center_vertical"
+        android:paddingStart="6dp"
+        android:paddingEnd="8dp"
+        android:text="@string/widget_quick_connect"
+        android:textColor="@color/phonecast_blue"
+        android:textSize="15sp"
+        android:textStyle="bold" />
+</LinearLayout>

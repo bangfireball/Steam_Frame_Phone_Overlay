@@ -32,7 +32,7 @@ Before implementation, read `design.md` completely, `docs/development.md`, and r
 6. Latest adjustable Start Location build received “that's better.” No detailed preview/apply/cancel/persistence or drag-depth/shortcut approval was stated.
 7. A dashboard-active hotkey experiment physically failed: neither hold nor double-click actions delivered while the SteamVR dashboard owned focus. The shortcut set is again disabled there. Repeated same-hand double-click world pinning was then implemented and physically reported as perfect.
 8. Start Location settings/preview and the phone footer's Back, Close, and Resize behavior/appearance were physically approved in normal use. Explicit-action joystick depth still does not work while the dashboard owns focus and now requires input-route research rather than threshold tuning.
-9. The Android sender now includes a home-screen Quick connect widget that reloads saved receiver details and launches the mandatory MediaProjection consent flow. JVM tests, APK assembly, and lint pass; physical widget installation and launch remain pending.
+9. The Android sender now includes a home-screen Quick connect widget that reloads saved receiver details and launches the mandatory MediaProjection consent flow. Its minimum dimensions are 40 × 40 dp for a compact 1 × 1 icon; resizing wider reveals a label. The Android app and widget use the supplied PhoneCast mark. JVM tests, APK assembly, and lint pass; physical widget sizing and launch remain pending.
 
 Do not convert the failed legacy depth test into a claim that the new explicit-axis path works physically.
 
@@ -129,7 +129,7 @@ Latest code:
 
 1. Resume with the owner's next feedback rather than declaring Sprint 14 complete.
 2. Confirm Start Location dummy preview, live edits, Apply/Cancel, persistence, unchanged size, facing direction, and rotation behavior.
-3. Research why neither legacy polling nor the explicit axis action delivers Move-handle depth while the dashboard owns focus. Inspect `GetAnalogActionData` result/`bActive`, dashboard input ownership, and supported alternatives; do not increase global priority or activate axes during gameplay merely to force it.
+3. Run the bounded overlay-scroll-event experiment designed in [`sprint-14-depth-input-research.md`](sprint-14-depth-input-research.md). The supported candidate is to reuse dashboard laser scroll events during an owned Move drag, not to increase global priority or activate axes during gameplay.
 4. Verify both-stick hold and per-hand double-click docking, dashboard-open suppression, transition-held buttons, tracking loss, and real-game conflicts in both launch orders.
 5. Continue remaining Sprint 14 work: consistent lower controls across surfaces, keyboard/text entry, optional gesture recognizer, stronger input-release safety/automation and diagnostics. Avoid private Steam UI injection.
 6. Update and hash-verify the serving site after each owner-testable native build; do not report source-only work as downloadable.
