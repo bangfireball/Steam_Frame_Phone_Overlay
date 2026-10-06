@@ -1,4 +1,5 @@
 #include "phonecast/platform/openvr/OpenVrOverlayRenderer.h"
+#include "phonecast/vr/interaction/ControllerShortcut.h"
 #include "phonecast/vr/interaction/OverlayInteractionController.h"
 #include "phonecast/vr/interaction/PanelDepth.h"
 #include "phonecast/vr/interaction/StartLocation.h"
@@ -925,23 +926,17 @@ public:
     void PollShortcut() {
         if (!shortcutReady) return;
         const bool dashboardVisible = overlayApi->IsDashboardVisible();
-        std::array<vr::VRActiveActionSet_t, 2> activeSets{};
-        activeSets[0].ulActionSet = shortcutSet;
-        activeSets[0].nPriority = 0;
-        std::uint32_t activeSetCount = 1;
-        if (dashboardVisible) {
-            activeSets[1].ulActionSet = panelSet;
-            activeSets[1].nPriority = 0;
-            activeSetCount = 2;
-        }
-        if (inputApi->UpdateActionState(activeSets.data(), sizeof(activeSets[0]), activeSetCount) !=
-            vr::VRInputError_None) return;
+        vr::VRActiveActionSet_t active{};
+        active.ulActionSet = dashboardVisible ? panelSet : shortcutSet;
+        active.nPriority = 0;
+        if (inputApi->UpdateActionState(&active, sizeof(active), 1) != vr::VRInputError_None) return;
         if (dashboardVisible) {
             panelLeftY = ReadPanelAxis(panelAxisLeft);
             panelRightY = ReadPanelAxis(panelAxisRight);
-        } else {
-            panelLeftY = panelRightY = 0.0F;
+            shortcutActive = false;
+            return;
         }
+        panelLeftY = panelRightY = 0.0F;
         bool anyActive = false;
         const bool dockLeft = DigitalPressed(shortcutDockLeft, anyActive);
         const bool dockRight = DigitalPressed(shortcutDockRight, anyActive);
@@ -954,12 +949,11 @@ public:
         }
         if (hasPendingRadialMenuSelection) return;
         if (dockLeft || dockRight) {
-            pendingRadialMenuSelection.action = dockLeft
-                ? phonecast::vr::RadialMenuAction::LeftControllerLocked
-                : phonecast::vr::RadialMenuAction::RightControllerLocked;
             pendingRadialMenuSelection.hand = dockLeft
                 ? phonecast::vr::GlanceInput::LeftController
                 : phonecast::vr::GlanceInput::RightController;
+            pendingRadialMenuSelection.action = phonecast::vr::ControllerDockShortcutAction(
+                pendingRadialMenuSelection.hand, desiredVisible, currentSettings.placementMode);
             hasPendingRadialMenuSelection = true;
         } else if (toggle) {
             pendingRadialMenuSelection.action = phonecast::vr::RadialMenuAction::ToggleVisible;
@@ -2467,6 +2461,29 @@ bool OpenVrOverlayRenderer::PlaceBesideDashboard(
     const auto panel = Multiply(hmd, local);
     settings.placementMode = phonecast::vr::PlacementMode::WorldLocked;
     settings.worldTransform = ToArray(panel);
+    settings.worldTransformValid = true;
+    error.clear();
+    return true;
+}
+
+bool OpenVrOverlayRenderer::PinCurrentPosition(
+        phonecast::vr::OverlaySettings& settings, std::string& error) {
+    vr::HmdMatrix34_t absolute{};
+    if (!impl_->AbsoluteForSettings(impl_->currentSettings, absolute)) {
+        error = "The current phone pose is unavailable for world pinning.";
+        return false;
+    }
+    float physicalWidth = settings.widthMeters;
+    if (impl_->overlayApi->GetOverlayWidthInMeters(impl_->overlay, &physicalWidth) ==
+        vr::VROverlayError_None) {
+        const auto phoneHeight = impl_->compositeFrame.height > kGrabHandleHeightPixels
+            ? impl_->compositeFrame.height - kGrabHandleHeightPixels : 0U;
+        const float presentationScale = phoneHeight > 0 && impl_->compositeFrame.width > phoneHeight
+            ? static_cast<float>(impl_->compositeFrame.width) / phoneHeight : 1.0F;
+        settings.widthMeters = physicalWidth / presentationScale;
+    }
+    settings.placementMode = phonecast::vr::PlacementMode::WorldLocked;
+    settings.worldTransform = ToArray(absolute);
     settings.worldTransformValid = true;
     error.clear();
     return true;

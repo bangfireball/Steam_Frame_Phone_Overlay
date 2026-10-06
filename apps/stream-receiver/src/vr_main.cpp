@@ -547,6 +547,17 @@ int main(int argc, char** argv) {
                         glance.ShowPinned();
                         saveSettings = true;
                         break;
+                    case phonecast::vr::RadialMenuAction::PinCurrentPosition: {
+                        auto pinned = controls.Settings();
+                        if (!renderer.PinCurrentPosition(pinned, error)) {
+                            std::cerr << "Warning: " << error << '\n';
+                            break;
+                        }
+                        controls.ReplaceSettings(pinned);
+                        glance.ShowPinned();
+                        saveSettings = true;
+                        break;
+                    }
                     case phonecast::vr::RadialMenuAction::OpenSettings:
                         settingsMenu.Open(controls.Settings());
                         openSettingsRequested = true;

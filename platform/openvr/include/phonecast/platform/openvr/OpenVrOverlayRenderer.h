@@ -34,6 +34,7 @@ public:
     // launcher and by second-instance IPC; it never starts SteamVR itself.
     bool FocusDashboard(std::string& error);
     bool PlaceBesideDashboard(vr::OverlaySettings& settings, std::string& error);
+    bool PinCurrentPosition(vr::OverlaySettings& settings, std::string& error);
     std::string DefaultAudioDeviceId() const;
     bool TakePointerEvent(core::PointerEvent& event) override;
     bool ShowNotification(const core::protocol::NotificationEvent& notification,

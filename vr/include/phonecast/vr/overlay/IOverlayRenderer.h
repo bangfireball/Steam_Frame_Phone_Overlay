@@ -40,6 +40,8 @@ enum class RadialMenuAction {
     WorldLocked,
     LeftControllerLocked,
     RightControllerLocked,
+    // Converts the current tracked placement into a stationary world anchor.
+    PinCurrentPosition,
     OpenSettings
 };
 

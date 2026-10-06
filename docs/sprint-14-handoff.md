@@ -30,6 +30,7 @@ Before implementation, read `design.md` completely, `docs/development.md`, and r
 4. World reset was visible but too small/low; left-stick hold worked after multiple tries; legacy stick push/pull did **not** work. Revised reveal sizing/position, added both-stick hold and double-click docking, and replaced legacy axis reads with explicit actions. These revised shortcuts/axes have not been individually physically approved.
 5. Next Show was better but too far right and not facing the user. Owner requested notification-style placement controls with dummy preview.
 6. Latest adjustable Start Location build received “that's better.” No detailed preview/apply/cancel/persistence or drag-depth/shortcut approval was stated.
+7. A dashboard-active hotkey experiment physically failed: neither hold nor double-click actions delivered while the SteamVR dashboard owned focus. The shortcut set is again disabled there. The owner requested repeated same-hand double-click to pin an already docked visible phone in world space; that behavior is implemented but not yet physically validated.
 
 Do not convert the failed legacy depth test into a claim that the new explicit-axis path works physically.
 
@@ -63,18 +64,18 @@ Do not convert the failed legacy depth test into a claim that the new explicit-a
 - Tracking loss ends/fixes the panel at its last valid pose.
 - Dashboard-close cancellation runs on visible→hidden transition, not on every dashboard-hidden frame.
 - Legacy menu-button calibration polling is disabled in normal operation; Settings remains the supported calibration path.
-- `/actions/phonecast_panel` binds only left/right stick position and is submitted at normal priority while the dashboard is visible. No panel axis set is submitted during dashboard-closed gameplay. The shortcut set is submitted alongside it while the dashboard is visible for the pending dashboard-active hotkey experiment.
+- `/actions/phonecast_panel` binds only left/right stick position and is submitted at normal priority while the dashboard is visible. No panel axis set is submitted during dashboard-closed gameplay, and the shortcut set is no longer submitted while the dashboard owns focus.
 - While a phone/settings Move handle is held, the invoking hand's explicit axis supplies depth: up farther, down closer along the head-to-panel ray.
 - Portable `PanelDepth.h` supplies deadzone 0.20, maximum elapsed step 50 ms, maximum speed 0.6 m/s, range 0.20–3.0 m.
 - This is a proposed correction to the physically failed legacy axis path; native dashboard-focus delivery remains pending physical evidence.
 
 ### Shortcuts
 
-- With the dashboard open or closed: hold **either thumbstick button** to toggle phone visibility; double-click a stick to open/dock to that hand. Dashboard-active delivery and navigation coexistence are not yet physically established.
+- With the dashboard closed: hold **either thumbstick button** to toggle phone visibility; double-click a stick to open/dock to that hand. If the visible phone is already docked to that same hand, repeating the double click snapshots its current pose and physical size into a stationary world anchor.
 - Long/double recognition is in SteamVR bindings, not application timers.
 - Four optional Boolean actions in `/actions/phonecast_shortcuts`, normal priority `0`.
 - Active+changed+pressed events dispatch existing portable commands. Dock takes precedence if docking and toggle are delivered together.
-- The shortcut set is always submitted; the panel-axis set is additionally submitted while the dashboard is visible. No broad overlay-global action set, trigger, grip, or calibration inputs are shipped.
+- Shortcut and panel-axis sets are mutually exclusive again after dashboard-active delivery physically failed. No broad overlay-global action set, trigger, grip, or calibration inputs are shipped.
 - Both sets are remappable/unbindable through SteamVR. No in-app enable toggle has been added; defaults implement the owner's explicit request.
 - Binding activity is logged, but do not treat manifest load as input-delivery proof. There is not yet a complete per-action diagnostics UI or action-orchestration regression fixture.
 - A user-customized/cached SteamVR binding may retain old action paths after an update. If a new action is inactive, inspect/reset the PhoneCast binding rather than assuming the packaged defaults were adopted.
@@ -99,8 +100,8 @@ Do not convert the failed legacy depth test into a claim that the new explicit-a
 - Windows: `out/build/windows-x64/bin/phonecast-vr-stream-receiver.exe`.
 - ARM64 build: `out/build/linux-arm64-sprint14`.
 - Published bundle: `out/packages/phonecast-steam-frame-arm64-sprint14.tar.gz`.
-- Bundle SHA-256: `22e36bce1a3034fd8a897d820a8653f9a340fe2d1250f6b764b2f1027458684a`.
-- Packaged stripped receiver SHA-256: `5bbe08e66cc45e5c9da7c64ec185f4cdfaaf15a7214d44c99c01d78a71837f55`.
+- Bundle SHA-256: `2ba52fbf130ae32d42ff090c2027f5b9a1d973fab5224b2d8785bb6f7332825e`.
+- Packaged stripped receiver SHA-256: `e75f5616febc9b59c5aa89ac2c9287bd45aaffd1561ca51903554a735c00bcac`.
 - Node server: **http://10.0.0.3:8080**.
 - Routes: versioned `/phonecast-steam-frame-arm64-sprint14.tar.gz`, stable `/phonecast-steam-frame-arm64.tar.gz`, and `/install-phonecast.sh` bootstrap.
 - Current observed Node PID: `101552`; ephemeral, recheck before managing it. Ignored `local-apk-server/server.pid` records it.

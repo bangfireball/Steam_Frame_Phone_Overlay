@@ -3,6 +3,7 @@
 #include "phonecast/core/protocol/StreamProtocol.h"
 #include "phonecast/core/streaming/DecoderRecoveryController.h"
 #include "phonecast/core/streaming/GeneratedVideoSource.h"
+#include "phonecast/vr/interaction/ControllerShortcut.h"
 #include "phonecast/vr/interaction/OverlayInteractionController.h"
 #include "phonecast/vr/interaction/PanelDepth.h"
 #include "phonecast/vr/interaction/StartLocation.h"
@@ -365,6 +366,26 @@ void TestOverlayControls() {
           "active hand calibration resets");
 }
 
+void TestControllerShortcut() {
+    using phonecast::vr::ControllerDockShortcutAction;
+    using phonecast::vr::GlanceInput;
+    using phonecast::vr::PlacementMode;
+    using phonecast::vr::RadialMenuAction;
+
+    Check(ControllerDockShortcutAction(GlanceInput::LeftController, false,
+              PlacementMode::LeftControllerLocked) == RadialMenuAction::LeftControllerLocked,
+          "a hidden phone is reopened on the requested controller");
+    Check(ControllerDockShortcutAction(GlanceInput::LeftController, true,
+              PlacementMode::RightControllerLocked) == RadialMenuAction::LeftControllerLocked,
+          "a different controller receives the visible phone");
+    Check(ControllerDockShortcutAction(GlanceInput::LeftController, true,
+              PlacementMode::LeftControllerLocked) == RadialMenuAction::PinCurrentPosition,
+          "repeating the left dock shortcut pins at the current position");
+    Check(ControllerDockShortcutAction(GlanceInput::RightController, true,
+              PlacementMode::RightControllerLocked) == RadialMenuAction::PinCurrentPosition,
+          "repeating the right dock shortcut pins at the current position");
+}
+
 void TestGlanceMode() {
     phonecast::vr::OverlaySettings base;
     base.placementMode = phonecast::vr::PlacementMode::HeadLocked;
@@ -647,6 +668,7 @@ int main() {
     TestStreamProtocol();
     TestOverlayInteraction();
     TestOverlayControls();
+    TestControllerShortcut();
     TestGlanceMode();
     TestOverlaySettingsPersistence();
     TestSettingsMenu();
