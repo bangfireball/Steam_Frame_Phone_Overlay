@@ -727,9 +727,11 @@ std::vector<std::uint8_t> MakeDashboardTexture(
     }
 
     DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
-                   "LEFT STICK HOLD", 204, 372, 2, secondary);
+                   "HOLD EITHER STICK", 204, 366, 2, secondary);
     DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
-                   "TOGGLE PHONE", 204, 410, 2, secondary);
+                   "TOGGLE PHONE", 204, 402, 2, secondary);
+    DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                   "DOUBLE CLICK DOCK", 204, 438, 2, secondary);
     const auto& settings = kDashboardTargets[6];
     const auto& quit = kDashboardTargets[7];
     FillImageRoundedRect(image, kDashboardTextureWidth, kDashboardTextureHeight,
@@ -884,41 +886,76 @@ public:
         if (!inputApi) return;
         const auto manifest = std::filesystem::absolute(executablePath).parent_path() /
             "phonecast-actions.json";
-        if (inputApi->SetActionManifestPath(manifest.string().c_str()) != vr::VRInputError_None ||
-            inputApi->GetActionSetHandle("/actions/phonecast_shortcuts", &shortcutSet) != vr::VRInputError_None ||
-            inputApi->GetActionHandle("/actions/phonecast_shortcuts/in/toggle", &shortcutToggle) != vr::VRInputError_None) {
-            logger.Log(core::LogLevel::Warning, "openvr-shortcut", "Shortcut initialization failed.");
+        const bool ok =
+            inputApi->SetActionManifestPath(manifest.string().c_str()) == vr::VRInputError_None &&
+            inputApi->GetActionSetHandle("/actions/phonecast_shortcuts", &shortcutSet) == vr::VRInputError_None &&
+            inputApi->GetActionSetHandle("/actions/phonecast_panel", &panelSet) == vr::VRInputError_None &&
+            inputApi->GetActionHandle("/actions/phonecast_shortcuts/in/toggle_left", &shortcutToggleLeft) == vr::VRInputError_None &&
+            inputApi->GetActionHandle("/actions/phonecast_shortcuts/in/toggle_right", &shortcutToggleRight) == vr::VRInputError_None &&
+            inputApi->GetActionHandle("/actions/phonecast_shortcuts/in/dock_left", &shortcutDockLeft) == vr::VRInputError_None &&
+            inputApi->GetActionHandle("/actions/phonecast_shortcuts/in/dock_right", &shortcutDockRight) == vr::VRInputError_None &&
+            inputApi->GetActionHandle("/actions/phonecast_panel/in/axis_left", &panelAxisLeft) == vr::VRInputError_None &&
+            inputApi->GetActionHandle("/actions/phonecast_panel/in/axis_right", &panelAxisRight) == vr::VRInputError_None;
+        if (!ok) {
+            logger.Log(core::LogLevel::Warning, "openvr-shortcut", "Shortcut/panel action initialization failed.");
             return;
         }
         shortcutReady = true;
-        logger.Log(core::LogLevel::Info, "openvr-shortcut", "Narrow left-stick long press initialized at normal priority.");
+        logger.Log(core::LogLevel::Info, "openvr-shortcut",
+                   "Both-stick hold toggles and double-click docking initialized at normal priority.");
+    }
+
+    bool DigitalPressed(vr::VRActionHandle_t action, bool& active) const {
+        vr::InputDigitalActionData_t data{};
+        if (inputApi->GetDigitalActionData(action, &data, sizeof(data),
+                vr::k_ulInvalidInputValueHandle) != vr::VRInputError_None) return false;
+        active = active || data.bActive;
+        return data.bActive && data.bChanged && data.bState;
+    }
+
+    float ReadPanelAxis(vr::VRActionHandle_t action) const {
+        vr::InputAnalogActionData_t data{};
+        if (inputApi->GetAnalogActionData(action, &data, sizeof(data),
+                vr::k_ulInvalidInputValueHandle) != vr::VRInputError_None || !data.bActive)
+            return 0.0F;
+        return data.y;
     }
 
     void PollShortcut() {
         if (!shortcutReady) return;
-        if (overlayApi->IsDashboardVisible()) {
-            inputApi->UpdateActionState(nullptr, sizeof(vr::VRActiveActionSet_t), 0);
-            shortcutArmed = false;
-            return;
-        }
         vr::VRActiveActionSet_t active{};
-        active.ulActionSet = shortcutSet;
+        active.ulActionSet = overlayApi->IsDashboardVisible() ? panelSet : shortcutSet;
         active.nPriority = 0;
         if (inputApi->UpdateActionState(&active, sizeof(active), 1) != vr::VRInputError_None) return;
-        vr::InputDigitalActionData_t data{};
-        if (inputApi->GetDigitalActionData(shortcutToggle, &data, sizeof(data),
-                vr::k_ulInvalidInputValueHandle) != vr::VRInputError_None) return;
-        if (data.bActive != shortcutActive) {
-            shortcutActive = data.bActive;
-            logger.Log(core::LogLevel::Info, "openvr-shortcut",
-                       shortcutActive ? "Toggle binding active." : "Toggle binding inactive.");
+        if (overlayApi->IsDashboardVisible()) {
+            panelLeftY = ReadPanelAxis(panelAxisLeft);
+            panelRightY = ReadPanelAxis(panelAxisRight);
+            shortcutActive = false;
+            return;
         }
-        if (!data.bActive) return;
-        if (!data.bState) shortcutArmed = true;
-        if (shortcutArmed && data.bChanged && data.bState) {
+        panelLeftY = panelRightY = 0.0F;
+        bool anyActive = false;
+        const bool dockLeft = DigitalPressed(shortcutDockLeft, anyActive);
+        const bool dockRight = DigitalPressed(shortcutDockRight, anyActive);
+        const bool toggle = DigitalPressed(shortcutToggleLeft, anyActive) |
+                            DigitalPressed(shortcutToggleRight, anyActive);
+        if (anyActive != shortcutActive) {
+            shortcutActive = anyActive;
+            logger.Log(core::LogLevel::Info, "openvr-shortcut",
+                       shortcutActive ? "Shortcut bindings active." : "Shortcut bindings inactive.");
+        }
+        if (hasPendingRadialMenuSelection) return;
+        if (dockLeft || dockRight) {
+            pendingRadialMenuSelection.action = dockLeft
+                ? phonecast::vr::RadialMenuAction::LeftControllerLocked
+                : phonecast::vr::RadialMenuAction::RightControllerLocked;
+            pendingRadialMenuSelection.hand = dockLeft
+                ? phonecast::vr::GlanceInput::LeftController
+                : phonecast::vr::GlanceInput::RightController;
+            hasPendingRadialMenuSelection = true;
+        } else if (toggle) {
             pendingRadialMenuSelection.action = phonecast::vr::RadialMenuAction::ToggleVisible;
             hasPendingRadialMenuSelection = true;
-            shortcutArmed = false;
         }
     }
 
@@ -1880,18 +1917,12 @@ public:
             if (handle == overlay) grabLastAbsolute = tracked;
             else settingsWorldTransform = tracked;
             if (!DevicePose(vr::k_unTrackedDeviceIndex_Hmd, head)) return;
-            vr::VRControllerState_t state{};
-            if (!system->GetControllerState(device, &state, sizeof(state))) return;
-            std::size_t axisIndex = 0;
-            for (std::size_t index = 0; index < vr::k_unControllerStateAxisCount; ++index) {
-                const auto property = static_cast<vr::ETrackedDeviceProperty>(
-                    static_cast<int>(vr::Prop_Axis0Type_Int32) + static_cast<int>(index));
-                if (system->GetInt32TrackedDeviceProperty(device, property) == vr::k_eControllerAxis_Joystick) {
-                    axisIndex = index;
-                    break;
-                }
-            }
-            const float axis = state.rAxis[axisIndex].y;
+            const auto leftDevice = system->GetTrackedDeviceIndexForControllerRole(
+                vr::TrackedControllerRole_LeftHand);
+            const auto rightDevice = system->GetTrackedDeviceIndexForControllerRole(
+                vr::TrackedControllerRole_RightHand);
+            const float axis = device == leftDevice ? panelLeftY
+                : device == rightDevice ? panelRightY : 0.0F;
             if (std::fabs(axis) < 0.20F) return;
             auto absolute = Multiply(pose, relative);
             float direction[3]{};
@@ -2080,11 +2111,18 @@ public:
     HoldState rightHold{};
     phonecast::vr::WristMenuGesture wristMenuGesture{};
     vr::VRActionSetHandle_t shortcutSet{vr::k_ulInvalidActionSetHandle};
-    vr::VRActionHandle_t shortcutToggle{vr::k_ulInvalidActionHandle};
+    vr::VRActionSetHandle_t panelSet{vr::k_ulInvalidActionSetHandle};
+    vr::VRActionHandle_t shortcutToggleLeft{vr::k_ulInvalidActionHandle};
+    vr::VRActionHandle_t shortcutToggleRight{vr::k_ulInvalidActionHandle};
+    vr::VRActionHandle_t shortcutDockLeft{vr::k_ulInvalidActionHandle};
+    vr::VRActionHandle_t shortcutDockRight{vr::k_ulInvalidActionHandle};
+    vr::VRActionHandle_t panelAxisLeft{vr::k_ulInvalidActionHandle};
+    vr::VRActionHandle_t panelAxisRight{vr::k_ulInvalidActionHandle};
+    float panelLeftY{0.0F};
+    float panelRightY{0.0F};
     bool wasDashboardVisible{false};
     bool shortcutReady{false};
     bool shortcutActive{false};
-    bool shortcutArmed{false};
     std::chrono::steady_clock::time_point lastDragUpdate{};
     bool shown{false};
     bool desiredVisible{true};
@@ -2367,28 +2405,25 @@ bool OpenVrOverlayRenderer::SetVisible(bool visible, std::string& error) {
 
 bool OpenVrOverlayRenderer::PlaceBesideDashboard(
         phonecast::vr::OverlaySettings& settings, std::string& error) {
-    vr::HmdMatrix34_t panel{};
-    const vr::HmdVector2_t center{{0.5F, 0.5F}};
-    float dashboardWidth = 1.0F;
-    if (impl_->overlayApi->GetTransformForOverlayCoordinates(
-            impl_->dashboardOverlay, vr::TrackingUniverseStanding, center, &panel) !=
-            vr::VROverlayError_None) {
-        if (!impl_->DevicePose(vr::k_unTrackedDeviceIndex_Hmd, panel)) {
-            error = "No dashboard or HMD pose is available.";
-            return false;
-        }
-        const vr::HmdMatrix34_t local{{{1,0,0,0},{0,1,0,0},{0,0,1,-0.85F}}};
-        panel = Multiply(panel, local);
-    } else {
-        impl_->overlayApi->GetOverlayWidthInMeters(impl_->dashboardOverlay, &dashboardWidth);
+    vr::HmdMatrix34_t hmd{};
+    if (!impl_->DevicePose(vr::k_unTrackedDeviceIndex_Hmd, hmd)) {
+        error = "No HMD pose is available for the world reset.";
+        return false;
     }
     float phoneWidth = settings.widthMeters;
-    const auto phoneHeight = impl_->compositeFrame.height > kGrabHandleHeightPixels
-        ? impl_->compositeFrame.height - kGrabHandleHeightPixels : 0U;
-    if (phoneHeight > 0 && impl_->compositeFrame.width > phoneHeight)
-        phoneWidth *= static_cast<float>(impl_->compositeFrame.width) / phoneHeight;
+    if (impl_->overlayApi->GetOverlayWidthInMeters(impl_->overlay, &phoneWidth) ==
+        vr::VROverlayError_None) {
+        const auto phoneHeight = impl_->compositeFrame.height > kGrabHandleHeightPixels
+            ? impl_->compositeFrame.height - kGrabHandleHeightPixels : 0U;
+        const float presentationScale = phoneHeight > 0 && impl_->compositeFrame.width > phoneHeight
+            ? static_cast<float>(impl_->compositeFrame.width) / phoneHeight : 1.0F;
+        settings.widthMeters = phoneWidth / presentationScale;
+    }
+    float dashboardWidth = 1.0F;
+    impl_->overlayApi->GetOverlayWidthInMeters(impl_->dashboardOverlay, &dashboardWidth);
     const float offset = dashboardWidth * 0.5F + phoneWidth * 0.5F + 0.08F;
-    for (int row = 0; row < 3; ++row) panel.m[row][3] += panel.m[row][0] * offset;
+    const vr::HmdMatrix34_t local{{{1,0,0,offset},{0,1,0,0},{0,0,1,-0.85F}}};
+    const auto panel = Multiply(hmd, local);
     settings.placementMode = phonecast::vr::PlacementMode::WorldLocked;
     settings.worldTransform = ToArray(panel);
     settings.worldTransformValid = true;
@@ -2828,7 +2863,8 @@ void OpenVrOverlayRenderer::Stop() noexcept {
     impl_->resizing = false;
     impl_->shortcutReady = false;
     impl_->shortcutActive = false;
-    impl_->shortcutArmed = false;
+    impl_->panelLeftY = 0.0F;
+    impl_->panelRightY = 0.0F;
     impl_->wasDashboardVisible = false;
     impl_->lastDragUpdate = {};
     impl_->hasPendingSettingsMenuCommand = false;

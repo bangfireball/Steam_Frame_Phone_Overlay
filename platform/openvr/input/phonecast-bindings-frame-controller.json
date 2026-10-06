@@ -1,10 +1,29 @@
 {
   "controller_type": "frame_controller",
-  "name": "PhoneCast left stick long press",
-  "description": "Hold the left thumbstick button to show or hide the phone with the dashboard closed.",
+  "name": "PhoneCast visibility and panel controls",
+  "description": "Hold either stick to toggle the phone; double click to open it on that controller.",
   "bindings": {
     "/actions/phonecast_shortcuts": {
-      "sources": [{"path": "/user/hand/left/input/thumbstick", "mode": "button", "parameters": {"long_press_duration": "1.0"}, "inputs": {"long": {"output": "/actions/phonecast_shortcuts/in/toggle"}}}]
+      "sources": [
+        {"path": "/user/hand/left/input/thumbstick", "mode": "button", "inputs": {
+          "long": {"output": "/actions/phonecast_shortcuts/in/toggle_left"},
+          "double": {"output": "/actions/phonecast_shortcuts/in/dock_left"}
+        }},
+        {"path": "/user/hand/right/input/thumbstick", "mode": "button", "inputs": {
+          "long": {"output": "/actions/phonecast_shortcuts/in/toggle_right"},
+          "double": {"output": "/actions/phonecast_shortcuts/in/dock_right"}
+        }}
+      ]
+    },
+    "/actions/phonecast_panel": {
+      "sources": [
+        {"path": "/user/hand/left/input/thumbstick", "mode": "joystick", "inputs": {
+          "position": {"output": "/actions/phonecast_panel/in/axis_left"}
+        }},
+        {"path": "/user/hand/right/input/thumbstick", "mode": "joystick", "inputs": {
+          "position": {"output": "/actions/phonecast_panel/in/axis_right"}
+        }}
+      ]
     }
   }
 }
