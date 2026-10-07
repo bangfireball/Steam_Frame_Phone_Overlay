@@ -2,6 +2,21 @@ plugins {
     id "com.android.application"
 }
 
+// Signing material stays outside the repository. An explicit override supports
+// other machines/CI without placing credentials in command-line arguments.
+def signingPropertiesPath = System.getenv("PHONECAST_SIGNING_PROPERTIES")
+def signingPropertiesFile = signingPropertiesPath
+        ? new File(signingPropertiesPath)
+        : new File(System.getProperty("user.home"), ".phonecast-vr/android-release/signing.properties")
+def releaseSigningProperties = new Properties()
+if (signingPropertiesFile.isFile()) {
+    signingPropertiesFile.withInputStream { releaseSigningProperties.load(it) }
+}
+def requiredSigningFields = ["storeFile", "storePassword", "keyAlias", "keyPassword"]
+def hasReleaseSigning = requiredSigningFields.every {
+    releaseSigningProperties.getProperty(it)?.trim()
+}
+
 android {
     namespace "com.phonecastvr.sender"
     compileSdk 36
@@ -10,14 +25,28 @@ android {
         applicationId "com.phonecastvr.sender"
         minSdk 29
         targetSdk 36
-        versionCode 2
-        versionName "0.3.0"
+        versionCode 3
+        versionName "0.8"
 
         testInstrumentationRunner "android.test.InstrumentationTestRunner"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile new File(releaseSigningProperties.getProperty("storeFile"))
+                storePassword releaseSigningProperties.getProperty("storePassword")
+                keyAlias releaseSigningProperties.getProperty("keyAlias")
+                keyPassword releaseSigningProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
@@ -26,6 +55,25 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// Do not silently turn a requested public release into an unsigned artifact.
+// Debug builds and tests remain usable without anyone's private release key.
+def validateReleaseSigning = tasks.register("validateReleaseSigning") {
+    doLast {
+        if (!hasReleaseSigning) {
+            throw new GradleException("Release signing is not configured. See android/sender/README.md; set PHONECAST_SIGNING_PROPERTIES to a private signing.properties file.")
+        }
+        def keyStore = new File(releaseSigningProperties.getProperty("storeFile"))
+        if (!keyStore.isAbsolute() || !keyStore.isFile()) {
+            throw new GradleException("Release storeFile must be an absolute path to an existing keystore.")
+        }
+    }
+}
+tasks.configureEach {
+    if (name in ["assembleRelease", "bundleRelease", "packageRelease", "signReleaseBundle"]) {
+        dependsOn(validateReleaseSigning)
     }
 }
 

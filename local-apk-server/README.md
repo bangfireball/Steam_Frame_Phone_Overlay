@@ -1,6 +1,6 @@
-# Local PhoneCast download server
+# Local PhoneCast release download server
 
-Optional, dependency-free Node.js server for downloading PhoneCast artifacts over the trusted local network. It is not part of the runtime architecture.
+Optional dependency-free Node.js server for downloading the v0.8 release assets over a trusted local network. It is not part of the phone-to-headset runtime architecture and is not a public Internet service.
 
 From the repository root:
 
@@ -8,19 +8,17 @@ From the repository root:
 node local-apk-server/server.js
 ```
 
-It listens on port `8080` by default and offers whichever artifacts currently exist:
+It listens on port `8080` by default and serves:
 
-- Android APK: `android/sender/app/build/outputs/apk/debug/app-debug.apk`
-- Steam Frame ARM64 Sprint 14 bundle: `out/packages/phonecast-steam-frame-arm64-sprint14.tar.gz`
+| File | Local source | Download route |
+| --- | --- | --- |
+| Signed Android v0.8 APK | `out/packages/phonecast-vr-v0.8-android.apk` | `/phonecast-vr-v0.8-android.apk` |
+| Steam Frame ARM64 release | `out/packages/phonecast-vr-v0.8-steam-frame-arm64.tar.gz` | `/phonecast-vr-v0.8-steam-frame-arm64.tar.gz` |
+| Checksums for both assets | `out/packages/SHA256SUMS` | `/SHA256SUMS` |
 
-The APK path serves the current compatible sender, including the resizable Android home-screen Quick connect widget with a compact 1 × 1 layout. The stable
-`/phonecast-steam-frame-arm64.tar.gz` alias and curl bootstrap select the Sprint 14
-archive. This receiver bundle adds the landscape quick dashboard, reliable
-Show-beside-dashboard behavior, refreshed settings, and phone resize corner while
-retaining the owner-approved Sprint 13 audio path. If the current Android APK is
-already installed, update only the Frame bundle and quit PhoneCast first. Windows
-and ARM64 builds/tests pass; the refreshed UI still needs physical headset visual,
-resize, and laser-target approval.
+The existing `/phonecast-sender.apk` and `/phonecast-steam-frame-arm64.tar.gz` aliases serve these same release files. There is no fallback to debug APKs or older sprint bundles. Missing assets return 404; the page reports their absence. Old sprint-specific routes are no longer served.
+
+The signed APK cannot update a debug-signed installation. Stop casting, note the saved settings, uninstall the debug app, and then install the release APK; uninstalling clears saved app settings. Future public APK updates must use the same release signing key. Never serve or commit keystores or private signing properties.
 
 Override the port if needed:
 
@@ -29,60 +27,42 @@ $env:PORT=8081
 node local-apk-server/server.js
 ```
 
-## Package the Steam Frame bundle
+Open `http://YOUR_PC_LAN_IP:8080` from the phone/headset. Do not use `localhost` on another device. HTTP is unencrypted and does not authenticate artifacts; checksums from the same server detect corruption, not a malicious server. Stop the server with Ctrl+C after downloading.
 
-First complete the Linux ARM64 build and install staging described in `docs/development.md`. Then package the native receiver and adjacent OpenVR assets:
+## Steam Frame install
 
-```bash
-mkdir -p out/packages
-tar -czf out/packages/phonecast-steam-frame-arm64-sprint14.tar.gz \
-  -C out/packages phonecast-steam-frame-arm64-sprint14
-```
-
-The archive is a native AArch64 Linux application, not an APK. The download
-page provides copyable command blocks for both manual extraction and curl-based
-download/install. Open the page using the PC's LAN address so the curl block
-uses an address reachable from Steam Frame, not `localhost`.
-
-For an archive already downloaded to Steam Frame:
+The page provides copyable manual and curl-based install commands. For an archive already downloaded to Steam Frame:
 
 ```bash
 set -eu
 cd "$HOME/Downloads"
-tar -xzf phonecast-steam-frame-arm64-sprint14.tar.gz
-sh phonecast-steam-frame-arm64-sprint14/steam-frame-installer/install-phonecast.sh
+tar -xzf phonecast-vr-v0.8-steam-frame-arm64.tar.gz
+sh phonecast-vr-v0.8-steam-frame-arm64/steam-frame-installer/install-phonecast.sh
 ```
 
-Or paste this block into a Steam Frame desktop terminal, replacing
-`YOUR_PC_LAN_IP` with the download server's LAN address:
+Or download and inspect the bootstrap before running it:
 
 ```bash
 curl -fSLo "$HOME/install-phonecast.sh" 'http://YOUR_PC_LAN_IP:8080/install-phonecast.sh' &&
 sh "$HOME/install-phonecast.sh" 'http://YOUR_PC_LAN_IP:8080'
 ```
 
-Run as the normal headset user, without `sudo`. Quit PhoneCast before updating.
-The `/install-phonecast.sh` bootstrap checks Linux/ARM64, refuses root, downloads
-the archive before executing its installer, stops on failure, and removes the
-temporary bundle files. It does not pipe remote scripts into a shell. The
-bootstrap remains at `~/install-phonecast.sh` for inspection or removal; it can
-also be inspected using the page's script link. Settings and pairing survive reinstalls. HTTP provides no authenticated
-artifact verification: use only your own trusted PC and LAN.
+Run as the normal headset user, without `sudo`. Quit PhoneCast before updating. The bootstrap checks Linux/ARM64, refuses root, downloads the release via the stable archive alias, extracts into a temporary directory, stops on failure, and cleans up. It does not pipe a remote script into a shell. The downloaded bootstrap remains at `~/install-phonecast.sh` for inspection/removal. Settings and pairing survive receiver reinstalls.
 
-The Copy buttons fall back to selecting the commands when clipboard access is
-unavailable on an HTTP page; press Ctrl+C to copy the selected text.
+After installing, open the SteamVR dashboard **+** launcher and select **PhoneCast VR**. This exact release archive still needs an on-headset test; native decoder/GPU reliability limitations remain in the root README.
 
-The installer preserves the receiver executable bit, creates the SteamOS desktop
-entry and icons, and makes PhoneCast available through the SteamVR dashboard
-**+** launcher.
+Copy buttons fall back to selecting text if the browser denies clipboard access on HTTP; press Ctrl+C to copy it.
 
-Only use this server on a trusted local network. Stop it with `Ctrl+C` after downloading.
+## Updating assets and server code
+
+The server reads artifacts on each request and sends `Cache-Control: no-store`. Replacing an APK/archive/checksum file needs no restart; regenerate `SHA256SUMS` after changing either asset. Changing server code requires restarting this Node process, not SteamVR or PhoneCast.
+
+Before sharing, run `sha256sum -c SHA256SUMS` from `out/packages`. Keep Linux installer scripts/checksum files LF-terminated, archive executable bits preserved, and the archive's top-level directory named `phonecast-vr-v0.8-steam-frame-arm64` to match the bootstrap.
 
 ## Tests
 
-Run `npm test --prefix local-apk-server` (Node.js and Bash/curl required). Tests
-cover page commands, shell syntax, browser URL substitution, download routes,
-missing artifacts, and stopping after a failed curl download. Harmless fixture
-tests cover bootstrap installation, platform/root rejection, missing installer,
-corrupt archive, download/install failure, and temporary-directory cleanup. They do not
-validate installation or browser clipboard behavior on physical Steam Frame.
+```powershell
+npm test --prefix local-apk-server
+```
+
+Requires Node.js and Bash/curl. Tests cover versioned and stable routes, release filenames, no-store headers, checksum availability, page commands, browser URL substitution, shell syntax, missing assets, and failed downloads. Harmless fixtures exercise bootstrap installation, platform/root rejection, missing installer, corrupt archive, download/install failure, and temporary-directory cleanup. No real receiver or physical headset is started by these tests.

@@ -1,6 +1,6 @@
 # PhoneCast Android Sender
 
-This Android application captures the user-approved display with `MediaProjection`, feeds it into a surface-input H.264/AVC `MediaCodec` encoder, and streams encoded access units to the Sprint 3 PC receiver over the local network.
+This Android application captures the user-approved display with `MediaProjection`, feeds it into a surface-input H.264/AVC `MediaCodec` encoder, and streams encoded access units to the native Steam Frame receiver over the local network. The Windows receiver is a secondary supported path. The v0.8 app uses `versionCode` 3.
 
 ## Requirements
 
@@ -22,6 +22,50 @@ APK:
 ```text
 app/build/outputs/apk/debug/app-debug.apk
 ```
+
+## Signed v0.8 release
+
+Release builds use a private `signing.properties` file outside the repository:
+
+- Default: `%USERPROFILE%\.phonecast-vr\android-release\signing.properties` on Windows, or `~/.phonecast-vr/android-release/signing.properties` elsewhere.
+- Override: set `PHONECAST_SIGNING_PROPERTIES` to an absolute path to another private properties file.
+
+The properties file contains these four fields (example placeholders, not actual credentials):
+
+```properties
+storeFile=C:/Users/YOUR_USER/.phonecast-vr/android-release/phonecast-vr-release.jks
+storePassword=YOUR_PRIVATE_KEYSTORE_PASSWORD
+keyAlias=phonecast-vr
+keyPassword=YOUR_PRIVATE_KEY_PASSWORD
+```
+
+Use an absolute keystore path and forward slashes in properties files. Never commit this file, the keystore, or passwords. If you already have a release signing key, reuse it rather than generating a replacement. The Android debug keystore at `~/.android/debug.keystore` is not a public release key.
+
+To create a key yourself, open this project in Android Studio, choose **Build → Generate Signed Bundle / APK → APK → Create new**, and save the keystore outside the repository. Use a strong password, alias `phonecast-vr`, and validity of at least 25 years. Then create the private properties file above. Restrict filesystem access to your account and store an encrypted backup of both the keystore and its credentials. APK certificates expose their certificate identity publicly; do not put private personal details in that identity.
+
+Build from `android/sender`:
+
+```powershell
+.\gradlew.bat testDebugUnitTest assembleDebug lintDebug assembleRelease lintRelease
+```
+
+Signed APK:
+
+```text
+app/build/outputs/apk/release/app-release.apk
+```
+
+Release assembly fails when signing configuration is missing; debug builds/tests still work without it. Verify the signed APK with your Android SDK build-tools `apksigner.bat`:
+
+```powershell
+apksigner.bat verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
+```
+
+Publish only the verified APK, never the signing material. For GitHub, the APK can be copied/renamed to `phonecast-vr-v0.8-android.apk`.
+
+**Debug-to-release migration:** a release-signed APK cannot update a debug-signed installation. Stop casting first so brightness and phone volume can restore, note your settings, uninstall the debug app, then install the release APK and grant optional permissions again. Uninstalling clears saved connection/settings data. Subsequent public updates must use this same release key and a higher `versionCode`; losing the key or password prevents ordinary in-place updates for GitHub APK users.
+
+See [Android app-signing documentation](https://developer.android.com/studio/publish/app-signing). APK signing establishes publisher/update identity; it does not encrypt PhoneCast's network stream.
 
 ## Install
 

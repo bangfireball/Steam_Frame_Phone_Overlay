@@ -15,6 +15,11 @@ CMakeUserPresets.json
 **/build/
 **/local.properties
 
+# Android release-signing secrets (also keep them outside the repository)
+*.jks
+*.keystore
+**/signing.properties
+
 # Optional local APK server state
 /local-apk-server/*.log
 /local-apk-server/*.pid

@@ -2291,6 +2291,29 @@ Detailed existing research, closure notes, and the validation matrix are in
 
 ---
 
+# Feature Backlog
+
+## Auto-find headset — automatic LAN discovery
+
+**Status:** `[ ] Not started — backlogged; not part of v0.8`
+
+The Android app should search the local network for a running PhoneCast headset receiver so the user does not need to find or type the headset's IP address.
+
+Planned behavior and acceptance criteria:
+
+- Discover running Steam Frame PhoneCast receivers on the same LAN and show a recognizable headset name.
+- Let the user select a headset when more than one receiver is found; never silently connect to an arbitrary device.
+- Keep the existing explicit pairing approval/code requirement. Discovery is not authentication and must not start capture or grant remote control automatically.
+- Remember the selected receiver and rediscover it when its IP changes, including ordinary reconnects.
+- Provide clear searching, found, and not-found states, with manual IP entry retained as a fallback for networks that block discovery.
+- Keep discovery bounded and lifecycle-aware rather than scanning continuously when the app is inactive.
+- Evaluate a standard LAN discovery mechanism such as mDNS/DNS-SD during implementation; preserve portable receiver/platform boundaries and document Android network permissions.
+- Test first connection, multiple receivers, changed IP, network interruption, unavailable receiver, and discovery-blocked Wi-Fi on physical Android/Steam Frame hardware.
+
+This makes the previously deferred Sprint 12 automatic-discovery goal an explicit product backlog feature. No discovery implementation or physical validation is claimed by this entry.
+
+---
+
 # 6. Networking & Security
 
 PhoneCast should assume that phone content is sensitive.

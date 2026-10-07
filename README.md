@@ -52,15 +52,20 @@ Download the **Steam Frame ARM64 receiver archive** and **Android APK** from [Gi
 
 ### 1. Install on Steam Frame
 
-1. Download and extract the receiver `.tar.gz` archive on the headset.
-2. Open a terminal in the extracted directory containing `phonecast-vr-stream-receiver` and `steam-frame-installer`.
-3. Run the installer as your normal user—**not with `sudo`**:
+1. Download `phonecast-vr-v0.8-steam-frame-arm64.tar.gz` to the headset's **Downloads** folder. Quit PhoneCast first if updating.
+2. Open a terminal in desktop mode and paste these commands to extract and install it. Run as your normal user—**not with `sudo`**:
 
    ```bash
+   set -eu
+   cd "$HOME/Downloads"
+   tar -xzf phonecast-vr-v0.8-steam-frame-arm64.tar.gz
+   cd phonecast-vr-v0.8-steam-frame-arm64
    ./steam-frame-installer/install-phonecast.sh
    ```
 
-4. With SteamVR running, open its dashboard, select **+**, and launch **PhoneCast VR**.
+   If you saved the archive elsewhere, change the first `cd` to that folder.
+
+3. With SteamVR running, open its dashboard, select **+**, and launch **PhoneCast VR**.
 
 Installation currently needs a terminal; ordinary launches afterward do not. The installer creates a desktop entry and installs under `~/.local/opt/phonecast-vr`. A second launch is designed to focus the existing receiver instead of starting another copy. Autostart is not required or currently provided.
 
@@ -95,6 +100,17 @@ Casting works without enabling remote control, notifications, or phone audio.
 | Phone dimming | **Dim phone while casting** and Android **Modify system settings** access | Preference is on by default, but without permission casting continues undimmed. Restore via the app/foreground notification; Android brightness controls are the emergency fallback. |
 
 See [remote control](docs/remote-control.md), [notifications](docs/notifications.md), [phone audio](docs/phone-audio.md), and [phone dimming](docs/android-screen-off.md) for details.
+
+### Can't enable Accessibility? Allow restricted settings
+
+Android 13 and newer may block Accessibility access for a sideloaded APK with a **Restricted setting** warning. If you trust the PhoneCast build you installed:
+
+1. Open Android **Settings → Apps → PhoneCast → App info**. You can also long-press the PhoneCast app icon and select **App info**.
+2. Tap the **three-dot menu** in the top-right and choose **Allow restricted settings**. Confirm your identity if prompted.
+3. Return to **Settings → Accessibility**, select **PhoneCast remote control**, and enable it. The service may appear under **Downloaded apps** or **Installed apps**.
+4. In PhoneCast, also enable **Allow remote control while casting**—both this toggle and the Accessibility service are required.
+
+Menu names and availability vary by phone and Android version. This approval does not enable remote control by itself. Casting still works without Accessibility. Only allow restricted settings for an app you trust; see [Android's restricted-settings guidance](https://support.google.com/android/answer/12623953).
 
 ## Known limitations in v0.8
 

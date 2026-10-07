@@ -4,11 +4,10 @@ const path = require("node:path");
 
 const host = process.env.HOST || "0.0.0.0";
 const port = Number(process.env.PORT || 8080);
-const defaultApkPath = path.resolve(
-  __dirname,
-  "../android/sender/app/build/outputs/apk/debug/app-debug.apk",
-);
-const steamFrameDirectoryName = "phonecast-steam-frame-arm64-sprint14";
+const apkFileName = "phonecast-vr-v0.8-android.apk";
+const defaultApkPath = path.resolve(__dirname, `../out/packages/${apkFileName}`);
+const defaultChecksumsPath = path.resolve(__dirname, "../out/packages/SHA256SUMS");
+const steamFrameDirectoryName = "phonecast-vr-v0.8-steam-frame-arm64";
 const steamFrameFileName = `${steamFrameDirectoryName}.tar.gz`;
 const defaultSteamFramePath = path.resolve(
   __dirname,
@@ -35,6 +34,7 @@ function serveDownload(response, filePath, contentType, fileName, missingMessage
 function createDownloadServer(files = {}) {
 const apkPath = files.apkPath || defaultApkPath;
 const steamFramePath = files.steamFramePath || defaultSteamFramePath;
+const checksumsPath = files.checksumsPath || defaultChecksumsPath;
 return http.createServer((request, response) => {
   const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
 
@@ -56,14 +56,16 @@ return http.createServer((request, response) => {
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PhoneCast Downloads</title>
 <style>pre {background:#eee;padding:1rem;overflow:auto} button {cursor:pointer}</style></head>
 <body style="font-family:sans-serif;max-width:40rem;margin:4rem auto;padding:0 1rem">
-<h1>PhoneCast Downloads</h1>
+<h1>PhoneCast v0.8 Downloads</h1>
+<p>Early-access release: native Steam Frame receiver and release-signed Android app.</p>
+${fs.existsSync(checksumsPath) ? '<p><a href="/SHA256SUMS">Download SHA256SUMS</a> to verify both downloads. Checksums from this HTTP server detect corruption, not a malicious server.</p>' : ''}
 <h2>Android phone</h2>
 ${apkAvailable
-  ? '<p><a href="/phonecast-sender.apk">Download the current Android APK</a></p><p>The sender remains compatible with the Sprint 14 receiver. Dim phone while casting is enabled by default; approve Android\'s separate Modify system settings access to use it, or cast undimmed. Settings and the casting notification can restore brightness temporarily. Optional phone playback audio is off by default.</p>'
-  : "<p>The debug APK has not been built yet.</p>"}
+  ? `<p><a href="/${apkFileName}">Download the signed Android v0.8 APK</a></p><p>If you previously installed the debug app, stop casting, note your settings, and uninstall it before installing this release: the signing keys differ. Uninstalling clears saved settings. Optional phone playback audio is off by default. Dim phone while casting is enabled by default but requires Android's separate Modify system settings approval; casting works undimmed without it.</p>`
+  : "<p>The signed v0.8 APK is not available.</p>"}
 <h2>Steam Frame</h2>
 ${steamFrameAvailable
-  ? `<p><a href="/${steamFrameFileName}">Download the Sprint 14 ARM64 Linux bundle</a></p>
+  ? `<p><a href="/${steamFrameFileName}">Download the v0.8 Steam Frame ARM64 release bundle</a></p>
 <p>On Steam Frame, open a terminal in desktop mode. Install as your normal user, without <code>sudo</code>. This is a native Linux application, not an APK.</p>
 <h3>Already downloaded? Extract and install</h3>
 <p>These commands assume the archive is in <code>~/Downloads</code>.</p>
@@ -80,7 +82,7 @@ sh "$HOME/install-phonecast.sh" 'http://YOUR_PC_LAN_IP:${port}'</code></pre>
 <button type="button" data-copy="curl-install">Copy commands</button>
 <p>The script checks Linux/ARM64 and refuses root installation. It downloads and extracts the bundle in a temporary directory, cleans up, and stops on failure. No remote script is piped into a shell. The downloaded script remains at <code>~/install-phonecast.sh</code> for inspection or removal.</p>
 <p>After installation, open the SteamVR dashboard <strong>+ app launcher</strong> and select <strong>PhoneCast VR</strong>. Quit PhoneCast before updating an existing installation; settings and pairing are retained.</p>
-<p>This Sprint 14 build adds Settings → Placement → Start Location with live dummy preview and saved distance/horizontal/vertical controls. Show keeps the phone size, resets closer to center, and faces the user. Either-stick hold toggles visibility; double click opens on that controller. Software tests pass; physical approval remains pending.</p>
+<p>v0.8 includes in-headset settings, controller interaction, notifications, optional phone audio, and move/resize controls. Some decoder freezes and Adreno/Vulkan device-loss failures remain under investigation; save game progress before testing. This exact release archive still needs an on-headset test.</p>
 <p><strong>Trusted LAN only:</strong> this development server uses unencrypted HTTP. Install only from your own trusted PC.</p>`
   : "<p>The Steam Frame ARM64 bundle has not been packaged yet.</p>"}
 <script>
@@ -117,9 +119,15 @@ for (const button of document.querySelectorAll('[data-copy]')) {
     return;
   }
 
-  if (url.pathname === "/phonecast-sender.apk") {
+  if (url.pathname === "/SHA256SUMS") {
+    serveDownload(response, checksumsPath, "text/plain; charset=utf-8",
+      "SHA256SUMS", "Checksums not found");
+    return;
+  }
+
+  if (url.pathname === `/${apkFileName}` || url.pathname === "/phonecast-sender.apk") {
     serveDownload(response, apkPath, "application/vnd.android.package-archive",
-      "phonecast-sender-debug.apk", "APK not found");
+      apkFileName, "Signed APK not found");
     return;
   }
 

@@ -19,7 +19,9 @@ test('download page commands, origin substitution, routes and failure handling',
   const apk = path.join(dir, 'sender.apk');
   fs.writeFileSync(bundle, 'test bundle');
   fs.writeFileSync(apk, 'test apk');
-  const server = createDownloadServer({ apkPath: apk, steamFramePath: bundle });
+  const checksums = path.join(dir, 'SHA256SUMS');
+  fs.writeFileSync(checksums, 'test checksums\n');
+  const server = createDownloadServer({ apkPath: apk, steamFramePath: bundle, checksumsPath: checksums });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
     await new Promise(resolve => server.close(resolve));
@@ -32,10 +34,11 @@ test('download page commands, origin substitution, routes and failure handling',
   const manual = html.match(/id="manual-install">([\s\S]*?)<\/code>/)[1];
   const curl = html.match(/id="curl-install">([\s\S]*?)<\/code>/)[1].replaceAll('&amp;', '&');
   assert.match(manual, /cd "\$HOME\/Downloads"/);
-  assert.match(manual, /sh phonecast-steam-frame-arm64-sprint14\/steam-frame-installer\/install-phonecast.sh/);
-  assert.match(html, /Download the current Android APK/);
-  assert.match(html, /Download the Sprint 14 ARM64 Linux bundle/);
-  assert.doesNotMatch(html, /sprint12|Sprint 12|sprint13|Sprint 13/);
+  assert.match(manual, /sh phonecast-vr-v0\.8-steam-frame-arm64\/steam-frame-installer\/install-phonecast.sh/);
+  assert.match(html, /Download the signed Android v0.8 APK/);
+  assert.match(html, /Download the v0.8 Steam Frame ARM64 release bundle/);
+  assert.match(html, /Download SHA256SUMS/);
+  assert.doesNotMatch(html, /sprint12|Sprint 12|sprint13|Sprint 13|sprint14|Sprint 14|sender-debug/);
   assert.match(curl, /curl -fSLo/);
   assert.match(curl, /&&\nsh/);
   assert.ok(!curl.includes('| sh'));
@@ -57,17 +60,32 @@ test('download page commands, origin substitution, routes and failure handling',
   assert.match(script, /without sudo/);
   assert.ok(!script.includes('\r'), 'served Linux installer must use LF line endings');
   assert.equal(spawnSync('bash', ['-n'], { input: script }).status, 0);
-  assert.match(script, /phonecast-steam-frame-arm64-sprint14\/steam-frame-installer\/install-phonecast.sh/);
-  for (const route of ['/phonecast-steam-frame-arm64.tar.gz', '/phonecast-steam-frame-arm64-sprint14.tar.gz']) {
+  assert.match(script, /phonecast-vr-v0\.8-steam-frame-arm64\/steam-frame-installer\/install-phonecast.sh/);
+  for (const route of ['/phonecast-steam-frame-arm64.tar.gz', '/phonecast-vr-v0.8-steam-frame-arm64.tar.gz']) {
     const response = await fetch(origin + route);
     assert.equal(response.status, 200);
-    assert.equal(response.headers.get('content-disposition'), 'attachment; filename="phonecast-steam-frame-arm64-sprint14.tar.gz"');
+    assert.equal(response.headers.get('content-disposition'), 'attachment; filename="phonecast-vr-v0.8-steam-frame-arm64.tar.gz"');
+    assert.equal(response.headers.get('cache-control'), 'no-store');
     assert.equal(await response.text(), 'test bundle');
   }
-  assert.equal(await (await fetch(origin + '/phonecast-sender.apk')).text(), 'test apk');
+  for (const route of ['/phonecast-sender.apk', '/phonecast-vr-v0.8-android.apk']) {
+    const response = await fetch(origin + route);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-disposition'), 'attachment; filename="phonecast-vr-v0.8-android.apk"');
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.equal(await response.text(), 'test apk');
+  }
+  const checksumResponse = await fetch(origin + '/SHA256SUMS');
+  assert.equal(checksumResponse.status, 200);
+  assert.equal(checksumResponse.headers.get('cache-control'), 'no-store');
+  assert.equal(await checksumResponse.text(), 'test checksums\n');
+  fs.unlinkSync(checksums);
+  assert.equal((await fetch(origin + '/SHA256SUMS')).status, 404);
+  assert.doesNotMatch(await (await fetch(origin)).text(), /Download SHA256SUMS/);
   assert.equal((await fetch(origin, { method: 'POST' })).status, 405);
   assert.equal((await fetch(origin + '/missing')).status, 404);
   assert.equal((await fetch(origin + '/phonecast-steam-frame-arm64-sprint12.tar.gz')).status, 404);
+  assert.equal((await fetch(origin + '/phonecast-steam-frame-arm64-sprint14.tar.gz')).status, 404);
   fs.unlinkSync(bundle);
   assert.equal((await fetch(origin + '/phonecast-steam-frame-arm64.tar.gz')).status, 404);
   // A failed download must stop before tar/install, with no shell-script side effects.
@@ -84,5 +102,7 @@ test('download page commands, origin substitution, routes and failure handling',
   assert.match(failedDownload.stderr, /404/);
   assert.doesNotMatch(await (await fetch(origin)).text(), /id="curl-install"/);
   fs.unlinkSync(apk);
+  assert.equal((await fetch(origin + '/phonecast-sender.apk')).status, 404);
+  assert.equal((await fetch(origin + '/phonecast-vr-v0.8-android.apk')).status, 404);
   assert.equal((await fetch(origin)).status, 503);
 });

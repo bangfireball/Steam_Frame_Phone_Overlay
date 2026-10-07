@@ -5,7 +5,7 @@ set -eu
 script=$1
 sandbox=$(mktemp -d)
 trap 'rm -rf "$sandbox"' EXIT
-mkdir -p "$sandbox/bin" "$sandbox/tmp" "$sandbox/payload/phonecast-steam-frame-arm64-sprint14/steam-frame-installer"
+mkdir -p "$sandbox/bin" "$sandbox/tmp" "$sandbox/payload/phonecast-vr-v0.8-steam-frame-arm64/steam-frame-installer"
 cat > "$sandbox/bin/uname" <<'EOF'
 #!/bin/sh
 case "$1" in -s) echo Linux;; -m) echo "${TEST_ARCH:-aarch64}";; esac
@@ -23,7 +23,7 @@ while [ "$#" -gt 0 ]; do
 done
 exit 1
 EOF
-cat > "$sandbox/payload/phonecast-steam-frame-arm64-sprint14/steam-frame-installer/install-phonecast.sh" <<'EOF'
+cat > "$sandbox/payload/phonecast-vr-v0.8-steam-frame-arm64/steam-frame-installer/install-phonecast.sh" <<'EOF'
 #!/bin/sh
 printf 'installed\n' > "$TEST_MARKER"
 exit "${TEST_INSTALL_STATUS:-0}"
@@ -59,7 +59,7 @@ unset TEST_INSTALL_STATUS
 printf 'invalid archive' > "$TEST_ARCHIVE"
 expect_failure http://trusted.example:8080
 [ ! -f "$TEST_MARKER" ]
-rm -rf "$sandbox/payload/phonecast-steam-frame-arm64-sprint14"
+rm -rf "$sandbox/payload/phonecast-vr-v0.8-steam-frame-arm64"
 tar -czf "$TEST_ARCHIVE" -C "$sandbox/payload" .
 expect_failure http://trusted.example:8080
 [ ! -f "$TEST_MARKER" ]

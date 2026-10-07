@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(phonecast-vr VERSION 0.1.0 LANGUAGES CXX)
+project(phonecast-vr VERSION 0.8.0 LANGUAGES CXX)
 
 include(CTest)
 
