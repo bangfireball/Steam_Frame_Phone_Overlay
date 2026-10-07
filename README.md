@@ -1,177 +1,153 @@
 # PhoneCast VR
 
-PhoneCast VR mirrors an Android phone into VR as a low-latency OpenVR overlay. It can run through Windows SteamVR or directly on Steam Frame ARM64 without a PC.
+**Your Android phone, inside Steam Frame. No PC required.**
 
-> **v0.1 — personal alpha / near-release build**
->
-> The core experience works and has been used on real hardware, but setup and parts of the interface are still rough. This is an early open-source release for technical users, not a polished consumer product.
+Mirror your phone into VR, check notifications, watch videos with optional phone audio, and interact using your controllers—all while a standalone game runs underneath.
 
-## What works
+**v0.8 · First public release preparation · Early-access software**
 
-- Android screen capture using MediaProjection and hardware H.264 encoding
-- Paired local-network streaming at approximately 30 FPS
-- Windows x64 receiver using Media Foundation, D3D11, and OpenVR
-- Native Steam Frame ARM64 receiver using V4L2, Vulkan, and OpenVR
-- Head-, world-, left-controller-, and right-controller-locked placement
-- Show, hide, glance, pin, scale, opacity, distance, and placement controls
-- SteamVR dashboard panel and in-headset settings
-- Optional controller interaction with Android: tap, long-press, drag, swipe, scroll, and Back
-- Optional notification cards with privacy filtering and app allow/block lists
-- Portrait and landscape streaming on the established Windows path
-- Persisted overlay and controller-placement settings
-- Performance diagnostics and selectable Battery Saver, Standard, and Quality profiles
+[Downloads & release notes](https://github.com/bangfireball/Steam_Frame_Phone_Overlay/releases) · [Report a bug](https://github.com/bangfireball/Steam_Frame_Phone_Overlay/issues) · [Build from source](docs/development.md)
 
-The native Steam Frame Vulkan path has been physically tested with smooth, flicker-free phone streaming and stable memory during a locally running flat game. Native coexistence with a true standalone VR scene, orientation recreation, clean shutdown, and longer lifecycle cases still need broader validation.
+## See it in action
 
-## Important limitations
+| Phone overlay during gameplay | Dashboard and settings |
+| --- | --- |
+| *Gameplay photo coming soon* | *Controls photo coming soon* |
 
-- **The stream is not encrypted. Use PhoneCast only on a trusted private LAN.**
-- Setup is currently manual: start the receiver, enter its LAN IP and six-digit pairing code on Android, and approve Android screen sharing.
-- Native Steam Frame packaging, startup, reconnect, and sleep/wake behavior are not yet consumer-ready.
-- The UI works but remains rough. Wrist-opening gestures and broad controller hotkeys are intentionally disabled because they were not reliable enough and could conflict with game input.
-- With the dashboard closed, the persistent phone panel is view-only so PhoneCast does not steal controller input from the active game.
-- Remote control requires explicit in-app consent and enabling the PhoneCast Android Accessibility service.
-- Notification forwarding is optional and disabled by default. Notification text remains redacted unless separately enabled.
-- Android may stop MediaProjection when the phone locks. Start a new casting session after unlocking.
-- Phone audio is not currently streamed.
-- Steam Frame support targets current development hardware/runtime behavior and may be affected by SteamOS or SteamVR updates.
+**Demo video:** coming soon—showing launch, pairing, phone interaction, and standalone gameplay.
 
-See [`design.md`](design.md) for exact validation status and unresolved hardware checks. Compilation alone is not treated as physical validation.
+<!-- Release media slots: replace the placeholder cells above with Markdown images.
+Suggested files: docs/media/gameplay.jpg and docs/media/dashboard.jpg.
+For a video, add a linked thumbnail: [![Watch the demo](docs/media/demo.jpg)](VIDEO_URL).
+Use your own captures and hide pairing codes, notification text, and personal details.
+-->
 
-## Requirements
+## What you can do
 
-### Android sender
+- **View your phone in VR:** local-network H.264 streaming targeting 30 FPS, with portrait and landscape support.
+- **Place it where you want:** world/head placement or left/right controller docking, with move and resize handles.
+- **Control Android:** tap, hold, swipe, drag-scroll, and Android Back with the dashboard laser when optional remote control is enabled.
+- **Hear phone audio:** optional supported playback capture, headset volume/mute controls, and local-phone mute.
+- **See notifications:** optional cards, app allow/block lists, and notification-to-app navigation; sensitive content is redacted by default.
+- **Keep setup convenient:** saved receiver details, Android Quick connect widget, in-headset settings, and reconnect during an active capture session.
+- **Dim the physical phone:** default-on dimming while casting, subject to Android approval, with temporary restore controls.
 
-- Android 10 or newer
-- Android SDK 36 and JDK 17 to build
-- A device with an H.264/AVC surface-input encoder
+The primary release target is **the native Steam Frame ARM64 receiver + Android app**. A Windows SteamVR receiver also works, but is a secondary development/fallback path—not the focus of v0.8. A Windows-hosted overlay cannot follow you into headset-native standalone games.
 
-### Windows receiver
+## Before you install
 
-- Windows x64
-- SteamVR
-- CMake 3.24 or newer, Ninja, and a C++17 compiler
+> **Trusted private LAN only.** The current pairing gate does **not** encrypt video, audio, notifications, or remote-control traffic. Do not expose the receiver to the Internet or use it on an untrusted/shared network.
 
-### Native Steam Frame receiver
+You need:
 
-- Steam Frame with native SteamVR/OpenVR support
-- Linux ARM64 cross-build environment described in [`docs/development.md`](docs/development.md)
-- Steam Linux Runtime 3.0 ARM64 (Sniper) for deployment
+- **Steam Frame** with native SteamVR running.
+- **Android 10 or newer**, with screen-capture and H.264 encoder support. Individual apps may block capture.
+- Both devices on the same trusted local network, with phone-to-headset TCP access on port `49321`.
 
-## Build the Android app
+PhoneCast has been physically used on Steam Frame with standalone Cubism, phone interaction, notifications, rotation, and sustained phone video/audio playback. It is still early-access software: broader game compatibility, both launch orders, sleep/wake, and failure recovery are not fully validated.
 
-From the repository root:
+## Quick start
 
-```powershell
-cd android\sender
-.\gradlew.bat testDebugUnitTest assembleDebug lintDebug
-```
+Download the **Steam Frame ARM64 receiver archive** and **Android APK** from [GitHub Releases](https://github.com/bangfireball/Steam_Frame_Phone_Overlay/releases). Use the matching v0.8 assets, not GitHub's automatically generated source-code archives. If v0.8 is not listed yet, publication is still pending.
 
-Install the debug APK:
+### 1. Install on Steam Frame
 
-```powershell
-adb install -r app\build\outputs\apk\debug\app-debug.apk
-```
+1. Download and extract the receiver `.tar.gz` archive on the headset.
+2. Open a terminal in the extracted directory containing `phonecast-vr-stream-receiver` and `steam-frame-installer`.
+3. Run the installer as your normal user—**not with `sudo`**:
 
-See [`android/sender/README.md`](android/sender/README.md) for permissions, optional remote control, notifications, and diagnostics.
+   ```bash
+   ./steam-frame-installer/install-phonecast.sh
+   ```
 
-## Build the Windows receiver
+4. With SteamVR running, open its dashboard, select **+**, and launch **PhoneCast VR**.
 
-```powershell
-cmake --preset windows-x64
-cmake --build --preset windows-x64
-ctest --test-dir out/build/windows-x64 --output-on-failure
-```
+Installation currently needs a terminal; ordinary launches afterward do not. The installer creates a desktop entry and installs under `~/.local/opt/phonecast-vr`. A second launch is designed to focus the existing receiver instead of starting another copy. Autostart is not required or currently provided.
 
-The coding harness on the original development machine needs the PowerShell and MinGW runtime-path commands documented in [`docs/development.md`](docs/development.md).
+### 2. Install and connect Android
 
-## Run on Windows
-
-Do not start or restart SteamVR through Windows Remote Desktop. Doing so can break VRLink texture creation and produce a gray or missing stream. Follow the physical-console procedure in [`docs/development.md`](docs/development.md).
-
-For normal use, run:
-
-```text
-Start PhoneCast VR.cmd
-```
-
-The launcher starts the receiver on TCP port `49321` with pairing code `123456`. The equivalent manual command is:
-
-```powershell
-.\out\build\windows-x64\bin\phonecast-vr-stream-receiver.exe --pair-code 123456
-```
-
-On Android:
-
-1. Enter the receiver computer's private LAN IPv4 address.
-2. Enter the same six-digit pairing code.
-3. Select a streaming profile; **Standard** is the validated default.
+1. Install the downloaded APK. Android may ask you to allow installation from the browser/file manager you used.
+2. Open PhoneCast and enter the **headset's local IP address** and the **six-digit pairing code shown in its PhoneCast dashboard**. Check the headset's network settings for its address; automatic discovery is not implemented.
+3. Start with the **Standard** streaming profile.
 4. Press **Start casting** and approve Android's screen-sharing prompt.
-5. Open the SteamVR dashboard and select the **PhoneCast** tab.
-6. Use Show/Hide, Glance, Pin, Settings, and placement controls with the controller laser.
+5. In the headset's PhoneCast dashboard, choose **Show**.
 
-Use `Stop PhoneCast VR.cmd` to stop the Windows receiver.
+PhoneCast remembers connection details. Android may require fresh screen-sharing consent for each new capture session. If connecting fails, check the address, pairing code, and whether guest Wi-Fi/client isolation prevents devices from talking to each other.
 
-## Run directly on Steam Frame
+### 3. Use it in VR
 
-Cross-build the ARM64 receiver with the Docker command in [`docs/development.md`](docs/development.md). Deploy `phonecast-vr-stream-receiver` and its adjacent manifest/input JSON files, preserve the executable bit, and launch:
+- Open the normal SteamVR dashboard and select **PhoneCast** for Show/Hide, placement, Settings, and Quit.
+- **Show** places the phone at your configured world-space Start Location while preserving its size.
+- With the dashboard open, point the controller laser at the phone to interact. Hold the bottom **Move** handle to reposition; use joystick push/pull while holding it to adjust depth. Use the **Resize** corner to change size.
+- The phone footer keeps **Android Back**, **Move**, **Close**, and **Resize** separate. Close hides the panel; dashboard Quit stops the receiver.
+- With the dashboard closed, the phone remains visible but is **view-only**, preserving game input.
+- Dashboard-closed shortcuts: long-press either stick to toggle visibility; double-click a stick to dock to that hand; repeat while docked to pin in world space. These may conflict with game controls—remap or unbind them in SteamVR. Per-shortcut toggles are not implemented yet.
+
+## Optional Android features and permissions
+
+Casting works without enabling remote control, notifications, or phone audio.
+
+| Feature | What to enable | Important detail |
+| --- | --- | --- |
+| Remote control | **Allow remote control while casting** and the **PhoneCast remote control** Accessibility service | Both gates are required. The service does not retrieve window content. Sideloaded apps may need Android's **Allow restricted settings** approval before Accessibility can be enabled. |
+| Notifications | Notification forwarding and Android notification access | Disabled by default; revealing sensitive title/body text requires a separate opt-in. |
+| Phone audio | **Phone playback audio** and Android audio permission; start a new cast | Playback only, not microphone capture. Protected/capture-blocked audio is unsupported. Optional local-phone mute is separate. |
+| Phone dimming | **Dim phone while casting** and Android **Modify system settings** access | Preference is on by default, but without permission casting continues undimmed. Restore via the app/foreground notification; Android brightness controls are the emergency fallback. |
+
+See [remote control](docs/remote-control.md), [notifications](docs/notifications.md), [phone audio](docs/phone-audio.md), and [phone dimming](docs/android-screen-off.md) for details.
+
+## Known limitations in v0.8
+
+- **Native GPU/decoder reliability is still follow-up work.** Video freezes and Adreno/Vulkan device-loss exits have occurred in some sessions, including game-active launches. Decoder recovery is implemented but its fault cases still need physical validation; bounded Vulkan recovery is not implemented. GPU resets can also affect the running game. Save game progress before testing.
+- **Headset sleep/wake, SteamVR restart, crash recovery, and broader launch-order/game compatibility are not fully validated.** Relaunching PhoneCast or starting a new cast may be necessary.
+- Locking the phone can end Android screen sharing. Unlock, start a new cast, and grant consent again; PhoneCast does not bypass lock-screen privacy.
+- Controller-docked panels can jitter during movement. Defaults may need per-hand calibration.
+- Keyboard/text entry and wrist gestures are backlogged. Hotkeys are not guaranteed conflict-free.
+- Audio capture depends on the source app's policy; source UI mute is not always reflected in Android playback capture.
+- Android Force Stop cannot immediately restore brightness or phone volume. Best-effort later recovery depends on retained permissions; manual recovery may be needed.
+- SteamOS/SteamVR updates may change compatibility. Broader Android-device testing is welcome.
+
+The detailed [roadmap and physical evidence](design.md) distinguish owner-approved behavior from automated tests and deferred cases. No measured photon-level latency or universal compatibility claim is made.
+
+## Update, uninstall, and troubleshoot
+
+**Update:** quit PhoneCast, extract the new receiver bundle, and rerun its installer. Install the matching Android APK. Use APKs signed with the same signing key for in-place Android updates.
+
+**Uninstall receiver:** quit PhoneCast, then run:
 
 ```bash
-chmod +x phonecast-vr-stream-receiver
-./phonecast-vr-stream-receiver --pair-code 123456
+~/.local/opt/phonecast-vr/uninstall-phonecast.sh
 ```
 
-Then connect Android to the Steam Frame's private LAN address instead of the PC address. The receiver automatically searches for the native stateful H.264 decoder; use `--video-device /dev/videoN` only if discovery selects incorrectly.
+Receiver settings and pairing remain in `~/.config/phonecast-vr` unless you remove them separately.
 
-Native installation is currently developer-oriented. Read [`platform/steam-frame-arm64/README.md`](platform/steam-frame-arm64/README.md) before deploying.
+Receiver logs normally live in `~/.local/state/phonecast-vr/receiver.log`, with diagnostics in the adjacent `performance.csv`. When [reporting an issue](https://github.com/bangfireball/Steam_Frame_Phone_Overlay/issues), include app/release version, Android device/OS, SteamOS/SteamVR version, game, launch order, and reproduction steps. Review logs before sharing; never include pairing codes, credentials, or private phone content.
 
-## Optional Android remote control
+## Windows receiver and development
 
-Casting does not require remote control. To enable it:
+The Windows x64 receiver is available from source for PC-hosted SteamVR use. It is secondary to the native headset release. **Never start or restart SteamVR through Windows Remote Desktop**; follow the physical-console guidance in [development instructions](docs/development.md).
 
-1. Read the disclosure in the Android app.
-2. Enable **Allow remote control while casting**.
-3. Open Android Accessibility settings.
-4. Explicitly enable **PhoneCast remote control**.
+Build instructions and tests:
 
-The service injects only receiver-requested gestures and Back. It is configured not to retrieve window content. Disable either gate to stop remote input. See [`docs/remote-control.md`](docs/remote-control.md) for security and Google Play policy considerations.
-
-## Optional notifications
-
-Notification forwarding is separately opt-in. Android provides package allow/block lists, and sensitive title/body text is excluded unless explicitly enabled. Notifications travel over the same currently unencrypted trusted-LAN connection.
-
-See [`docs/notifications.md`](docs/notifications.md) for the complete privacy model.
-
-## Development status
-
-PhoneCast v0.1 is functional but actively developed. Completed work includes Android capture, streaming, PC and native decoding, VR rendering, placement, remote interaction, notifications, and performance measurement. Current work is focused on finishing native Steam Frame lifecycle/VR-scene validation, followed by standalone startup/reconnect UX and later interface/gesture improvements.
-
-Useful documentation:
-
-- [`design.md`](design.md) — roadmap, sprint status, acceptance criteria, and physical evidence
-- [`docs/architecture.md`](docs/architecture.md) — Core/VR/platform boundaries
-- [`docs/development.md`](docs/development.md) — complete build, test, run, and deployment instructions
-- [`docs/protocol.md`](docs/protocol.md) — network protocol and security limitations
-- [`docs/performance.md`](docs/performance.md) — measured performance and test procedure
-- [`docs/steam-frame.md`](docs/steam-frame.md) — native Steam Frame findings and unresolved questions
-- [`docs/glance-mode.md`](docs/glance-mode.md) — dashboard and presentation behavior
-- [`docs/remote-control.md`](docs/remote-control.md) — Android interaction design and permissions
-- [`docs/notifications.md`](docs/notifications.md) — notification privacy and behavior
-
-## Agentic development disclosure
-
-PhoneCast VR has been developed with substantial assistance from AI coding agents. Agents have been used for research, planning, implementation, refactoring, test creation, debugging, and documentation.
-
-The project owner directs the work, chooses product behavior, reviews results, and performs the physical Android, SteamVR, and Steam Frame validation that an agent cannot perform by compiling code. The repository deliberately distinguishes automated/build evidence from physically observed behavior.
-
-AI assistance does not guarantee correctness or security. Review the source, permissions, protocol limitations, and platform-specific code before relying on it or distributing a build.
+- [Complete development setup](docs/development.md)
+- [Android app](android/sender/README.md)
+- [Steam Frame backend](platform/steam-frame-arm64/README.md)
+- [Architecture](docs/architecture.md) · [Protocol/security](docs/protocol.md) · [Performance evidence](docs/performance.md)
 
 ## Contributing
 
-Issues and focused pull requests are welcome. Please preserve the separation between portable Core/VR logic and Windows or Steam Frame platform code. Hardware-dependent claims should include the tested device, runtime, launch order, and whether the result was physically observed.
+Bug reports, device compatibility reports, documentation improvements, and focused pull requests are welcome. Preserve portable Core/VR boundaries and isolate platform-specific code. Hardware claims should name the tested device/runtime and whether the result was physically observed.
 
-Do not commit credentials, `.env` files, device-specific secrets, Android `local.properties`, build output, or authentication configuration.
+Do not commit credentials, `.env` files, device-specific secrets, Android `local.properties`, signing keys, build output, or authentication configuration.
+
+## AI-assisted development
+
+PhoneCast VR was developed with substantial AI coding-agent assistance for research, planning, implementation, tests, debugging, and documentation. The project owner directs the work and performs physical Android/headset validation. AI assistance is not a correctness or security guarantee; review the source, permissions, and known limitations before relying on it.
+
+## Support development
+
+Enjoy PhoneCast? [Buy me a coffee](https://buymeacoffee.com/pacwar) to optionally support development. PhoneCast remains free and open source; donations do not purchase features or guaranteed support.
 
 ## License
 
-PhoneCast VR is open-source software licensed under the [MIT License](LICENSE).
+[MIT](LICENSE). Free and open source.

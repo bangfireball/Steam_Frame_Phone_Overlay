@@ -16,7 +16,7 @@ through the acceptance test below.
 
 ## What is implemented
 
-`Start PhoneCast VR.cmd` detects an RDP session and currently:
+`scripts/windows/Start PhoneCast VR.cmd` detects an RDP session and currently:
 
 1. stops PhoneCast, SteamVR, and Steam;
 2. starts a detached continuation helper;
@@ -31,8 +31,8 @@ not make the resulting VRLink stream stable.
 
 Two diagnostic launchers are available:
 
-- `Test VR - No PhoneCast.cmd` — SteamVR baseline with PhoneCast stopped.
-- `Test VR - Visible PhoneCast.cmd` — visible, centered, head-locked PhoneCast
+- `scripts/windows/Test VR - No PhoneCast.cmd` — SteamVR baseline with PhoneCast stopped.
+- `scripts/windows/Test VR - Visible PhoneCast.cmd` — visible, centered, head-locked PhoneCast
   waiting panel; saved settings are not read or written and controller input is
   not required to reveal it.
 
@@ -173,7 +173,7 @@ Purpose: isolate the dedicated Frame adapter and Multi-Link transition.
 2. Disconnect or disable the dedicated Realtek 8832CU Frame adapter before
    starting Steam/SteamVR.
 3. Confirm the Frame and PC are connected through the same ordinary LAN.
-4. Run `Test VR - No PhoneCast.cmd` from a deliberately established RDP session,
+4. Run `scripts/windows/Test VR - No PhoneCast.cmd` from a deliberately established RDP session,
    or start SteamVR physically for the cleanest control.
 5. Stream for at least ten minutes.
 
@@ -262,6 +262,6 @@ RDP recovery is successful only when all of the following are physically proven:
 4. no sustained `WaitForAcquire` storm or dedicated-link timeout occurs;
 5. headset disconnect/reconnect is not required to maintain the stream.
 
-After that baseline passes, run `Test VR - Visible PhoneCast.cmd`. Confirm the
+After that baseline passes, run `scripts/windows/Test VR - Visible PhoneCast.cmd`. Confirm the
 waiting panel before starting Android casting, then validate phone video and
 controller input separately.

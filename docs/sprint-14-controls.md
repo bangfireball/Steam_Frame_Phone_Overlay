@@ -28,6 +28,10 @@ supported overlay scroll events, not SteamVR Input action delivery.
 - Legacy menu-button calibration polling is disabled in ordinary use. Controller calibration remains available through Settings.
 - Landscape renderer widths are converted back to the base portrait-size convention before persistence, avoiding repeated scale multiplication during rotation and placement updates.
 
+## Maintenance note
+
+The Start Location dummy preview currently reuses the otherwise dormant gesture-progress overlay. It contains no streamed phone pixels. Before restoring experimental wrist gestures, give preview and gesture progress separate surface ownership so they cannot overwrite one another. This note is retained from the retired Sprint 14 handoff; old package hashes, process IDs, and working instructions are available in Git history rather than a second active handoff document.
+
 ## Thumbstick shortcuts
 
 The shipped action manifest now has only the narrow shortcut action set. `/actions/phonecast_shortcuts` is submitted only while the dashboard is closed. A binding-layer long press on **either** thumbstick button toggles visibility without resetting placement. A binding-layer double click opens the phone and docks it to the controller whose stick was clicked. Repeating the double click while the visible phone is already docked to that same controller converts its current tracked pose and physical size into a stationary world anchor. While the dashboard is visible, no action set is submitted. The failed `/actions/phonecast_panel` axis set and bindings have been removed. The old trigger/grip/calibration bindings are not shipped.

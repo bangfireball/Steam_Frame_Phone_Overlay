@@ -152,6 +152,8 @@ Exact naming and implementation language may differ if investigation identifies 
 
 # 4. Repository Structure
 
+The layout below is the original planning sketch, not a current file inventory. The completed Sprint 0 `experiments/hello-frame` prototype was retired during v0.8 repository cleanup; its source is retained in Git history and its physical evidence remains in `docs/steam-frame.md`. The generated-texture receiver remains available for current overlay diagnostics.
+
 Begin with a structure approximately like:
 
 ```text
@@ -2053,7 +2055,7 @@ The previous handoff above is historical implementation state.
 
 **Status:** `[x] Complete — project-owner approved UI/control baseline; optional gestures and text entry backlogged`
 
-Closure supersedes the earlier working handoff in [`docs/sprint-14-handoff.md`](docs/sprint-14-handoff.md). The owner physically confirmed joystick push/pull, accepted consistent panel controls, move/resize safety, the Quick connect widget, and lifecycle behavior, and requested Sprint 14 closure. Further lifecycle evidence will accumulate organically; this does not establish an individually witnessed result for every original test-matrix case.
+Closure supersedes the earlier working handoff, now retained only in Git history; current controls are documented in [`docs/sprint-14-controls.md`](docs/sprint-14-controls.md). The owner physically confirmed joystick push/pull, accepted consistent panel controls, move/resize safety, the Quick connect widget, and lifecycle behavior, and requested Sprint 14 closure. Further lifecycle evidence will accumulate organically; this does not establish an individually witnessed result for every original test-matrix case.
 
 - `[x]` Local UI mockups reviewed and `_injest/` excluded from version control
 - `[x]` Framecorder dashboard-closed hotkey source research completed and documented

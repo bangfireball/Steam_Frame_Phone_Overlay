@@ -5,7 +5,6 @@ project(phonecast-vr VERSION 0.1.0 LANGUAGES CXX)
 include(CTest)
 
 option(PHONECAST_BUILD_RECEIVER "Build the PhoneCast receiver" ON)
-option(PHONECAST_BUILD_HELLO_FRAME "Build the Sprint 0 Hello Frame experiment" ON)
 
 function(phonecast_enable_warnings target)
     if(MSVC)
@@ -28,10 +27,6 @@ if(PHONECAST_BUILD_RECEIVER)
     endif()
     add_subdirectory(apps/receiver)
     add_subdirectory(apps/stream-receiver)
-endif()
-
-if(PHONECAST_BUILD_HELLO_FRAME)
-    add_subdirectory(experiments/hello-frame)
 endif()
 
 if(BUILD_TESTING AND PHONECAST_BUILD_RECEIVER)

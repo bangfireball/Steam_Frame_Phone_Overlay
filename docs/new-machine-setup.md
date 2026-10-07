@@ -145,11 +145,11 @@ From the physical Windows console:
 
 1. start Steam and SteamVR;
 2. connect Steam Frame through VRLink;
-3. double-click `Start PhoneCast VR.cmd`;
+3. double-click `scripts/windows/Start PhoneCast VR.cmd`;
 4. confirm the launcher reports port `49321` and pairing code `123456`;
 5. start casting from Android;
 6. verify the overlay and controller controls;
-7. double-click `Stop PhoneCast VR.cmd` when finished.
+7. double-click `scripts/windows/Stop PhoneCast VR.cmd` when finished.
 
 Logs are written under `out\logs`. Persistent overlay settings are stored in `%LOCALAPPDATA%\PhoneCastVR\overlay-settings.ini` and may be copied to retain the old machine's calibration.
 

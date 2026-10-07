@@ -55,7 +55,7 @@ Sprint 4 OpenVR streaming receiver (start SteamVR first):
 .\out\build\windows-x64\bin\phonecast-vr-stream-receiver.exe --pair-code 123456
 ```
 
-For routine review testing, double-click `Start PhoneCast VR.cmd` in the repository root. At the physical console it checks process session ownership, starts SteamVR if needed, replaces a receiver running from an older build path, launches the current validated `out/build/windows-x64` receiver on port `49321` with pairing code `123456`, and redirects logs to `out/logs`. If launched through RDP, it stops PhoneCast, SteamVR, and the Steam client; starts a detached recovery helper; requests an elevated `tscon` transfer of the current Windows session to the physical console; waits ten seconds for the physical display stack to settle; and restarts Steam, SteamVR, and PhoneCast only after the helper confirms the console attachment. The RDP connection closes intentionally. Recovery logs are written as `out/logs/console-recovery-*.log`. Use `Stop PhoneCast VR.cmd` to stop the receiver.
+For routine review testing, double-click `scripts/windows/Start PhoneCast VR.cmd`. At the physical console it checks process session ownership, starts SteamVR if needed, replaces a receiver running from an older build path, launches the current validated `out/build/windows-x64` receiver on port `49321` with pairing code `123456`, and redirects logs to `out/logs`. If launched through RDP, it stops PhoneCast, SteamVR, and the Steam client; starts a detached recovery helper; requests an elevated `tscon` transfer of the current Windows session to the physical console; waits ten seconds for the physical display stack to settle; and restarts Steam, SteamVR, and PhoneCast only after the helper confirms the console attachment. The RDP connection closes intentionally. Recovery logs are written as `out/logs/console-recovery-*.log`. Use `scripts/windows/Stop PhoneCast VR.cmd` to stop the receiver.
 
 The VR receiver starts in Sprint 6's **Hidden** state while continuing to decode video for immediate reveal. On startup the OpenVR backend adds a **PhoneCast** icon/tab to the SteamVR dashboard. Open the dashboard with the normal system button, select PhoneCast, and use its large Show/Hide, Glance, Pin, Settings, Head, World, Left, and Right laser targets. The dashboard icon, panel, and pointer controls are physically approved on the Windows/VRLink path. Dashboard creation remains non-fatal, and native ARM64 lifecycle validation is still pending. Quick Access injection and receiver autostart are not implemented.
 
@@ -93,12 +93,12 @@ A physical Steam Frame/VRLink test on 2026-10-02 showed that starting or restart
 
 Closing the RDP window is insufficient if Steam or SteamVR remains in the disconnected RDP session. Before testing:
 
-1. run `Start PhoneCast VR.cmd`; when invoked through RDP, approve its Windows elevation prompt and expect RDP to disconnect;
+1. run `scripts/windows/Start PhoneCast VR.cmd`; when invoked through RDP, approve its Windows elevation prompt and expect RDP to disconnect;
 2. wait for the detached helper to transfer the session and restart SteamVR and PhoneCast at the physical console;
 3. reconnect or sleep/wake the Frame after correcting the Windows session;
 4. confirm an ordinary PC game streams before diagnosing PhoneCast.
 
-You may reconnect through RDP between tests, but doing so can move the desktop away from the console and invalidate VRLink again. Run `Start PhoneCast VR.cmd` before each subsequent VR test; it repeats the stop, transfer, and clean restart. Do not interpret overlay results obtained during the broken RDP/VRLink state as application results. If recovery fails, inspect the newest `out/logs/console-recovery-*.stderr.log` and use `query session` to verify that the user session actually became `console`.
+You may reconnect through RDP between tests, but doing so can move the desktop away from the console and invalidate VRLink again. Run `scripts/windows/Start PhoneCast VR.cmd` before each subsequent VR test; it repeats the stop, transfer, and clean restart. Do not interpret overlay results obtained during the broken RDP/VRLink state as application results. If recovery fails, inspect the newest `out/logs/console-recovery-*.stderr.log` and use `query session` to verify that the user session actually became `console`.
 
 The 2026-10-02 physical Sprint 4 test subsequently confirmed a visible Android screen in the headset. On the multi-GPU host, OpenVR D3D11 overlays were invisible until the renderer used the adapter returned by `GetDXGIOutputInfo`; updates advanced only about once per five seconds until the D3D11 context was explicitly flushed. The corrected generated animation was visually smooth before the phone stream was retested successfully.
 
@@ -134,12 +134,12 @@ and submitted phone frames (first frames at 549 ms and 192 ms on two connections
 but remained visually unconfirmed; its default Hidden startup and unconfirmed
 controller input must be isolated from the headset-stream fault.
 
-Two root-level diagnostic launchers use the same RDP recovery:
+Two diagnostic launchers in `scripts/windows/` use the same RDP recovery:
 
-1. `Test VR - No PhoneCast.cmd`: stops any existing PhoneCast receiver and starts
+1. `scripts/windows/Test VR - No PhoneCast.cmd`: stops any existing PhoneCast receiver and starts
    SteamVR only. Keep Android casting off and test ordinary PC streaming for at
    least five minutes.
-2. `Test VR - Visible PhoneCast.cmd`: starts the diagnostic receiver with
+2. `scripts/windows/Test VR - Visible PhoneCast.cmd`: starts the diagnostic receiver with
    `--diagnostic-visible`. It ignores saved appearance/placement, uses default
    centered head-locked placement, and starts Pinned/visible with the waiting
    texture before Android connects. No controller action is needed. Settings are
@@ -158,7 +158,7 @@ The visible launcher uses `out/build/windows-x64-diagnostic` to avoid replacing
 the currently running canonical executable. Build with `cmake --preset
 windows-x64 -B out/build/windows-x64-diagnostic`, then `cmake --build
 out/build/windows-x64-diagnostic` (use the compiler/Ninja PATH guidance above).
-Normal `Start PhoneCast VR.cmd` behavior remains unchanged. A full diagnostic
+Normal `scripts/windows/Start PhoneCast VR.cmd` behavior remains unchanged. A full diagnostic
 build and all 11 CTest tests passed; PowerShell syntax and the read-only session
 monitor smoke test passed. These do not validate headset visibility or stability.
 
@@ -338,8 +338,11 @@ and Vulkan reliability follow-ups remain separate.
 ## CMake options
 
 - `PHONECAST_BUILD_RECEIVER` — build the generated OpenVR receiver and, on Windows, the desktop and OpenVR stream receivers (default `ON`).
-- `PHONECAST_BUILD_HELLO_FRAME` — retain the Sprint 0 experiment (default `ON`).
 - `BUILD_TESTING` — build/register tests (default controlled by CTest, normally `ON`).
+
+## Retired prototype
+
+The completed Sprint 0 `experiments/hello-frame` prototype has been removed from the active tree and build/install targets. Its source remains available in Git history; native feasibility evidence remains in `docs/steam-frame.md` and `design.md`. Use `phonecast-receiver` with its generated animated texture for current overlay diagnostics. Configure and install into a fresh staging directory when packaging a release so old `hello-frame` binaries/manifests are not carried forward from an earlier build.
 
 ## Tests
 
