@@ -5,6 +5,6 @@
   "description": "Disposable local APK download server",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test server.test.js"
+    "test": "node --test server.test.js candidate.test.js"
   }
 }

@@ -29,6 +29,18 @@ node local-apk-server/server.js
 
 Open `http://YOUR_PC_LAN_IP:8080` from the phone/headset. Do not use `localhost` on another device. HTTP is unencrypted and does not authenticate artifacts; checksums from the same server detect corruption, not a malicious server. Stop the server with Ctrl+C after downloading.
 
+## v0.9.0 versioned release assets
+
+When both artifacts exist, the page exposes a separately labelled **release-ready build — GitHub publication pending** section:
+
+- `/phonecast-vr-v0.9.0-android.apk`
+- `/phonecast-vr-v0.9.0-steam-frame-arm64.tar.gz`
+- `/SHA256SUMS-v0.9.0`
+
+These read matching files from `out/packages` and never replace the v0.8 aliases or bootstrap. Install both endpoints to exercise discovery; stop casting/quit the receiver before updating. The candidate uses the same APK signing key. Manual commands extract the `phonecast-vr-v0.9.0-steam-frame-arm64` directory and run its included installer. Do **not** use the old bootstrap to install the candidate.
+
+About/build details, safe Downloads exports and the IPv4 UDP finder are documented in `docs/v0.9-support.md`. The owner accepted the normal-use release baseline, not every extended network/storage/lifecycle case. Local serving does not publish a GitHub release. The headset Export logs row needs two deliberate selections: first to show Confirm export, second to write. Server tests cover versioned candidate routes, missing files, no-store headers, and separation from the stable aliases.
+
 ## Steam Frame install
 
 The page provides copyable manual and curl-based install commands. For an archive already downloaded to Steam Frame:

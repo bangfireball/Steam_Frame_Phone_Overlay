@@ -26,7 +26,7 @@ endif()
 add_executable(phonecast-vr-stream-receiver src/vr_main.cpp)
 target_compile_features(phonecast-vr-stream-receiver PRIVATE cxx_std_17)
 target_link_libraries(phonecast-vr-stream-receiver PRIVATE
-    phonecast-core phonecast-vr phonecast-network phonecast-openvr-backend
+    phonecast-core phonecast-vr phonecast-network phonecast-support phonecast-openvr-backend
 )
 if(WIN32)
     target_link_libraries(phonecast-vr-stream-receiver PRIVATE phonecast-windows-streaming)

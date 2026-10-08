@@ -289,6 +289,8 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 adb logcat -s PhoneCastCapture
 ```
 
+With **Modify system settings** approval, casting now temporarily extends the device screen timeout to about 24.85 days even when dimming is disabled, restoring the original on teardown and attempting recovery at process start/boot. Manual locking still ends projection; Force Stop or revoked access can delay restoration. Samsung background wake-lock suppression motivated this fix. The owner confirmed idle casting with a 15-second baseline on Samsung S22+ / Android 16 using signed version code 4; power logs verify the extended timeout and normal 15-second restoration after teardown. Samsung Settings may show its maximum selectable preset (10 minutes) instead of the actual override. Dimming-disabled and interrupted-session/failure checks remain separate. Start a new cast after granting access. See `docs/android-screen-off.md`.
+
 **Dim phone while casting** is enabled by default. Open PhoneCast Settings → Dim phone while casting to change its 5/15/30/60-second delay or opt out. Android's separate **Modify system settings** screen must be approved before device-wide brightness can change; declining leaves casting available and undimmed. The sender and foreground notification expose **Restore brightness**. PhoneCast stores restoration state before dimming and attempts cleanup on stop, projection revocation, process restart, and boot, but Force Stop cannot run immediate cleanup and revoked access prevents writes. Use Android Quick Settings as the emergency recovery path. Treat dimming, adaptive/manual restoration, MediaProjection brightness isolation, and touch wake as physically unvalidated until the Sprint 15 matrix in `docs/android-screen-off.md` is run.
 
 For optional VR remote control, first read the disclosure in the sender, check **Allow remote control while casting**, choose **Enable PhoneCast in Accessibility settings**, and explicitly enable **PhoneCast remote control**. Screen casting works without this service. The service injects only receiver-requested gestures and Back; it does not retrieve window content. While dimming is active, the enabled service also observes Android's coordinate-free touch-start event to attempt temporary brightness restoration. PhoneCast suppresses events around its own injected gestures, but physical-versus-injected behavior remains a target-device test. Disable either the in-app toggle or Accessibility service to stop remote control; disabling the service also removes automatic physical-touch wake, while explicit restore controls remain available.
@@ -334,6 +336,14 @@ Android cannot restore at the instant its process is forcibly killed; next-proce
 recovery and projection-revoke restoration remain physically deferred, as do
 protected-source behavior and external skew distributions. Sprint 12 decoder fault
 and Vulkan reliability follow-ups remain separate.
+
+## v0.9.0 connection/support release baseline
+
+See [`v0.9-support.md`](v0.9-support.md) for the implementation and physical matrix. Android now shows receiver-response state separately from encoding, has Settings → About/build details and safe Downloads log export, and provides a four-second **Find headset on LAN** search with explicit selection. The receiver adds About/export, Git build identification, and a non-fatal UDP 49322 discovery responder. Manual TCP/pairing remains supported; automatic identity-based active-stream IP retargeting is not implemented.
+
+Build/test the signed Android candidate with `testDebugUnitTest assembleDebug lintDebug testReleaseUnitTest assembleRelease lintRelease`; signing stays outside the repository. CTest adds `phonecast-support-tests` (real loopback UDP, safe export, bounds, failure, About confirmation). ARM64 tests can run under QEMU, but physical UI/network/storage validation is still required. On Windows, discovery may need a separate private-network UDP 49322 firewall allowance; never forward ports publicly.
+
+Candidate filenames use `phonecast-vr-v0.9.0-*`; local candidate links are separate from the v0.8 aliases/bootstrap. The owner accepted the revised normal-use baseline for release; extended network/storage/lifecycle cases remain separately documented. Public GitHub publication is not implied by packaging. The headset Export logs row requires two deliberate selections: first to show Confirm export, second to write the file.
 
 ## CMake options
 

@@ -136,6 +136,7 @@ public final class ScreenCaptureService extends Service {
     private PlaybackAudioCapture audioCapture;
     private PhoneAudioMuteController phoneAudioMute;
     private ScreenBrightnessController brightnessController;
+    private ScreenTimeoutController timeoutController;
     private PowerManager.WakeLock screenWakeLock;
     private long audioGeneration;
     private String audioStatus = "Audio off";
@@ -213,6 +214,7 @@ public final class ScreenCaptureService extends Service {
         createNotificationChannel();
         phoneAudioMute = AndroidPhoneAudioMute.create(this);
         brightnessController = AndroidScreenBrightness.create(this);
+        timeoutController = AndroidScreenTimeout.create(this);
         phoneAudioMute.setRequested(getSharedPreferences(PREFERENCES,MODE_PRIVATE)
                 .getBoolean(AndroidPhoneAudioMute.PREFERENCE_ENABLED,false));
         codecThread = new HandlerThread("phonecast-avc-output");
@@ -297,6 +299,7 @@ public final class ScreenCaptureService extends Service {
                     pairCode, new NetworkStreamer.Listener() {
                 @Override public void onConnectionChanged(boolean connected, String message) {
                     Log.i(TAG, message);
+                    DiagnosticLog.record(ScreenCaptureService.this, message);
                     if (connected) RemoteControlAccessibilityService.resetSession();
                     mainHandler.post(() -> {
                         if (stopping) return;
@@ -343,10 +346,14 @@ public final class ScreenCaptureService extends Service {
             if (virtualDisplay == null) throw new IllegalStateException("Virtual display creation failed");
 
             acquireScreenWakeLock();
+            boolean timeoutProtected = timeoutController.begin();
+            if (!timeoutProtected)
+                Log.w(TAG, "Automatic screen timeout protection unavailable; grant Modify system settings access or check device policy");
             scheduleDim();
             setRunningPreference(true);
             String message = "Casting with " + streamProfile.label + " at " +
-                    streamProfile.frameRate + " FPS";
+                    streamProfile.frameRate + " FPS" + (timeoutProtected ? "" :
+                    " · automatic lock protection unavailable (check Modify system settings)");
             updateNotification(message);
             broadcastStatus(true, message, size);
             Log.i(TAG, message + " (" + size.width + "x" + size.height + ")");
@@ -625,6 +632,8 @@ public final class ScreenCaptureService extends Service {
         mainHandler.removeCallbacks(dimScreen);
         if (brightnessController != null && !brightnessController.restoreAndRelease())
             Log.w(TAG, "Could not restore brightness while stopping capture");
+        if (timeoutController != null && !timeoutController.restore())
+            Log.w(TAG, "Could not restore screen timeout; recovery retained for next app start");
         releaseScreenWakeLock();
         stopAudio();
         audioEnabledForSession = false;
@@ -666,6 +675,14 @@ public final class ScreenCaptureService extends Service {
     }
 
     private void broadcastStatus(boolean running, String message, CaptureConfig.Size size) {
+        boolean responsive = running && networkStreamer != null && networkStreamer.receiverResponsive();
+        String connection = running && networkStreamer != null ? networkStreamer.connectionMessage() :
+                (running ? ConnectionFeedback.CONNECTING : "Not connected · casting stopped");
+        getSharedPreferences(PREFERENCES, MODE_PRIVATE).edit()
+                .putBoolean("receiver_responsive", responsive).putString("connection_message", connection).apply();
+        DiagnosticLog.sample(this, running, responsive, encodedFrames.get(),
+                networkStreamer == null ? 0 : networkStreamer.droppedFrames(),
+                networkStreamer == null ? -1 : networkStreamer.roundTripMicros());
         Intent status = new Intent(ACTION_STATUS)
                 .setPackage(getPackageName())
                 .putExtra(EXTRA_RUNNING, running)

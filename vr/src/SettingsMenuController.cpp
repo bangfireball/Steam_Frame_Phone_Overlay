@@ -62,6 +62,7 @@ void SettingsMenuController::Open(const OverlaySettings& settings) {
     page_ = Page::Root;
     selected_ = 0;
     resetConfirmation_ = false;
+    exportConfirmation_ = false;
     open_ = true;
 }
 
@@ -77,7 +78,8 @@ void SettingsMenuController::MergeRendererUpdate(const OverlaySettings& settings
 
 std::size_t SettingsMenuController::ItemCount() const noexcept {
     switch (page_) {
-        case Page::Root: return 10;
+        case Page::Root: return 11;
+        case Page::About: return 7;
         case Page::Appearance: return 4;
         case Page::Placement: return 6;
         case Page::StartLocation: return 4;
@@ -98,13 +100,13 @@ SettingsMenuView SettingsMenuController::View() const {
             view.title = "PHONECAST SETTINGS";
             view.labels = {"APPEARANCE", "PLACEMENT", "LEFT DOCK", "RIGHT DOCK",
                            "GLANCE AND CONTROLS", "NOTIFICATIONS", "PHONE AUDIO",
-                           "RESET ALL", "CANCEL", "APPLY"};
+                           "RESET ALL", "CANCEL", "APPLY", "ABOUT"};
             view.values = {"DARK", PlacementName(draft_.placementMode),
                            Decimal(draft_.leftController.distanceMeters) + " M",
                            Decimal(draft_.rightController.distanceMeters) + " M",
                            "ON", "PRIORITY",
                            draft_.audioMuted ? "MUTED" : "HEADSET",
-                           resetConfirmation_ ? "CONFIRM" : "", "", ""};
+                           resetConfirmation_ ? "CONFIRM" : "", "", "", ">"};
             view.normalizedValues.assign(view.labels.size(), -1.0F);
             break;
         case Page::Appearance:
@@ -180,6 +182,14 @@ SettingsMenuView SettingsMenuController::View() const {
                                     Normalize(draft_.startOffsetXMeters, -1.00F, 1.00F),
                                     Normalize(draft_.startOffsetYMeters, -0.75F, 0.75F), -1.0F};
             break;
+        case Page::About:
+            view.title = "ABOUT PHONECAST";
+            view.labels = {"VERSION", "BUILD", "EXPORT LOGS", "EXPORT STATUS", "FILE", "PRIVACY", "BACK"};
+            view.values = {PHONECAST_VERSION, PHONECAST_BUILD_ID,
+                exportConfirmation_ ? "CONFIRM EXPORT" : "TO DOWNLOADS", exportStatus_,
+                exportFilename_, "REVIEW BEFORE SHARING", ""};
+            view.normalizedValues.assign(7, -1.0F);
+            break;
         case Page::Audio:
             view.title = "PHONE AUDIO";
             view.labels = {"MUTE", "VOLUME", "OUTPUT", "STATUS", "BACK"};
@@ -201,6 +211,7 @@ SettingsMenuResult SettingsMenuController::Adjust(int direction) {
         return SettingsMenuResult::Updated;
     }
     switch (page_) {
+        case Page::About:
         case Page::Audio:
         case Page::Root:
             return SettingsMenuResult::None;
@@ -294,6 +305,7 @@ SettingsMenuResult SettingsMenuController::SetNormalized(float value) {
         return SettingsMenuResult::Updated;
     }
     switch (page_) {
+        case Page::About:
         case Page::Audio:
         case Page::Root:
             return SettingsMenuResult::None;
@@ -344,8 +356,16 @@ SettingsMenuResult SettingsMenuController::SetNormalized(float value) {
 }
 
 SettingsMenuResult SettingsMenuController::Activate() {
+    if (page_ == Page::About && selected_ == 2) {
+        if (exportStatus_ == "EXPORTING") return SettingsMenuResult::None;
+        if (!exportConfirmation_) { exportConfirmation_ = true; return SettingsMenuResult::None; }
+        exportConfirmation_ = false;
+        exportStatus_ = "EXPORTING";
+        return SettingsMenuResult::ExportRequested;
+    }
     if (page_ == Page::Audio && (selected_ == 0 || selected_ == 2)) return Adjust(1);
     if (page_ == Page::Root) {
+        if (selected_ == 10) { page_ = Page::About; selected_ = 0; exportConfirmation_ = false; return SettingsMenuResult::None; }
         if (selected_ <= 5) {
             page_ = static_cast<Page>(static_cast<int>(Page::Appearance) + static_cast<int>(selected_));
             selected_ = 0;
@@ -408,10 +428,12 @@ SettingsMenuResult SettingsMenuController::Handle(const SettingsMenuInput& input
     if (!open_) return SettingsMenuResult::None;
     switch (input.command) {
         case SettingsMenuCommand::PreviousItem:
+            exportConfirmation_ = false;
             selected_ = selected_ == 0 ? ItemCount() - 1 : selected_ - 1;
             resetConfirmation_ = false;
             return SettingsMenuResult::None;
         case SettingsMenuCommand::NextItem:
+            exportConfirmation_ = false;
             selected_ = (selected_ + 1) % ItemCount();
             resetConfirmation_ = false;
             return SettingsMenuResult::None;
@@ -424,6 +446,7 @@ SettingsMenuResult SettingsMenuController::Handle(const SettingsMenuInput& input
         case SettingsMenuCommand::Activate:
             return Activate();
         case SettingsMenuCommand::Back:
+            exportConfirmation_ = false;
             resetConfirmation_ = false;
             if (page_ == Page::Root) {
                 open_ = false;

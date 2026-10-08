@@ -2293,9 +2293,59 @@ Detailed existing research, closure notes, and the validation matrix are in
 
 # Feature Backlog
 
+## Android connection feedback and actionable status
+
+**Status:** `[x] v0.9.0 normal-use release baseline accepted by the owner — extended failure/lifecycle cases remain separately documented`
+
+- Separate capture/encoder activity from receiver connectivity in the phone UI; local capture must not imply successful streaming.
+- Show connecting, connected/receiver-responsive, reconnecting, and disconnected states with appropriate non-green warning styling when the receiver is unavailable.
+- Preserve connection status across encoder-stat updates, orientation changes, and activity resume rather than overwriting it with generic capturing text.
+- Distinguish socket connection from confirmed receiver response/authentication where the protocol permits; do not treat a successful TCP connect alone as pairing acceptance or decoded-video confirmation.
+- Surface safe, actionable failure details and retry guidance (receiver running, current IP/code, same trusted LAN, VPN/client isolation), without exposing credentials.
+- Keep frame counters but explain local drops and pending RTT without claiming the receiver rejected frames.
+- Test initial unreachable receiver, pairing rejection, no receiver response, successful connection, interruption/reconnect, and physical phone/headset UI behavior.
+
+Implementation separates encoder activity from receiver replies, preserves warnings across statistics, resets RTT, and supplies safe retry guidance. Initial owner testing confirmed useful receiver-close and wrong-IP/code feedback, but found retry-text/page-height flicker. Code 6 retains the failure during retries and uses fixed-size status/detail/counter fields. The owner subsequently accepted the revised update for immediate release; this does not claim every original failure/lifecycle case was individually witnessed. See `docs/v0.9-support.md` for behavior, testing, and remaining physical checks.
+
+## Settings About and diagnostic-log export
+
+**Status:** `[x] v0.9.0 release baseline accepted by the owner — extended storage/privacy edge cases retain separate validation status`
+
+Add an **About** section to PhoneCast Settings on Android and the headset:
+
+- Show the installed application version; include Android version code and receiver build identifier where available so support can distinguish patched builds.
+- Provide an explicit **Export logs to Downloads** action, with a clear success/failure result and the saved filename/location.
+- Android exports PhoneCast-owned diagnostics using supported Android storage APIs; ordinary users must not need ADB, root, or broad storage access. Do not assume an app can retrieve unrestricted system logcat.
+- The headset exports its receiver diagnostics to the user's Downloads folder without requiring SSH or terminal commands.
+- Use timestamped filenames, bounded exports, and a privacy warning before users share files. Exclude pairing codes, credentials, notification content, input/text contents, and screen/audio samples; redact potentially sensitive metadata where necessary.
+- Keep logging/export platform-specific behind the existing boundaries, with reusable About/status behavior where practical.
+- Validate displayed versions, export permissions and failures, file discoverability, redaction, and physical use on Android and Steam Frame.
+
+About surfaces and explicit bounded safe Downloads exports are implemented on Android and the native receiver. Exports intentionally omit arbitrary raw log text/private payloads. The owner confirmed native export; code-6 feedback changes the abbreviated `pc-vr` filename to `phonecast-headset-<timestamp>.txt`. Expanded About/storage validation remains pending. A proposed migration of Settings into the dashboard has been assessed but is not implemented; see `docs/v0.9-support.md`.
+
+## Casting screen-timeout fix — 2026-10-07
+
+- `[x]` Implemented temporary `SCREEN_OFF_TIMEOUT = Integer.MAX_VALUE` (about 24.85 days) during an authorized casting session, independently of brightness dimming, using explicitly granted Modify system settings access.
+- `[x]` Persist the original timeout before writing; restore on normal teardown/projection termination and attempt abandoned-session recovery at process start and boot. Preserve subsequent user timeout changes; retain recovery on permission/write failure. Force Stop cannot perform immediate cleanup.
+- `[x]` Android JVM tests, debug APK build, and lint pass.
+- `[x]` Owner physically confirmed idle casting no longer locks after the configured 15 seconds on Samsung S22+ / Android 16 with release-signed `versionCode` 4. Power logs show timeout changing from 15,000 to 2,147,483,647 ms during casting and restoring to 15,000 ms at teardown, followed by normal timeout sleep. Samsung Settings displayed its largest selectable option (10 minutes), not the actual extended value.
+- `[ ]` Separate dimming-disabled, manual-lock, and interrupted-session recovery checks remain unvalidated. OEM/device-admin policy can still restrict effective timeout on other devices.
+- `[~]` Release readiness: signed code-4 APK, debug/release tests and lint, matching signing-certificate verification, and both local HTTP routes/checksums pass. Public GitHub publication is not yet claimed. The owner subsequently selected a v0.9.0 feature candidate (code 5), which includes this fix; code-4 artifacts remain separate rather than silently replacing public release assets.
+
+Read-only device logs show Samsung marking `PhoneCast:casting-screen` as `abuse wakelock package : com.phonecastvr.sender`, followed by sleep due to the 15-second timeout and projection termination. The screen wake lock alone is therefore insufficient on this device. No phone settings were changed during diagnosis.
+
+## Optional developer/ADB mode — future investigation
+
+**Status:** `[ ] Research backlog — owner-requested optional advanced path, not implemented`
+
+Investigate an explicitly opt-in developer/ADB mode for users willing to enable Developer options, debugging, and device authorization. Review scrcpy's privileged `userActivity()` keep-active mechanism, charging-only stay-awake behavior, setup/security implications, disconnect recovery, and compatibility on Samsung/Android versions. Keep ordinary casting independent of debugging, root, and a PC. Preserve intentional manual locking and document permissions honestly.
+
+This new owner request supersedes the earlier blanket rejection of future developer/ADB research, but does not reopen Sprint 15 or authorize implementing ADB, Shizuku, or panel-off functionality now. Local-only display blanking remains a separate feasibility/privacy question, not an assumed benefit. Any advanced integration requires a separate design and physical validation.
+
+
 ## Auto-find headset — automatic LAN discovery
 
-**Status:** `[ ] Not started — backlogged; not part of v0.8`
+**Status:** `[~] v0.9.0 bounded LAN finder included in the owner-approved release baseline — extended discovery cases and active-session identity-based rediscovery remain follow-up work`
 
 The Android app should search the local network for a running PhoneCast headset receiver so the user does not need to find or type the headset's IP address.
 
@@ -2310,7 +2360,7 @@ Planned behavior and acceptance criteria:
 - Evaluate a standard LAN discovery mechanism such as mDNS/DNS-SD during implementation; preserve portable receiver/platform boundaries and document Android network permissions.
 - Test first connection, multiple receivers, changed IP, network interruption, unavailable receiver, and discovery-blocked Wi-Fi on physical Android/Steam Frame hardware.
 
-This makes the previously deferred Sprint 12 automatic-discovery goal an explicit product backlog feature. No discovery implementation or physical validation is claimed by this entry.
+The v0.9.0 **Find headset on LAN** implementation uses a four-second IPv4 UDP query/reply search with explicit selection, version/name display, remembered address/name, no continuous scanning, and manual-IP fallback. mDNS/DNS-SD was evaluated; the initial custom finder avoids a new receiver daemon/dependency. Discovery is not authentication. Silent changed-IP retargeting during an active reconnect is not implemented; users stop casting, search/select again, and start a consented cast. This remaining goal requires a trustworthy identity design rather than assuming names are unique. See `docs/v0.9-support.md` for protocol bounds, network limitations, tests and physical matrix. The owner accepted the overall release baseline; a separate individually exercised discovery/multiple-receiver/blocked-network matrix is not claimed.
 
 ---
 

@@ -6,9 +6,9 @@
     <string name="stop_casting">Stop casting</string>
     <string name="restore_brightness">Restore brightness</string>
     <string name="dim_phone_title">Dim phone while casting</string>
-    <string name="dim_phone_summary">Enabled by default. PhoneCast temporarily uses minimum nonzero brightness while keeping the captured stream unchanged. Android requires separate Modify system settings approval. If the optional PhoneCast Accessibility service is enabled, a physical touch temporarily restores brightness; otherwise use the restore action here or in the casting notification. Turning this off restores the previous brightness policy.</string>
+    <string name="dim_phone_summary">Enabled by default. PhoneCast temporarily uses minimum nonzero brightness while keeping the captured stream unchanged. With Modify system settings approval, casting also extends the screen timeout to about 24.8 days, even if dimming is off, and restores the original timeout afterward. Manual locking still ends capture. Force Stop may delay restoration until the next app start or reboot. If the optional PhoneCast Accessibility service is enabled, a physical touch temporarily restores brightness; otherwise use the restore action here or in the casting notification. Turning this off restores the previous brightness policy.</string>
     <string name="enable_dim_phone">Dim phone while casting</string>
-    <string name="grant_brightness_access">Allow brightness changes</string>
+    <string name="grant_brightness_access">Allow casting display settings</string>
     <string name="brightness_access_enabled">Modify system settings enabled</string>
     <string name="restore_brightness_now">Restore brightness temporarily</string>
     <string name="sprint_two_explanation">Enter the receiver address and pairing code, then approve screen capture to stream H.264 over your local network.</string>

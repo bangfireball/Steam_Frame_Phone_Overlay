@@ -9,7 +9,8 @@ enum class SettingsMenuResult {
     None,
     Updated,
     Applied,
-    Cancelled
+    Cancelled,
+    ExportRequested
 };
 
 class SettingsMenuController {
@@ -21,6 +22,9 @@ public:
     [[nodiscard]] SettingsMenuView View() const;
     void MergeRendererUpdate(const OverlaySettings& settings) noexcept;
     void SetAudioStatus(std::string status) { audioStatus_ = std::move(status); }
+    void SetExportStatus(std::string status, std::string filename = {}) {
+        exportStatus_ = std::move(status); exportFilename_ = std::move(filename);
+    }
     SettingsMenuResult Handle(SettingsMenuCommand command);
     SettingsMenuResult Handle(const SettingsMenuInput& input);
     void Close() noexcept { open_ = false; }
@@ -35,7 +39,8 @@ private:
         Glance,
         Notifications,
         Audio,
-        StartLocation
+        StartLocation,
+        About
     };
 
     [[nodiscard]] std::size_t ItemCount() const noexcept;
@@ -48,6 +53,9 @@ private:
     Page page_{Page::Root};
     std::size_t selected_{0};
     std::string audioStatus_{"OFF"};
+    std::string exportStatus_{"REVIEW BEFORE SHARING"};
+    std::string exportFilename_{"NONE"};
+    bool exportConfirmation_{false};
     OverlaySettings original_{};
     OverlaySettings draft_{};
 };

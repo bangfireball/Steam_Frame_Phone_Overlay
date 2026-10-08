@@ -35,6 +35,9 @@ function createDownloadServer(files = {}) {
 const apkPath = files.apkPath || defaultApkPath;
 const steamFramePath = files.steamFramePath || defaultSteamFramePath;
 const checksumsPath = files.checksumsPath || defaultChecksumsPath;
+const candidateApkPath = files.candidateApkPath || path.resolve(__dirname, '../out/packages/phonecast-vr-v0.9.0-android.apk');
+const candidateFramePath = files.candidateFramePath || path.resolve(__dirname, '../out/packages/phonecast-vr-v0.9.0-steam-frame-arm64.tar.gz');
+const candidateChecksumsPath = files.candidateChecksumsPath || path.resolve(__dirname, '../out/packages/SHA256SUMS-v0.9.0');
 return http.createServer((request, response) => {
   const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
 
@@ -47,7 +50,8 @@ return http.createServer((request, response) => {
   if (url.pathname === "/") {
     const apkAvailable = fs.existsSync(apkPath);
     const steamFrameAvailable = fs.existsSync(steamFramePath);
-    response.writeHead(apkAvailable || steamFrameAvailable ? 200 : 503, {
+    const candidateAvailable = fs.existsSync(candidateApkPath) && fs.existsSync(candidateFramePath);
+    response.writeHead(apkAvailable || steamFrameAvailable || candidateAvailable ? 200 : 503, {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
     });
@@ -56,9 +60,18 @@ return http.createServer((request, response) => {
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PhoneCast Downloads</title>
 <style>pre {background:#eee;padding:1rem;overflow:auto} button {cursor:pointer}</style></head>
 <body style="font-family:sans-serif;max-width:40rem;margin:4rem auto;padding:0 1rem">
-<h1>PhoneCast v0.8 Downloads</h1>
+<h1>PhoneCast Downloads</h1>
 <p>Early-access release: native Steam Frame receiver and release-signed Android app.</p>
 ${fs.existsSync(checksumsPath) ? '<p><a href="/SHA256SUMS">Download SHA256SUMS</a> to verify both downloads. Checksums from this HTTP server detect corruption, not a malicious server.</p>' : ''}
+${fs.existsSync(candidateApkPath) && fs.existsSync(candidateFramePath) ? `<h2>v0.9.0 release-ready build — GitHub publication pending</h2>
+<p>Owner-approved normal-use baseline: connection feedback, About/version details, safe Downloads log exports, and Find headset on LAN. Install both endpoints for discovery. Extended network/storage/lifecycle cases remain separately unvalidated. Existing v0.8 downloads and bootstrap below are unchanged.</p>
+<p><a href="/phonecast-vr-v0.9.0-android.apk">Signed v0.9.0 Android APK</a> · <a href="/phonecast-vr-v0.9.0-steam-frame-arm64.tar.gz">v0.9.0 Steam Frame bundle</a> · <a href="/SHA256SUMS-v0.9.0">Candidate checksums</a></p>
+<p>Stop casting before the APK update. Quit PhoneCast before the receiver update; saved settings and pairing are retained. The signing key is unchanged.</p>
+<pre>set -eu
+cd "$HOME/Downloads"
+tar -xzf phonecast-vr-v0.9.0-steam-frame-arm64.tar.gz
+sh phonecast-vr-v0.9.0-steam-frame-arm64/steam-frame-installer/install-phonecast.sh</pre>
+<p>Receiver: Settings → About / Export logs. Select Export logs once to show Confirm export, then select the same row a second time to write. Phone: Settings → About. LAN search requires UDP 49322 on the same non-guest network; manual IP/pairing still works.</p>` : ''}
 <h2>Android phone</h2>
 ${apkAvailable
   ? `<p><a href="/${apkFileName}">Download the signed Android v0.8 APK</a></p><p>If you previously installed the debug app, stop casting, note your settings, and uninstall it before installing this release: the signing keys differ. Uninstalling clears saved settings. Optional phone playback audio is off by default. Dim phone while casting is enabled by default but requires Android's separate Modify system settings approval; casting works undimmed without it.</p>`
@@ -110,6 +123,17 @@ for (const button of document.querySelectorAll('[data-copy]')) {
 </script>
 </body>
 </html>`);
+    return;
+  }
+
+  const candidates = {
+    '/phonecast-vr-v0.9.0-android.apk': [candidateApkPath, 'application/vnd.android.package-archive'],
+    '/phonecast-vr-v0.9.0-steam-frame-arm64.tar.gz': [candidateFramePath, 'application/gzip'],
+    '/SHA256SUMS-v0.9.0': [candidateChecksumsPath, 'text/plain; charset=utf-8'],
+  };
+  if (Object.hasOwn(candidates, url.pathname)) {
+    const [file, type] = candidates[url.pathname];
+    serveDownload(response, file, type, url.pathname.slice(1), 'Candidate artifact not found');
     return;
   }
 

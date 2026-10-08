@@ -50,6 +50,7 @@ public final class MainActivity extends Activity {
 
     private TextView screenTitleView;
     private TextView statusView;
+    private TextView connectionDetailsView;
     private TextView metricsView;
     private TextView audioStatusView;
     private CheckBox playbackAudioView;
@@ -76,6 +77,8 @@ public final class MainActivity extends Activity {
     private boolean captureAfterPermission;
     private boolean receiverRegistered;
     private boolean running;
+    private Button findHeadsetButton;
+    private LanDiscovery discovery;
 
     private final BroadcastReceiver statusReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
@@ -140,6 +143,8 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onStop() {
+        if (discovery != null) { discovery.cancel(); discovery = null; }
+        if (findHeadsetButton != null) { findHeadsetButton.setText("Find headset on LAN"); findHeadsetButton.setEnabled(!running); }
         saveNotificationPreferences();
         if (receiverRegistered) {
             unregisterReceiver(statusReceiver);
@@ -206,8 +211,19 @@ public final class MainActivity extends Activity {
 
         LinearLayout statusCard = card();
         statusView = text("Ready to cast", 20, COLOR_PRIMARY, Gravity.START);
+        statusView.setLines(2);
+        statusView.setEllipsize(android.text.TextUtils.TruncateAt.END);
         statusCard.addView(statusView, matchWrap());
+        connectionDetailsView = text("No active receiver connection", 14, COLOR_SECONDARY, Gravity.START);
+        connectionDetailsView.setLines(3);
+        connectionDetailsView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        connectionDetailsView.setOnClickListener(view -> new AlertDialog.Builder(this)
+                .setTitle("Connection details").setMessage(connectionDetailsView.getText())
+                .setPositiveButton("OK", null).show());
+        statusCard.addView(connectionDetailsView, spaced(0, dp(4), 0, 0));
         metricsView = text("No active capture", 14, COLOR_SECONDARY, Gravity.START);
+        metricsView.setLines(3);
+        metricsView.setEllipsize(android.text.TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams metricsParams = matchWrap();
         metricsParams.setMargins(0, dp(8), 0, 0);
         statusCard.addView(metricsView, metricsParams);
@@ -234,6 +250,10 @@ public final class MainActivity extends Activity {
                 preferences.getString("pair_code", ""),
                 InputType.TYPE_CLASS_NUMBER);
         connectionCard.addView(pairCodeView, fieldParams());
+        findHeadsetButton = secondaryButton();
+        findHeadsetButton.setText("Find headset on LAN");
+        findHeadsetButton.setOnClickListener(view -> findHeadsets());
+        connectionCard.addView(findHeadsetButton, buttonParams());
         mainContent.addView(connectionCard, cardParams());
 
         primaryButton = new Button(this);
@@ -436,10 +456,70 @@ public final class MainActivity extends Activity {
         });
         settingsContent.addView(notificationCard, cardParams());
 
+        LinearLayout about = card();
+        about.addView(sectionTitle("About"), matchWrap());
+        about.addView(text("PhoneCast " + DiagnosticLog.version(this) + "\nBuild " + BuildConfig.SUPPORT_BUILD + " " + BuildConfig.BUILD_TYPE,
+                14, COLOR_SECONDARY, Gravity.START), matchWrap());
+        Button export = secondaryButton();
+        export.setText("Export diagnostic logs to Downloads");
+        export.setOnClickListener(view -> new AlertDialog.Builder(this)
+                .setTitle("Export diagnostics?")
+                .setMessage("Exports bounded PhoneCast connection events and counters, not system logcat, screen/audio data or pairing codes. Review the file before sharing privately with support.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Export", (dialog, which) -> {
+                    export.setEnabled(false);
+                    new Thread(() -> {
+                        String result;
+                        try { result = "Saved " + DiagnosticLog.export(getApplicationContext()); }
+                        catch (Exception error) { result = "Export failed. Check available storage and try again."; }
+                        final String message = result;
+                        runOnUiThread(() -> {
+                            export.setEnabled(true);
+                            if (!isFinishing() && !isDestroyed()) new AlertDialog.Builder(this)
+                                    .setTitle("Diagnostic export").setMessage(message).setPositiveButton("OK", null).show();
+                        });
+                    }, "phonecast-export").start();
+                }).show());
+        about.addView(export, buttonParams());
+        settingsContent.addView(about, cardParams());
+
         Button done = secondaryButton();
         done.setText("Done");
         done.setOnClickListener(view -> showSettings(false));
         settingsContent.addView(done, buttonParams());
+    }
+
+    private void findHeadsets() {
+        if (running || discovery != null) return;
+        findHeadsetButton.setEnabled(false);
+        findHeadsetButton.setText("Searching LAN…");
+        discovery = new LanDiscovery();
+        discovery.start(this, (receivers, failed) -> {
+            discovery = null;
+            findHeadsetButton.setEnabled(!running);
+            findHeadsetButton.setText("Find headset on LAN");
+            if (running || isFinishing() || isDestroyed()) return;
+            DiagnosticLog.record(this, "discovery results=" + receivers.size() + " failed=" + failed);
+            if (receivers.isEmpty()) {
+                new AlertDialog.Builder(this).setTitle("No receiver found")
+                        .setMessage("Launch PhoneCast on the headset and use the same non-guest LAN. VPN or Wi-Fi client isolation can block discovery. Older receivers may not support discovery; manual IP entry still works.")
+                        .setPositiveButton("OK", null).show();
+                return;
+            }
+            String[] labels = new String[receivers.size()];
+            for (int i = 0; i < labels.length; ++i) {
+                String[] receiver = receivers.get(i);
+                boolean remembered = receiver[1].equals(senderPreferences().getString("receiver_name", ""));
+                labels[i] = (remembered ? "Previously selected name · " : "") + receiver[1] + " · " + receiver[0] + " · v" + receiver[2];
+            }
+            new AlertDialog.Builder(this).setTitle("Select your headset · pairing still required")
+                    .setItems(labels, (dialog, index) -> {
+                        receiverHostView.setText(receivers.get(index)[0]);
+                        senderPreferences().edit().putString("receiver_host", receivers.get(index)[0])
+                                .putString("receiver_name", receivers.get(index)[1]).apply();
+                        connectionHintView.setText("Headset selected. Verify its dashboard pairing code before casting.");
+                    }).setNegativeButton("Cancel", null).show();
+        });
     }
 
     private void showSettings(boolean show) {
@@ -458,12 +538,7 @@ public final class MainActivity extends Activity {
 
     private void refreshServiceState() {
         boolean active = senderPreferences().getBoolean("capture_running", false);
-        if (active != running) {
-            updateState(active, active ? "Casting is active" : "Ready to cast",
-                    0, 0, 0, 0, 0, -1);
-        } else if (!active) {
-            updateState(false, "Ready to cast", 0, 0, 0, 0, 0, -1);
-        }
+        updateState(active, active ? "Casting is active" : "Ready to cast", 0, 0, 0, 0, 0, -1);
     }
 
     private void handleQuickConnectIntent(Intent intent) {
@@ -501,9 +576,7 @@ public final class MainActivity extends Activity {
                 .putString("pair_code", pairCode)
                 .putString("stream_profile", profile.name())
                 .apply();
-        if (preferences.getBoolean(AndroidScreenBrightness.PREFERENCE_ENABLED,
-                AndroidScreenBrightness.DEFAULT_ENABLED) &&
-                !Settings.System.canWrite(this) &&
+        if (!Settings.System.canWrite(this) &&
                 !preferences.getBoolean(AndroidScreenBrightness.PREFERENCE_PERMISSION_PROMPTED,
                         false)) {
             showBrightnessAccessExplanation();
@@ -526,14 +599,14 @@ public final class MainActivity extends Activity {
 
     private void showBrightnessAccessExplanation() {
         new AlertDialog.Builder(this)
-                .setTitle("Allow phone dimming?")
-                .setMessage("Dim phone while casting is enabled by default. Android requires Modify system settings access so PhoneCast can lower and restore device brightness. You can cast without it or turn dimming off at any time.")
-                .setPositiveButton("Allow dimming", (dialog, which) -> {
+                .setTitle("Allow casting display settings?")
+                .setMessage("Modify system settings access lets PhoneCast temporarily extend the screen timeout while casting in other apps and restore it afterward. It also enables optional phone dimming. Without access, the phone may automatically lock and end capture. You can cast without access; manual locking remains available.")
+                .setPositiveButton("Allow",  (dialog, which) -> {
                     senderPreferences().edit().putBoolean(
                             AndroidScreenBrightness.PREFERENCE_PERMISSION_PROMPTED, true).apply();
                     openBrightnessSettings(true);
                 })
-                .setNegativeButton("Cast without dimming", (dialog, which) -> {
+                .setNegativeButton("Cast without access",  (dialog, which) -> {
                     senderPreferences().edit().putBoolean(
                             AndroidScreenBrightness.PREFERENCE_PERMISSION_PROMPTED, true).apply();
                     continueCaptureRequest();
@@ -608,6 +681,8 @@ public final class MainActivity extends Activity {
                 .putExtra(ScreenCaptureService.EXTRA_PAIR_CODE, pairCode)
                 .putExtra(ScreenCaptureService.EXTRA_STREAM_PROFILE,
                         selectedStreamProfile().name());
+        senderPreferences().edit().putBoolean("receiver_responsive", false)
+                .putString("connection_message", ConnectionFeedback.CONNECTING).apply();
         startForegroundService(service);
         updateState(true, "Starting secure screen permission session…",
                 0, 0, 0, 0, 0, -1);
@@ -622,14 +697,22 @@ public final class MainActivity extends Activity {
                              int width, int height, long droppedFrames, long rttMicros) {
         running = isRunning;
         senderPreferences().edit().putBoolean("capture_running", isRunning).apply();
-        statusView.setText(message == null ? (isRunning ? "Casting" : "Ready to cast") : message);
-        statusView.setTextColor(isRunning ? COLOR_SUCCESS : COLOR_PRIMARY);
+        boolean responsive = isRunning && senderPreferences().getBoolean("receiver_responsive", false);
+        String connectionMessage = senderPreferences().getString("connection_message", ConnectionFeedback.CONNECTING);
+        statusView.setText(isRunning ? ConnectionPresentation.title(responsive, connectionMessage)
+                : (message == null ? "Ready to cast" : message));
+        String details = isRunning ? (responsive
+                ? "Receiver ping replies are arriving; decoded/visible video is not confirmed by this status."
+                : connectionMessage) : (message == null ? "No active receiver connection" : message);
+        connectionDetailsView.setText(details);
+        connectionDetailsView.setContentDescription(details + ". Tap for full connection details.");
+        statusView.setTextColor(responsive ? COLOR_SUCCESS : (isRunning ? Color.rgb(255, 191, 90) : COLOR_PRIMARY));
         if (isRunning && width > 0) {
             metricsView.setText(String.format(Locale.US,
-                    "%d × %d  ·  %,d frames\n%.1f MB  ·  %,d dropped  ·  %s",
+                    "Capturing %d × %d  ·  %,d encoded frames\n%.1f MB encoded  ·  %,d local drops  ·  %s",
                     width, height, frames, bytes / 1_000_000.0, droppedFrames,
                     rttMicros >= 0 ? String.format(Locale.US, "%.1f ms RTT", rttMicros / 1000.0)
-                            : "RTT pending"));
+                            : "Waiting for receiver reply"));
         } else {
             metricsView.setText(isRunning ? "Preparing video and receiver connection…"
                     : "No active capture");
@@ -639,10 +722,13 @@ public final class MainActivity extends Activity {
                 isRunning ? Color.rgb(242, 103, 112) : COLOR_PRIMARY));
         receiverHostView.setEnabled(!isRunning);
         pairCodeView.setEnabled(!isRunning);
+        if (findHeadsetButton != null) findHeadsetButton.setEnabled(!isRunning && discovery == null);
         if (streamProfileView != null) streamProfileView.setEnabled(!isRunning);
         if (restoreBrightnessButton != null) restoreBrightnessButton.setEnabled(
                 isRunning && dimPhoneView != null && dimPhoneView.isChecked());
-        connectionHintView.setText(isRunning ? "Connection details are locked while casting."
+        connectionHintView.setText(isRunning
+                ? (responsive ? "Receiver responds; this does not confirm decoded picture delivery."
+                    : "Not connected yet. Retrying automatically. Check headset IP/code and same non-guest LAN. Stop casting to edit details or search again.")
                 : "Saved details make the next cast a two-step start.");
     }
 
@@ -661,7 +747,7 @@ public final class MainActivity extends Activity {
         boolean granted = Settings.System.canWrite(this);
         brightnessAccessButton.setText(granted
                 ? R.string.brightness_access_enabled : R.string.grant_brightness_access);
-        brightnessAccessButton.setEnabled(enabled && !granted);
+        brightnessAccessButton.setEnabled(!granted);
         dimDelayView.setEnabled(enabled);
         restoreBrightnessButton.setEnabled(enabled && running);
     }

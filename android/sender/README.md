@@ -1,6 +1,6 @@
 # PhoneCast Android Sender
 
-This Android application captures the user-approved display with `MediaProjection`, feeds it into a surface-input H.264/AVC `MediaCodec` encoder, and streams encoded access units to the native Steam Frame receiver over the local network. The Windows receiver is a secondary supported path. The v0.8 app uses `versionCode` 3.
+This Android application captures the user-approved display with `MediaProjection`, feeds it into a surface-input H.264/AVC `MediaCodec` encoder, and streams encoded access units to the native Steam Frame receiver over the local network. The Windows receiver is a secondary supported path. The v0.9.0 release uses `versionCode` 6 with the same release signing key. It retains the physically validated screen-timeout fix from code 4; the original v0.8 release used code 3.
 
 ## Requirements
 
@@ -23,7 +23,7 @@ APK:
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## Signed v0.8 release
+## Signed release
 
 Release builds use a private `signing.properties` file outside the repository:
 
@@ -61,7 +61,7 @@ Release assembly fails when signing configuration is missing; debug builds/tests
 apksigner.bat verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
 ```
 
-Publish only the verified APK, never the signing material. For GitHub, the APK can be copied/renamed to `phonecast-vr-v0.8-android.apk`.
+Publish only the verified APK, never the signing material. The v0.9.0 release APK is copied/renamed to `phonecast-vr-v0.9.0-android.apk`; it must not silently replace v0.8 assets. Public publication remains separate from building the artifacts.
 
 **Debug-to-release migration:** a release-signed APK cannot update a debug-signed installation. Stop casting first so brightness and phone volume can restore, note your settings, uninstall the debug app, then install the release APK and grant optional permissions again. Uninstalling clears saved connection/settings data. Subsequent public updates must use this same release key and a higher `versionCode`; losing the key or password prevents ordinary in-place updates for GitHub APK users.
 
@@ -88,6 +88,14 @@ Useful diagnostics:
 ```powershell
 adb logcat -s PhoneCastCapture
 ```
+
+## v0.9.0 connection and support update
+
+- Amber connection warnings are distinct from local capture. Green requires a valid recent receiver ping reply, not simply a running encoder or TCP socket. This does not confirm decoded/visible headset video. Retry failures stay visible between attempts instead of flashing Connecting/Disconnected; fixed-size status/detail/counter fields prevent page-height jitter. Tap the details field for its full text.
+- **Find headset on LAN** searches for running v0.9 receivers for four seconds and requires explicit selection. Same non-guest IPv4 LAN and UDP 49322 reachability are required; manual IP entry/pairing remain available. Stop casting before changing endpoints. Remembered names are hints, not authenticated identities; silent active-session IP retargeting is not implemented.
+- **Settings → About** shows installed version/code and build type. **Export diagnostic logs to Downloads** produces a bounded private-content-free app support summary via MediaStore, without ADB or broad storage permission. Review before sharing privately.
+- Receiver About/export and discovery require the updated receiver. Ordinary TCP remains compatible with older receivers.
+- The owner accepted the revised normal-use release baseline. Expanded discovery/storage/lifecycle cases remain separately unvalidated; see `docs/v0.9-support.md` for the matrix and limitations.
 
 ## Current behavior
 

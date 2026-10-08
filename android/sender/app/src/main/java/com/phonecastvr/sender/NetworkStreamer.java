@@ -1,7 +1,5 @@
 package com.phonecastvr.sender;
 
-import android.util.Log;
-
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
@@ -25,7 +23,6 @@ final class NetworkStreamer {
         void onAudioCapability(boolean supported);
     }
 
-    private static final String TAG = "PhoneCastNetwork";
     private static final int CONNECT_TIMEOUT_MILLIS = 3000;
     private static final int MAX_BACKOFF_MILLIS = 5000;
 
@@ -52,6 +49,22 @@ final class NetworkStreamer {
     private volatile Packet latestRemoteControlStatus;
     private volatile Socket socket;
     private Thread thread;
+    private volatile boolean receiverResponsive;
+    private volatile String connectionMessage = ConnectionFeedback.CONNECTING;
+    private volatile String readerFailure;
+    private volatile String retryMessage;
+    private volatile boolean confirmedThisAttempt;
+    private final AtomicLong lastReplyNanos = new AtomicLong();
+
+    boolean receiverResponsive() { return receiverResponsive; }
+    String connectionMessage() { return connectionMessage; }
+    private void connection(boolean responsive, String message) {
+        if (receiverResponsive == responsive && connectionMessage.equals(message)) return;
+        receiverResponsive = responsive;
+        if (!responsive) roundTripMicros.set(-1);
+        connectionMessage = message;
+        listener.onConnectionChanged(responsive, message);
+    }
 
     NetworkStreamer(String host, int port, String pairCode, Listener listener) {
         this.host = host;
@@ -179,6 +192,12 @@ final class NetworkStreamer {
         while (running.get()) {
             try (Socket activeSocket = new Socket()) {
                 socket = activeSocket;
+                roundTripMicros.set(-1);
+                readerFailure = null;
+                confirmedThisAttempt = false;
+                lastReplyNanos.set(System.nanoTime());
+                connection(false, retryMessage == null ? ConnectionFeedback.CONNECTING : retryMessage);
+                activeSocket.setSoTimeout(10000);
                 activeSocket.setTcpNoDelay(true);
                 activeSocket.connect(new InetSocketAddress(host, port), CONNECT_TIMEOUT_MILLIS);
                 DataOutputStream output = new DataOutputStream(
@@ -193,7 +212,8 @@ final class NetworkStreamer {
                 Thread reader = new Thread(() -> readReceiverMessages(input,activeSocket),
                         "phonecast-network-replies");
                 reader.setDaemon(true);
-                reader.start();
+                if (retryMessage == null) connection(false, ConnectionFeedback.WAITING);
+                reader.start(); // Read deadline can also interrupt a blocked initial write.
                 StreamProtocol.write(output, StreamProtocol.TYPE_HELLO, 0, 0,
                         System.nanoTime() / 1000L, 0, 0,
                         pairCode.getBytes(StandardCharsets.US_ASCII));
@@ -208,17 +228,20 @@ final class NetworkStreamer {
                     cachedKeyFrame.write(output);
                 }
                 output.flush();
-                listener.onConnectionChanged(true, "Connected to " + host + ':' + port);
                 droppedFrames.addAndGet(frames.size());
                 frames.clear();
                 notifications.clear();
                 waitingForKeyFrame.set(true);
                 listener.onKeyFrameNeeded();
-                backoffMillis = 250;
                 long nextPingNanos = 0;
                 Packet sentAudioConfig = null, sentAudioStatus = null;
 
                 while (running.get()) {
+                    if (System.nanoTime() - lastReplyNanos.get() > 10000000000L) {
+                        java.net.SocketTimeoutException timeout = new java.net.SocketTimeoutException("Receiver reply timeout");
+                        readerFailure = ConnectionFeedback.failure(timeout);
+                        throw timeout;
+                    }
                     Packet currentRemoteControlStatus = latestRemoteControlStatus;
                     if (currentRemoteControlStatus != null &&
                             currentRemoteControlStatus != sentRemoteControlStatus) {
@@ -269,8 +292,14 @@ final class NetworkStreamer {
                 output.flush();
             } catch (IOException error) {
                 if (running.get()) {
-                    listener.onConnectionChanged(false, "Waiting for receiver at " + host + ':' + port);
-                    Log.w(TAG, "Receiver connection failed: " + error.getMessage());
+                    // Closing a timed-out writer also wakes the reader with SocketException;
+                    // do not let that secondary close hide the actionable timeout reason.
+                    String reason = error instanceof java.net.SocketTimeoutException
+                            ? ConnectionFeedback.failure(error)
+                            : (readerFailure != null ? readerFailure : ConnectionFeedback.failure(error));
+                    retryMessage = reason;
+                    connection(false, reason);
+                    if (confirmedThisAttempt) backoffMillis = 250;
                     sleep(backoffMillis);
                     backoffMillis = Math.min(MAX_BACKOFF_MILLIS, backoffMillis * 2);
                 }
@@ -285,7 +314,7 @@ final class NetworkStreamer {
                 listener.onAudioCapability(false);
             }
         }
-        listener.onConnectionChanged(false, "Streaming stopped");
+        connection(false, "Not connected · casting stopped");
     }
 
     private void readReceiverMessages(DataInputStream input, Socket owner) {
@@ -296,6 +325,13 @@ final class NetworkStreamer {
                 if (header.payloadSize > 0) input.readFully(payload);
                 if (socket != owner) return;
                 if (header.type == StreamProtocol.TYPE_PONG) {
+                    long nowMicros = System.nanoTime() / 1000L;
+                    if (header.timestampMicros <= 0 || header.timestampMicros > nowMicros ||
+                            nowMicros - header.timestampMicros > 10000000L) continue;
+                    lastReplyNanos.set(System.nanoTime());
+                    retryMessage = null;
+                    confirmedThisAttempt = true;
+                    if (!receiverResponsive) connection(true, ConnectionFeedback.CONNECTED);
                     if (audioRequested && !audioSupported && AudioProtocol.hasCapability(payload)) {
                         audioSupported = true;
                         listener.onAudioCapability(true);
@@ -314,9 +350,14 @@ final class NetworkStreamer {
                     listener.onNotificationOpen(header.sequence);
                 }
             }
-        } catch (IOException ignored) {
-            // Wake a blocked writer and stop capture promptly on reader disconnect.
+        } catch (IOException error) {
+            // No reply/EOF must immediately remove the green connected state.
             if (socket == owner) {
+                if (readerFailure == null) readerFailure = ConnectionFeedback.failure(error);
+                if (running.get()) {
+                    retryMessage = readerFailure;
+                    connection(false, readerFailure);
+                }
                 audioSupported = false;
                 listener.onAudioCapability(false);
                 try { owner.close(); } catch (IOException closing) { /* Already closed. */ }

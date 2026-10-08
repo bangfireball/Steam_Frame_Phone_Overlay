@@ -370,6 +370,35 @@ best-effort path cannot run.
 - [Android 15 behavior changes](https://developer.android.com/about/versions/15/behavior-changes-all) — force-stop/stopped-state behavior.
 - [Android media projection](https://developer.android.com/media/grow/media-projection) — lock-screen termination and invalid projection lifecycle.
 
+## Samsung background timeout follow-up — 2026-10-07
+
+The owner's SM-S906U (S22+) running Android 16 locks when casting from other apps. Read-only power logs show Samsung classifying the casting screen-dim wake lock as `abuse wakelock`, disabling its contribution and sleeping due to timeout. Foreground-only keep-screen-on is not sufficient for phone mirroring.
+
+The sender now temporarily writes `Settings.System.SCREEN_OFF_TIMEOUT` to `Integer.MAX_VALUE` (2,147,483,647 ms, approximately 24.85 days) while projection is active, with the existing explicit Modify system settings capability. This is independent of the dimming preference. The original timeout is synchronously saved before writing and restored on teardown; app-start/boot recovery handles abandoned ownership best-effort. User timeout changes are preserved. Permission revocation, write failure, and Force Stop can delay restoration; Android Display settings remain the emergency recovery path. Without access, casting remains available with an automatic-lock warning. Grant access before starting a new cast.
+
+Manual locking remains untouched and ends projection normally. OEM clamping and device-admin maximum-lock policy remain possible; readback verifies the setting, not the effective awake policy. JVM tests, APK assembly, and lint pass. No device setting was changed or APK installed during the initial implementation; the subsequent authorized installation and physical validation are recorded below.
+
+The timeout-fix APK was release-signed and published to the local download server on 2026-10-07 as v0.8 `versionCode` 4. Debug/release JVM tests, both APK builds, and debug/release lint pass. `apksigner` verified the same certificate as the original code-3 release, permitting an in-place release update. Both live APK routes match the release SHA-256 `963be8172accc7539ff768f870932b44493ae98716fceb6d2edaf1a796580227`; served `SHA256SUMS` was updated without changing the receiver archive. This is local publication only, not a GitHub release update or physical phone validation. Stop casting before installing, retain Modify system settings approval, and start a new cast afterward.
+
+### Physical confirmation — 2026-10-07
+
+The initial reported 15-second lock occurred with the original release (`versionCode` 3) still installed; it was not a test of the fix. With owner authorization, the signed code-4 APK was installed using `adb install -r`, and package inspection confirmed code 4. The owner then reported that idle casting worked without the prior 15-second lock.
+
+Read-only `PowerManagerService` logs corroborate both application and restoration:
+
+- 21:32:06: configured timeout was 15,000 ms.
+- 21:32:19: system setting and effective screen-off timeout changed to 2,147,483,647 ms (about 24.85 days).
+- 21:33:35: timeout returned to 15,000 ms as the cast ended; capture-stop logs followed at 21:33:36.
+- 21:33:52: normal sleep occurred due to the restored 15-second timeout.
+
+Samsung Settings showed **10 minutes**, its maximum selectable preset, while logs reported the actual much larger timeout. The displayed preset is not the authoritative value for this temporary override. Do not manually select another timeout during casting unless intentionally replacing the override; user changes are preserved.
+
+This confirms the owner's Samsung S22+ / Android 16 idle-casting and normal restoration case, not every device or failure path. Dimming-disabled testing, manual-lock testing of this build, permission-loss, and interrupted-session recovery remain separate checks. Raw logs are ignored under `out/diagnostics/phone-timeout-followup/`.
+
+The initial distribution recommendation was a separate **v0.8.1** patch with the same signing key, release notes and fresh checksums rather than silently replacing published v0.8 artifacts. The owner subsequently chose **v0.9.0** for the connection/About/export/discovery work; that code-5 test candidate includes this timeout fix and is tracked in `docs/v0.9-support.md`. The timeout fix alone does not require a receiver reinstall; v0.9 discovery/About features do require the new receiver. No GitHub release was created or modified by this validation.
+
+The owner additionally requested future optional developer/ADB research in `design.md`, superseding the prior prohibition on researching that option. No privileged integration is implemented. scrcpy's [device controls](https://github.com/Genymobile/scrcpy/blob/master/doc/device.md) distinguish privileged periodic user activity, charging-only stay-awake, temporary timeout changes, and panel-power control. These are not equivalent to a normal app wake lock.
+
 ## Conclusion
 
 Samsung Phone Link does not appear to solve this by merely dimming the phone. It offers a special black/hidden local-display state while remote mirroring continues. Public documentation confirms the behavior but does not disclose its implementation. PhoneCast will therefore use default-on, user-disableable minimum-brightness operation as the supported Sprint 15 baseline, subject to explicit Android special-access approval and best-effort recovery. Panel-off operation remains limited to future privileged or advanced experiments.

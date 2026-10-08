@@ -4,7 +4,7 @@
 
 Mirror your phone into VR, check notifications, watch videos with optional phone audio, and interact using your controllers—all while a standalone game runs underneath.
 
-**v0.8 · First public release preparation · Early-access software**
+**v0.9.0 · Connection and support update · Early-access software**
 
 [Downloads & release notes](https://github.com/bangfireball/Steam_Frame_Phone_Overlay/releases) · [Report a bug](https://github.com/bangfireball/Steam_Frame_Phone_Overlay/issues) · [Build from source](docs/development.md)
 
@@ -29,10 +29,13 @@ Use your own captures and hide pairing codes, notification text, and personal de
 - **Control Android:** tap, hold, swipe, drag-scroll, and Android Back with the dashboard laser when optional remote control is enabled.
 - **Hear phone audio:** optional supported playback capture, headset volume/mute controls, and local-phone mute.
 - **See notifications:** optional cards, app allow/block lists, and notification-to-app navigation; sensitive content is redacted by default.
-- **Keep setup convenient:** saved receiver details, Android Quick connect widget, in-headset settings, and reconnect during an active capture session.
+- **Keep setup convenient:** Find headset on LAN, saved receiver details, Android Quick connect widget, in-headset settings, and reconnect during an active capture session.
+- **Get clear connection feedback:** receiver-response status, stable retry warnings, and actionable guidance instead of treating local capture as a successful connection.
+- **Get support information:** About/version details and privacy-safe diagnostic exports to Downloads on phone and headset.
 - **Dim the physical phone:** default-on dimming while casting, subject to Android approval, with temporary restore controls.
+- **Prevent idle phone locking while casting:** temporary screen-timeout protection with Modify system settings access, restored afterward; intentional manual locking remains available.
 
-The primary release target is **the native Steam Frame ARM64 receiver + Android app**. A Windows SteamVR receiver also works, but is a secondary development/fallback path—not the focus of v0.8. A Windows-hosted overlay cannot follow you into headset-native standalone games.
+The primary release target is **the native Steam Frame ARM64 receiver + Android app**. A Windows SteamVR receiver also works, but is a secondary development/fallback path—not the focus of v0.9.0. A Windows-hosted overlay cannot follow you into headset-native standalone games.
 
 ## Before you install
 
@@ -42,24 +45,24 @@ You need:
 
 - **Steam Frame** with native SteamVR running.
 - **Android 10 or newer**, with screen-capture and H.264 encoder support. Individual apps may block capture.
-- Both devices on the same trusted local network, with phone-to-headset TCP access on port `49321`.
+- Both devices on the same trusted local network, with phone-to-headset TCP access on port `49321`. The optional LAN finder also needs UDP `49322`; manual IP entry remains available if discovery is blocked.
 
 PhoneCast has been physically used on Steam Frame with standalone Cubism, phone interaction, notifications, rotation, and sustained phone video/audio playback. It is still early-access software: broader game compatibility, both launch orders, sleep/wake, and failure recovery are not fully validated.
 
 ## Quick start
 
-Download the **Steam Frame ARM64 receiver archive** and **Android APK** from [GitHub Releases](https://github.com/bangfireball/Steam_Frame_Phone_Overlay/releases). Use the matching v0.8 assets, not GitHub's automatically generated source-code archives. If v0.8 is not listed yet, publication is still pending.
+Download the **Steam Frame ARM64 receiver archive** and **Android APK** from [GitHub Releases](https://github.com/bangfireball/Steam_Frame_Phone_Overlay/releases). Use the matching **v0.9.0** assets, not GitHub's automatically generated source-code archives. If v0.9.0 is not listed yet, publication is still pending. The release also includes `SHA256SUMS-v0.9.0` for verifying downloads.
 
 ### 1. Install on Steam Frame
 
-1. Download `phonecast-vr-v0.8-steam-frame-arm64.tar.gz` to the headset's **Downloads** folder. Quit PhoneCast first if updating.
+1. Download `phonecast-vr-v0.9.0-steam-frame-arm64.tar.gz` to the headset's **Downloads** folder. Quit PhoneCast first if updating.
 2. Open a terminal in desktop mode and paste these commands to extract and install it. Run as your normal user—**not with `sudo`**:
 
    ```bash
    set -eu
    cd "$HOME/Downloads"
-   tar -xzf phonecast-vr-v0.8-steam-frame-arm64.tar.gz
-   cd phonecast-vr-v0.8-steam-frame-arm64
+   tar -xzf phonecast-vr-v0.9.0-steam-frame-arm64.tar.gz
+   cd phonecast-vr-v0.9.0-steam-frame-arm64
    ./steam-frame-installer/install-phonecast.sh
    ```
 
@@ -72,12 +75,14 @@ Installation currently needs a terminal; ordinary launches afterward do not. The
 ### 2. Install and connect Android
 
 1. Install the downloaded APK. Android may ask you to allow installation from the browser/file manager you used.
-2. Open PhoneCast and enter the **headset's local IP address** and the **six-digit pairing code shown in its PhoneCast dashboard**. Check the headset's network settings for its address; automatic discovery is not implemented.
+2. Open PhoneCast, choose **Find headset on LAN**, and explicitly select your headset. Enter the **six-digit pairing code shown in its PhoneCast dashboard**. If discovery finds nothing, enter the **headset's current local IP address** from its network settings. Discovery does not bypass pairing or screen-sharing consent.
 3. Start with the **Standard** streaming profile.
 4. Press **Start casting** and approve Android's screen-sharing prompt.
 5. In the headset's PhoneCast dashboard, choose **Show**.
 
-PhoneCast remembers connection details. Android may require fresh screen-sharing consent for each new capture session. If connecting fails, check the address, pairing code, and whether guest Wi-Fi/client isolation prevents devices from talking to each other.
+PhoneCast remembers connection details. Android may require fresh screen-sharing consent for each new capture session. If connecting fails, check the address, pairing code, VPN and whether guest Wi-Fi/client isolation prevents devices from talking to each other. Amber means the receiver is not yet confirmed; green requires a receiver reply, not merely a running encoder. A green status does not prove decoded picture delivery. Retry warnings remain visible between attempts; tap the connection details text for the full message.
+
+If the headset IP changes during a failed cast, stop casting, search/select again, and start a new cast. Silent active-session IP retargeting is not implemented.
 
 ### 3. Use it in VR
 
@@ -98,6 +103,7 @@ Casting works without enabling remote control, notifications, or phone audio.
 | Notifications | Notification forwarding and Android notification access | Disabled by default; revealing sensitive title/body text requires a separate opt-in. |
 | Phone audio | **Phone playback audio** and Android audio permission; start a new cast | Playback only, not microphone capture. Protected/capture-blocked audio is unsupported. Optional local-phone mute is separate. |
 | Phone dimming | **Dim phone while casting** and Android **Modify system settings** access | Preference is on by default, but without permission casting continues undimmed. Restore via the app/foreground notification; Android brightness controls are the emergency fallback. |
+| Idle-lock prevention | Android **Modify system settings** access; start a new cast after granting it | Temporarily extends the screen timeout independently of dimming and restores the original on reachable stop paths. Manual locking still ends projection. OEM/device-admin restrictions may apply. |
 
 See [remote control](docs/remote-control.md), [notifications](docs/notifications.md), [phone audio](docs/phone-audio.md), and [phone dimming](docs/android-screen-off.md) for details.
 
@@ -112,7 +118,7 @@ Android 13 and newer may block Accessibility access for a sideloaded APK with a 
 
 Menu names and availability vary by phone and Android version. This approval does not enable remote control by itself. Casting still works without Accessibility. Only allow restricted settings for an app you trust; see [Android's restricted-settings guidance](https://support.google.com/android/answer/12623953).
 
-## Known limitations in v0.8
+## Known limitations in v0.9.0
 
 - **Native GPU/decoder reliability is still follow-up work.** Video freezes and Adreno/Vulkan device-loss exits have occurred in some sessions, including game-active launches. Decoder recovery is implemented but its fault cases still need physical validation; bounded Vulkan recovery is not implemented. GPU resets can also affect the running game. Save game progress before testing.
 - **Headset sleep/wake, SteamVR restart, crash recovery, and broader launch-order/game compatibility are not fully validated.** Relaunching PhoneCast or starting a new cast may be necessary.
@@ -120,7 +126,8 @@ Menu names and availability vary by phone and Android version. This approval doe
 - Controller-docked panels can jitter during movement. Defaults may need per-hand calibration.
 - Keyboard/text entry and wrist gestures are backlogged. Hotkeys are not guaranteed conflict-free.
 - Audio capture depends on the source app's policy; source UI mute is not always reflected in Android playback capture.
-- Android Force Stop cannot immediately restore brightness or phone volume. Best-effort later recovery depends on retained permissions; manual recovery may be needed.
+- Android Force Stop cannot immediately restore brightness, screen timeout or phone volume. Best-effort later recovery depends on retained permissions; manual recovery may be needed.
+- LAN discovery is a bounded IPv4/default-port finder, not authenticated identity. Broadcast-blocked, guest/client-isolated, cross-subnet or IPv6-only networks may need manual entry. Broader discovery/network and storage-failure cases remain to be exercised.
 - SteamOS/SteamVR updates may change compatibility. Broader Android-device testing is welcome.
 
 The detailed [roadmap and physical evidence](design.md) distinguish owner-approved behavior from automated tests and deferred cases. No measured photon-level latency or universal compatibility claim is made.
@@ -137,7 +144,20 @@ The detailed [roadmap and physical evidence](design.md) distinguish owner-approv
 
 Receiver settings and pairing remain in `~/.config/phonecast-vr` unless you remove them separately.
 
-Receiver logs normally live in `~/.local/state/phonecast-vr/receiver.log`, with diagnostics in the adjacent `performance.csv`. When [reporting an issue](https://github.com/bangfireball/Steam_Frame_Phone_Overlay/issues), include app/release version, Android device/OS, SteamOS/SteamVR version, game, launch order, and reproduction steps. Review logs before sharing; never include pairing codes, credentials, or private phone content.
+### Export logs without ADB or SSH
+
+**On the headset:**
+
+1. Open the SteamVR dashboard → **PhoneCast → Settings → About / Export logs**.
+2. Select **Export logs once**. The row changes to **Confirm export**.
+3. **Select the same row a second time to confirm.** These are two deliberate clicks/selections, not the thumbstick double-click hotkey.
+4. Wait for **Saved to Downloads** and note the displayed filename, `phonecast-headset-<timestamp>.txt`. Find it in the headset's Downloads folder using the desktop file manager.
+
+**On the phone:** open **Settings → About → Export diagnostic logs to Downloads**, review the privacy notice, and confirm **Export**. The result shows the saved `phonecast-android-<timestamp>.txt` location.
+
+Exports are bounded support summaries, not unrestricted system/raw-log dumps. Review files before sharing privately; never post pairing codes, credentials or private phone content. About shows installed version/build information. When [reporting an issue](https://github.com/bangfireball/Steam_Frame_Phone_Overlay/issues), include both app versions, Android device/OS, SteamOS/SteamVR version, game, launch order, and reproduction steps.
+
+For deeper diagnosis, native raw logs normally live in `~/.local/state/phonecast-vr/receiver.log`, with diagnostics in the adjacent `performance.csv`. Review/redact raw files before sharing. See [v0.9 support details and validation boundaries](docs/v0.9-support.md).
 
 ## Windows receiver and development
 

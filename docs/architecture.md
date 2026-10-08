@@ -213,6 +213,14 @@ approved native playback/game-mixing results, and explicitly deferred physical
 cases. Android's optional local-phone mute is platform-side lifecycle policy around
 the portable capture stream; it stores/restores media volume without entering Core.
 
+## v0.9.0 support candidate
+
+`platform/network/LanDiscovery` owns the WinSock/POSIX UDP responder; Android owns a bounded foreground LAN search and explicit endpoint selection. Neither discovery nor sockets enter Core. Discovery is an untrusted hint layer over unchanged TCP pairing, not an identity mechanism.
+
+Portable `SettingsMenuController` adds an About view and explicit export request/result without filesystem dependencies. The receiver composition root runs `platform/support` export I/O asynchronously and returns status/filename to the view. The platform exporter selects safe diagnostic lines, honors Downloads/XDG paths and bounds file reads/output. Android separately records fixed safe app events and exports through MediaStore Downloads. No unrestricted system logcat, private phone payload or authentication material is exported.
+
+Android connection feedback is driven by valid recent PONG replies independently of capture counters, with bounded no-reply timeout and safe actionable error text. A responding receiver does not prove decoder/display success. See [`v0.9-support.md`](v0.9-support.md) for limitations, test evidence and physical validation still required.
+
 ## Deferred work
 
-Encrypted pairing, automatic discovery, extended ergonomic tuning of controller-placement defaults, physical standalone native-overlay validation, native decoder-to-GPU surface sharing, and process-attributed GPU utilization remain deferred. The custom TCP transport is subject to head-of-line blocking and must be measured on real Wi-Fi before it is treated as a long-term choice.
+Encrypted pairing, identity-based active-session rediscovery, extended ergonomic tuning of controller-placement defaults, physical standalone native-overlay validation, native decoder-to-GPU surface sharing, and process-attributed GPU utilization remain deferred. The custom TCP transport is subject to head-of-line blocking and must be measured on real Wi-Fi before it is treated as a long-term choice.

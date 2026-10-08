@@ -1,5 +1,6 @@
 add_library(phonecast-network
     src/TcpVideoServer.cpp
+    src/LanDiscovery.cpp
 )
 target_include_directories(phonecast-network PUBLIC include)
 target_compile_features(phonecast-network PUBLIC cxx_std_17)

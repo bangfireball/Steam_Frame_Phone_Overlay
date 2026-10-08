@@ -142,7 +142,7 @@ A `REMOTE_CONTROL_STATUS` payload is exactly two bytes: payload version `1`, fol
 11. Android reports both remote-control gates independently at connection and after changes so the receiver can warn rather than failing silently.
 12. Selecting a card reveals the phone and returns its opaque action token; Android invokes the original notification launch action only while that token remains valid and forwarding remains enabled.
 
-Manual address entry satisfies Sprint 3's “discovers or connects” criterion. Automatic discovery is deferred until the basic stream has physical-device validation.
+Manual address entry satisfies Sprint 3's “discovers or connects” criterion. The v0.9.0 test candidate adds a bounded, explicit-selection IPv4 UDP finder on port 49322; the TCP framing/pairing gate remains unchanged. Discovery responses are untrusted hints and never contain pairing credentials. See [`v0.9-support.md`](v0.9-support.md) for the query/reply contract, bounds, mDNS evaluation, manual fallback and pending physical checks. Identity-based changed-IP retargeting during an active reconnect remains deferred.
 
 ## Decoder decision
 

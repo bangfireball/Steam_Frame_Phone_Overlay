@@ -5,6 +5,9 @@
 #include "phonecast/core/audio/AudioPlayback.h"
 #include "phonecast/platform/openvr/OpenVrOverlayRenderer.h"
 #include "phonecast/platform/network/TcpVideoServer.h"
+#include "phonecast/platform/network/LanDiscovery.h"
+#include "phonecast/platform/support/SupportDiagnostics.h"
+#include <future>
 #ifdef _WIN32
 #include "phonecast/platform/windows/MfH264Decoder.h"
 #include "phonecast/platform/windows/WasapiAudioOutput.h"
@@ -389,6 +392,9 @@ int main(int argc, char** argv) {
         renderer.Stop();
         return EXIT_FAILURE;
     }
+    phonecast::platform::network::LanDiscovery discovery;
+    if (!discovery.Start(port)) std::cerr << "[discovery] Unavailable; manual IP still works.\n";
+    std::future<std::pair<std::string, std::string>> diagnosticExport;
     PrintUsage();
     std::cout << "\nPhoneCast VR receiver listening on port " << port
               << ". The pairing credential is shown in the PhoneCast dashboard.\n";
@@ -462,6 +468,11 @@ int main(int argc, char** argv) {
     while (running) {
         const auto loopStarted = std::chrono::steady_clock::now();
         if (!renderer.PumpEvents()) break;
+        if (diagnosticExport.valid() && diagnosticExport.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            const auto exported = diagnosticExport.get();
+            settingsMenu.SetExportStatus(exported.first, exported.second);
+            if (settingsMenu.IsOpen()) renderer.ShowSettingsMenu(settingsMenu.View(), error);
+        }
 #ifndef _WIN32
         if (standaloneRuntime.TakeDashboardFocusRequest() &&
             !renderer.FocusDashboard(error))
@@ -589,6 +600,18 @@ int main(int argc, char** argv) {
         phonecast::vr::SettingsMenuInput settingsInput{};
         if (settingsMenu.IsOpen() && renderer.TakeSettingsMenuInput(settingsInput)) {
             const auto result = settingsMenu.Handle(settingsInput);
+            if (result == phonecast::vr::SettingsMenuResult::ExportRequested && !diagnosticExport.valid()) {
+                try {
+                    std::cout.flush();
+                    diagnosticExport = std::async(std::launch::async, [] {
+                        std::string filename, exportError;
+                        const bool saved = phonecast::platform::support::ExportDiagnostics(filename, exportError);
+                        return std::make_pair(saved ? std::string("SAVED TO DOWNLOADS") : exportError, filename);
+                    });
+                } catch (const std::exception&) {
+                    settingsMenu.SetExportStatus("EXPORT WORKER UNAVAILABLE");
+                }
+            }
             if (result == phonecast::vr::SettingsMenuResult::Updated ||
                 result == phonecast::vr::SettingsMenuResult::Applied) {
                 controls.ReplaceSettings(settingsMenu.Draft());

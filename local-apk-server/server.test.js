@@ -21,7 +21,9 @@ test('download page commands, origin substitution, routes and failure handling',
   fs.writeFileSync(apk, 'test apk');
   const checksums = path.join(dir, 'SHA256SUMS');
   fs.writeFileSync(checksums, 'test checksums\n');
-  const server = createDownloadServer({ apkPath: apk, steamFramePath: bundle, checksumsPath: checksums });
+  const server = createDownloadServer({ apkPath: apk, steamFramePath: bundle, checksumsPath: checksums,
+    candidateApkPath: path.join(dir, 'absent.apk'), candidateFramePath: path.join(dir, 'absent.tar.gz'),
+    candidateChecksumsPath: path.join(dir, 'absent-sums') });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
     await new Promise(resolve => server.close(resolve));

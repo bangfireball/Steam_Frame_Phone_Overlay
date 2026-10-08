@@ -380,6 +380,9 @@ std::vector<std::uint8_t> MakeSettingsTexture(const phonecast::vr::SettingsMenuV
                                   view.values[index].size() > 12 ? 1 : 2, secondary);
             DrawSettingsLabel(image, ">", 474, centerY, 2, secondary);
         }
+        FillSettingsRoundedRect(image, 16, 666, 480, 46, 12,
+            view.selectedIndex == 10 ? selected : row);
+        DrawSettingsLabel(image, "ABOUT / EXPORT LOGS", 256, 689, 2, text);
         constexpr std::array<int, 3> actionLeft{16, 174, 332};
         constexpr std::array<int, 3> actionWidth{142, 142, 164};
         for (std::size_t action = 0; action < 3; ++action) {
@@ -405,7 +408,7 @@ std::vector<std::uint8_t> MakeSettingsTexture(const phonecast::vr::SettingsMenuV
                                     index == view.selectedIndex ? selected : row);
             DrawSettingsLabel(image, view.labels[index], 152, centerY - 12,
                               view.labels[index].size() > 15 ? 1 : 2, text);
-            const bool adjustable = index < view.values.size() &&
+            const bool adjustable = view.title != "ABOUT PHONECAST" && index < view.values.size() &&
                                     !view.values[index].empty() && view.values[index] != ">";
             if (index < view.values.size())
                 DrawSettingsLabel(image, view.values[index], 372, centerY - 12,
@@ -729,11 +732,13 @@ std::vector<std::uint8_t> MakeDashboardTexture(
     }
 
     DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
-                   "HOLD EITHER STICK", 204, 366, 2, secondary);
+                   "CLOSE DASHBOARD FOR HOTKEYS", 204, 350, 2, primary);
     DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
-                   "TOGGLE PHONE", 204, 402, 2, secondary);
+                   "HOLD EITHER STICK", 204, 382, 2, secondary);
     DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
-                   "DOUBLE CLICK DOCK", 204, 438, 2, secondary);
+                   "TOGGLE PHONE", 204, 414, 2, secondary);
+    DrawImageLabel(image, kDashboardTextureWidth, kDashboardTextureHeight,
+                   "DOUBLE CLICK DOCK", 204, 446, 2, secondary);
     const auto& settings = kDashboardTargets[6];
     const auto& quit = kDashboardTargets[7];
     FillImageRoundedRect(image, kDashboardTextureWidth, kDashboardTextureHeight,
@@ -1641,6 +1646,7 @@ public:
                 if (y >= center - 32 && y < center + 32 && x >= 16 && x < 496)
                     return row;
             }
+            if (y >= 666 && y < 712 && x >= 16 && x < 496) return 10;
             constexpr std::array<int, 3> actionLeft{16, 174, 332};
             constexpr std::array<int, 3> actionWidth{142, 142, 164};
             for (int action = 0; action < 3; ++action) {
@@ -1672,6 +1678,7 @@ public:
         settingsLaserTargetRow = row;
         const auto index = static_cast<std::size_t>(row);
         const bool adjustable = settingsMenuView.title != "PHONECAST SETTINGS" &&
+                                settingsMenuView.title != "ABOUT PHONECAST" &&
                                 index < settingsMenuView.values.size() &&
                                 !settingsMenuView.values[index].empty() &&
                                 settingsMenuView.values[index] != ">";
